@@ -1,11 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
 from app.config import settings
 from app.core.rate_limit import limiter
 from app.middleware.security_headers import SecurityHeadersMiddleware
-from app.routers import auth, counselors, availability, bookings, payments
+from app.routers import auth, availability, bookings, counselors, payments
 
 app = FastAPI(
     title="Alaga API",
@@ -30,6 +31,7 @@ app.include_router(counselors.router)
 app.include_router(availability.router)
 app.include_router(bookings.router)
 app.include_router(payments.router)
+
 
 @app.get("/health")
 async def health_check():

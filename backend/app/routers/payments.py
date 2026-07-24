@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.db.session import get_db
 from app.services.payment_service import simulate_payment_success
 
 router = APIRouter(prefix="/payments", tags=["payments"])
+
 
 @router.post("/simulate-success/{booking_id}")
 async def simulate_success(booking_id: str, db: AsyncSession = Depends(get_db)):

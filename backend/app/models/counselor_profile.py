@@ -1,8 +1,10 @@
-from sqlalchemy import Column, String, Boolean, ForeignKey
-from sqlalchemy import Column, String, Boolean, ForeignKey, JSON
-from sqlalchemy.orm import relationship
 import uuid
+
+from sqlalchemy import JSON, Boolean, Column, ForeignKey, String
+from sqlalchemy.orm import relationship
+
 from app.db.base import Base
+
 
 class CounselorProfile(Base):
     __tablename__ = "counselor_profiles"

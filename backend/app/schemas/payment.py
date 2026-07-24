@@ -1,24 +1,28 @@
-from pydantic import BaseModel, ConfigDict
-from typing import Optional
 from datetime import datetime
-from app.models.payment import PaymentStatus, PaymentMethod
+
+from pydantic import BaseModel, ConfigDict
+
+from app.models.payment import PaymentMethod, PaymentStatus
+
 
 class PaymentBase(BaseModel):
     amount: float
     currency: str = "PHP"
-    payment_method: Optional[PaymentMethod] = None
+    payment_method: PaymentMethod | None = None
+
 
 class PaymentCreate(PaymentBase):
     booking_id: str
     provider: str = "simulated"
 
+
 class PaymentResponse(PaymentBase):
     id: str
     booking_id: str
     provider: str
-    provider_payment_id: Optional[str] = None
+    provider_payment_id: str | None = None
     status: PaymentStatus
     created_at: datetime
-    paid_at: Optional[datetime] = None
-    
+    paid_at: datetime | None = None
+
     model_config = ConfigDict(from_attributes=True)
