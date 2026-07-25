@@ -24,3 +24,16 @@ class BookingResponse(BookingBase):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class IntakeFormResponse(BaseModel):
+    id: str
+    concern_category: str
+    notes: str | None = None
+    submitted_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BookingCounselorResponse(BookingResponse):
+    intake_form: IntakeFormResponse | None = None

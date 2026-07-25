@@ -2,18 +2,19 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.core.security import get_current_user
+from app.core.security import get_current_user, require_role
 from app.db.session import get_db
+from sqlalchemy.orm import selectinload
 from app.models.booking import Booking, BookingStatus
 from app.models.intake_form import IntakeForm
 from app.models.payment import Payment, PaymentStatus
 from app.models.user import User
-from app.schemas.booking import BookingCreate, BookingResponse
+from app.schemas.booking import BookingCreate, BookingResponse, BookingCounselorResponse
 from app.services.booking_service import (
     check_counselor_availability,
     expire_booking_if_unpaid,
 )
-from app.services.payment_service import create_simulated_checkout
+from app.services.payment_service import create_paymongo_checkout
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
 
@@ -77,7 +78,7 @@ async def create_booking(
     await db.commit()
 
     # 6. Call payment service
-    checkout_url = await create_simulated_checkout(amount, new_booking.id)
+    checkout_url = await create_paymongo_checkout(amount, new_booking.id)
 
     # 7. Start background task to expire booking in 30 minutes if unpaid
     background_tasks.add_task(expire_booking_if_unpaid, new_booking.id, db, 30)
@@ -98,5 +99,34 @@ async def get_my_bookings(
     """
     result = await db.execute(
         select(Booking).where(Booking.client_id == current_user.id)
+    )
+    return result.scalars().all()
+
+
+@router.get("/counselor/me", response_model=list[BookingCounselorResponse])
+async def get_counselor_bookings(
+    current_user: User = Depends(require_role(["counselor"])), 
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Returns bookings and their associated intake forms for the currently authenticated counselor.
+    """
+    # Assuming counselor profile id is linked to user id, we first find the counselor profile
+    # Actually, in this schema, Booking.counselor_id is the counselor profile ID, not the User ID.
+    # We need to fetch the counselor profile ID first.
+    from app.models.counselor_profile import CounselorProfile
+    
+    counselor_result = await db.execute(
+        select(CounselorProfile).where(CounselorProfile.user_id == current_user.id)
+    )
+    counselor = counselor_result.scalar_one_or_none()
+    
+    if not counselor:
+        raise HTTPException(status_code=404, detail="Counselor profile not found")
+
+    result = await db.execute(
+        select(Booking)
+        .options(selectinload(Booking.intake_form))
+        .where(Booking.counselor_id == counselor.id)
     )
     return result.scalars().all()
