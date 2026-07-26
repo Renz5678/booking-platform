@@ -21,6 +21,18 @@ async def get_availability(counselor_id: str, db: AsyncSession = Depends(get_db)
     return await availability_service.get_counselor_availability(db, counselor_id)
 
 
+@router.get("/{counselor_id}/slots")
+async def get_counselor_slots(counselor_id: str, start_date: str, end_date: str, duration: int = 50, db: AsyncSession = Depends(get_db)):
+    """Public endpoint to get available slots for a counselor on a specific date range with a given duration."""
+    counselor = await counselor_service.get_counselor_by_id(db, counselor_id)
+    if not counselor or not (counselor.is_verified and counselor.is_active):
+        raise HTTPException(status_code=404, detail="Counselor not found or inactive")
+
+    slots = await availability_service.get_available_slots(db, counselor_id, start_date, end_date, duration)
+    return slots
+
+
+
 @router.get("/me/blocks", response_model=list[AvailabilityResponse])
 async def get_my_availability(
     db: AsyncSession = Depends(get_db),

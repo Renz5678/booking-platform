@@ -30,7 +30,7 @@ export default function DashboardLayout({ children, allowedRoles, role }: Dashbo
   };
 
   // Define navigation items based on role
-  let navItems = [];
+  let navItems: { name: string, path: string }[] = [];
   if (role === "client") {
     navItems = [
       { name: "Dashboard", path: "/dashboard" },
@@ -178,7 +178,7 @@ export default function DashboardLayout({ children, allowedRoles, role }: Dashbo
         </nav>
 
         {/* Main Content Area */}
-        <main className="flex-grow w-full max-w-[1200px] mx-auto px-4 md:px-margin-desktop py-section-gap flex flex-col gap-section-gap">
+        <main className="flex-grow w-full max-w-[1200px] mx-auto px-4 md:px-margin-desktop py-8 flex flex-col gap-8">
           {children}
         </main>
       </div>

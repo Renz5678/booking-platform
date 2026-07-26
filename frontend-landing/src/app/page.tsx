@@ -1,3 +1,4 @@
+import Image from "next/image";
 export default function Home() {
   return (
     <>
@@ -15,7 +16,7 @@ export default function Home() {
           </button>
         </div>
         <div className="relative h-64 md:h-[500px] rounded-2xl overflow-hidden custom-shadow">
-          <img className="w-full h-full object-cover" alt="A serene, well-lit modern home office or living room space serving as a safe setting for online therapy. The room features soft neutral tones, minimal decor, a comfortable armchair, and warm natural light streaming through a window. The overall aesthetic is calm, professional, and therapeutic, utilizing a corporate modern minimalist style with pale mint and pure white accents." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBiCTk6Co4rdBNY7PtEJKqjdcG3ThIhRiiRAUtA1UipYcupQZdR0pM2uEoQFFVXWwp5KlzBK0jTY4Fwco6zrNZSPklmqM_eOuATVAwJgeKGismQuV_PQWXFNnwQ7aOs6AEw_fKGIpEbWlgAGNW_UFdSF5eli6tHwzIZsUcQglipLY3zoTbWp21fUmvgsUT0LUT8NldWBszZOIMbRkA3gBR-MNcVmfaUfLv1KpQGtYR9iO2eCaqbw2HzYsc6K-RkZQdLjDKAnQ8W8ZY"/>
+          <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuBiCTk6Co4rdBNY7PtEJKqjdcG3ThIhRiiRAUtA1UipYcupQZdR0pM2uEoQFFVXWwp5KlzBK0jTY4Fwco6zrNZSPklmqM_eOuATVAwJgeKGismQuV_PQWXFNnwQ7aOs6AEw_fKGIpEbWlgAGNW_UFdSF5eli6tHwzIZsUcQglipLY3zoTbWp21fUmvgsUT0LUT8NldWBszZOIMbRkA3gBR-MNcVmfaUfLv1KpQGtYR9iO2eCaqbw2HzYsc6K-RkZQdLjDKAnQ8W8ZY" alt="A serene, well-lit modern home office or living room space serving as a safe setting for online therapy. The room features soft neutral tones, minimal decor, a comfortable armchair, and warm natural light streaming through a window. The overall aesthetic is calm, professional, and therapeutic, utilizing a corporate modern minimalist style with pale mint and pure white accents." className="w-full h-full object-cover" fill unoptimized />
         </div>
       </section>
 
@@ -80,7 +81,7 @@ export default function Home() {
             {/* Card 1 */}
             <div className="bg-surface-container-lowest rounded-2xl overflow-hidden custom-shadow custom-hover-shadow transition-shadow">
               <div className="h-48 relative">
-                <img className="w-full h-full object-cover" alt="Professional headshot portrait of a compassionate female counselor named Dr. Maria Santos." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCp1jj8wAHjlAdoNQ0UF7q6LFbSdyfcs2mmT4U5KhNQC-unnBnWsjCF06uRdqvjgVgXkRrHwmxSjfoMQ3nHN-6Ztu2-2lp1AZYqzkoi4Rs_l6dvr-fuO1cD36b125zAgAqkjiSWOSRC5Kc-fFXeqn7-cIMJUfOuc3-X15snJ5Op3MoD-Y3sL7xuWc9oeNBKyEtuSGU2IvWRHS12b-8IBaBUX15QT4MTNXuxOrtnwFGjHh6CFSMpjojVelBpJY7IprziBJE_jt-Ht1g"/>
+                <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuCp1jj8wAHjlAdoNQ0UF7q6LFbSdyfcs2mmT4U5KhNQC-unnBnWsjCF06uRdqvjgVgXkRrHwmxSjfoMQ3nHN-6Ztu2-2lp1AZYqzkoi4Rs_l6dvr-fuO1cD36b125zAgAqkjiSWOSRC5Kc-fFXeqn7-cIMJUfOuc3-X15snJ5Op3MoD-Y3sL7xuWc9oeNBKyEtuSGU2IvWRHS12b-8IBaBUX15QT4MTNXuxOrtnwFGjHh6CFSMpjojVelBpJY7IprziBJE_jt-Ht1g" alt="Professional headshot portrait of a compassionate female counselor named Dr. Maria Santos." className="w-full h-full object-cover" fill unoptimized />
               </div>
               <div className="p-6">
                 <h3 className="font-headline-md text-headline-md text-primary mb-1">Dr. Maria Santos</h3>
@@ -94,7 +95,7 @@ export default function Home() {
             {/* Card 2 */}
             <div className="bg-surface-container-lowest rounded-2xl overflow-hidden custom-shadow custom-hover-shadow transition-shadow">
               <div className="h-48 relative">
-                <img className="w-full h-full object-cover" alt="Professional headshot portrait of an empathetic male counselor." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBNa8Wd59QOed9xaQfWKgAQjSDpil1fX793N8RxPk_6K1JBY0d13seljiOXsZAnpM-touZOHG-Kr09KWuzKhrMRZ8KiPPdB6W3x8qddOg2OJtcbWlFsf-5TQQGzh5anKE0ze-HVWj4UPuw0NSvIKhI80z2IVgQ-e3ra33oEz-y_YKWyfuAPUYeImEn4wZqVWEeeujzNoeSJo6-a9vDmHYcEOu4JHeSQ-PI3TJrtfh7K-zRVyn1DBkPBf3CNAJXt66vowbsbtGuC8yE"/>
+                <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuBNa8Wd59QOed9xaQfWKgAQjSDpil1fX793N8RxPk_6K1JBY0d13seljiOXsZAnpM-touZOHG-Kr09KWuzKhrMRZ8KiPPdB6W3x8qddOg2OJtcbWlFsf-5TQQGzh5anKE0ze-HVWj4UPuw0NSvIKhI80z2IVgQ-e3ra33oEz-y_YKWyfuAPUYeImEn4wZqVWEeeujzNoeSJo6-a9vDmHYcEOu4JHeSQ-PI3TJrtfh7K-zRVyn1DBkPBf3CNAJXt66vowbsbtGuC8yE" alt="Professional headshot portrait of an empathetic male counselor." className="w-full h-full object-cover" fill unoptimized />
               </div>
               <div className="p-6">
                 <h3 className="font-headline-md text-headline-md text-primary mb-1">Mark Reyes, RGC</h3>
@@ -108,7 +109,7 @@ export default function Home() {
             {/* Card 3 */}
             <div className="bg-surface-container-lowest rounded-2xl overflow-hidden custom-shadow custom-hover-shadow transition-shadow">
               <div className="h-48 relative">
-                <img className="w-full h-full object-cover" alt="Professional headshot portrait of a friendly female therapist." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA5nR2yWKeWaQgyPNYctMcy43Foxef-S5N3hQfDcWQjZYYIqxcm1ADnmw0mVCuoACwDuXm2YROPFSTz1Xnwx8x5UR71fBfWV-4_ZcvNADV4NnKawrdgZGcR-VHmVo7rLi670JytPTkmOpEaC2xPZLt7ZePTR5KwIFjYU8fkgBFiN7x5IsxMM5v3czLkZr9lCK6oFCFcMLcw5OtKqvCaNdmxLbtTlNWRqqnlhW6aNiMc6xh9roOkIZZftlaggmWgpkGBBBK9VqGxq3I"/>
+                <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuA5nR2yWKeWaQgyPNYctMcy43Foxef-S5N3hQfDcWQjZYYIqxcm1ADnmw0mVCuoACwDuXm2YROPFSTz1Xnwx8x5UR71fBfWV-4_ZcvNADV4NnKawrdgZGcR-VHmVo7rLi670JytPTkmOpEaC2xPZLt7ZePTR5KwIFjYU8fkgBFiN7x5IsxMM5v3czLkZr9lCK6oFCFcMLcw5OtKqvCaNdmxLbtTlNWRqqnlhW6aNiMc6xh9roOkIZZftlaggmWgpkGBBBK9VqGxq3I" alt="Professional headshot portrait of a friendly female therapist." className="w-full h-full object-cover" fill unoptimized />
               </div>
               <div className="p-6">
                 <h3 className="font-headline-md text-headline-md text-primary mb-1">Sarah Lim, RPsy</h3>
@@ -129,7 +130,7 @@ export default function Home() {
       {/* About Section */}
       <section className="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop py-section-gap grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
         <div className="order-2 md:order-1 relative h-64 md:h-[400px] rounded-2xl overflow-hidden custom-shadow">
-          <img className="w-full h-full object-cover" alt="An abstract, minimalist conceptual image representing mental health and wellness." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC5gvjiTgJkatt3S7PVBB8GBs_aPSpQfjFyjqJ-mF9I82dK5QZQFVyzAupj5ur4H8wB5zZzaYRvaaSF_xD14qyYnnQQ_gBEEGTw2pXi7J7WX9LJv_XmbE090ZZK5J5IFVCx0UMnmE182tZ6VO3ud7js-Qv2jLkfnF-Ifn0DTgOvH1O5MfBNG0og6hC1-4WVDQKgPavP1hrUHfusJAT9n0wAQ7L0UI0bg_H1VObF1xyxFwwnvBwU_iOfMZRHNuKaEaO2xYndCcy5onY"/>
+          <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuC5gvjiTgJkatt3S7PVBB8GBs_aPSpQfjFyjqJ-mF9I82dK5QZQFVyzAupj5ur4H8wB5zZzaYRvaaSF_xD14qyYnnQQ_gBEEGTw2pXi7J7WX9LJv_XmbE090ZZK5J5IFVCx0UMnmE182tZ6VO3ud7js-Qv2jLkfnF-Ifn0DTgOvH1O5MfBNG0og6hC1-4WVDQKgPavP1hrUHfusJAT9n0wAQ7L0UI0bg_H1VObF1xyxFwwnvBwU_iOfMZRHNuKaEaO2xYndCcy5onY" alt="An abstract, minimalist conceptual image representing mental health and wellness." className="w-full h-full object-cover" fill unoptimized />
         </div>
         <div className="order-1 md:order-2">
           <h2 className="font-headline-lg text-headline-lg text-primary mb-6">Our Mission at Alaga</h2>

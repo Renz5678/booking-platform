@@ -7,6 +7,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.services.payment_service import create_paymongo_checkout
 
+
 async def run():
     try:
         url = await create_paymongo_checkout(1500.0, "test-booking-12345")

@@ -1,8 +1,11 @@
 import asyncio
+
 from sqlalchemy.future import select
+
 from app.db.session import AsyncSessionLocal
 from app.models.booking import Booking
 from app.services.calendar_service import create_google_meet_event
+
 
 async def run_test():
     async with AsyncSessionLocal() as db:

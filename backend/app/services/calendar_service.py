@@ -1,8 +1,10 @@
 from datetime import datetime
+
 import httpx
 from fastapi import HTTPException
 
 from app.config import settings
+
 
 async def get_google_access_token(refresh_token: str | None = None) -> str:
     """Gets a new access token using the refresh token."""

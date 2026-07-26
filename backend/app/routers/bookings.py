@@ -1,16 +1,16 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
 
 from app.core.security import get_current_user, require_role
 from app.db.session import get_db
-from sqlalchemy.orm import selectinload
 from app.models.booking import Booking, BookingStatus
-from app.models.intake_form import IntakeForm
 from app.models.counselor_profile import CounselorProfile
+from app.models.intake_form import IntakeForm
 from app.models.payment import Payment, PaymentStatus
 from app.models.user import User
-from app.schemas.booking import BookingCreate, BookingResponse, BookingCounselorResponse
+from app.schemas.booking import BookingCounselorResponse, BookingCreate, BookingResponse
 from app.services.booking_service import (
     check_counselor_availability,
     expire_booking_if_unpaid,
@@ -67,7 +67,8 @@ async def create_booking(
     db.add(intake_form)
 
     # 5. Create Payment record
-    amount = 1500.0  # Platform standard MVP rate
+    duration_hours = (new_booking.scheduled_end - new_booking.scheduled_start).total_seconds() / 3600.0
+    amount = 300.0 * duration_hours
     payment = Payment(
         booking_id=new_booking.id,
         amount=amount,

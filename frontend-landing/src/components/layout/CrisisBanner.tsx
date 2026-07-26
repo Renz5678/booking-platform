@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 export default function CrisisBanner() {
   const pathname = usePathname();
-  const isDashboard = pathname?.includes("/dashboard") || pathname?.includes("/counselor") || pathname?.includes("/admin") || pathname?.includes("/faq") || pathname?.includes("/contact");
+  const isDashboard = pathname?.includes("/dashboard") || pathname?.includes("/counselor") || pathname?.includes("/admin") || pathname?.includes("/faq") || pathname?.includes("/contact") || pathname?.includes("/payment");
   const isAuth = pathname === "/login" || pathname === "/signup";
   const [isVisible, setIsVisible] = useState(true);
 

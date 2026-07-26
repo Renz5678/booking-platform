@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CounselorProfile } from "@/types";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 
 export default function CounselorProfilePage() {
-  const [profile, setProfile] = useState<any>(null);
+  const [profile, setProfile] = useState<CounselorProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

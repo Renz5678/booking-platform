@@ -1,9 +1,12 @@
 import asyncio
-from app.db.session import AsyncSessionLocal
-from app.models.user import User, RoleEnum
-from app.models.counselor_profile import CounselorProfile
-from sqlalchemy.future import select
 import sys
+
+from sqlalchemy.future import select
+
+from app.db.session import AsyncSessionLocal
+from app.models.counselor_profile import CounselorProfile
+from app.models.user import RoleEnum, User
+
 
 async def promote(email: str, role: str):
     async with AsyncSessionLocal() as db:

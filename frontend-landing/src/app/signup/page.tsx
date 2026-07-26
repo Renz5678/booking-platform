@@ -40,7 +40,7 @@ export default function SignupPage() {
       }
 
       router.push("/login?verified=true");
-    } catch (err: any) {
+    } catch (err: unknown) {
       setOtpError(err.message);
     } finally {
       setVerifying(false);
@@ -73,7 +73,7 @@ export default function SignupPage() {
       }
 
       setSuccess(true);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(err.message);
     } finally {
       setLoading(false);

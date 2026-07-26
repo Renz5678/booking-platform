@@ -1,20 +1,21 @@
 import base64
-import httpx
 from datetime import datetime, timezone
 
+import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.models.booking import Booking, BookingStatus
-from app.models.payment import Payment, PaymentStatus
-from app.models.counselor_profile import CounselorProfile
-from app.models.user import User
-from app.services.email_service import send_booking_confirmation
-from app.services.calendar_service import create_google_meet_event, add_event_to_calendar
-from app.core.encryption import decrypt_token
-
 from app.config import settings
-
+from app.core.encryption import decrypt_token
+from app.models.booking import Booking, BookingStatus
+from app.models.counselor_profile import CounselorProfile
+from app.models.payment import Payment, PaymentStatus
+from app.models.user import User
+from app.services.calendar_service import (
+    add_event_to_calendar,
+    create_google_meet_event,
+)
+from app.services.email_service import send_booking_confirmation
 
 PAYMONGO_BASE_URL = "https://api.paymongo.com/v1"
 

@@ -47,27 +47,30 @@ function SuccessContent() {
   }, [bookingId]);
 
   return (
-    <div className="max-w-md mx-auto mt-12 bg-surface-container-lowest rounded-xl shadow-ambient p-8 text-center border border-white">
+    <div className="max-w-xl mx-auto mt-16 bg-surface rounded-2xl shadow-ambient p-10 text-center">
       {status === "loading" && (
-        <div className="flex flex-col items-center">
-          <span className="material-symbols-outlined text-[48px] animate-spin text-secondary mb-4">progress_activity</span>
-          <h2 className="font-headline-md text-primary mb-2">Verifying Payment...</h2>
-          <p className="font-body-md text-on-surface-variant">Please wait while we confirm your session.</p>
+        <div className="flex flex-col items-center py-12">
+          <div className="w-20 h-20 bg-secondary-container rounded-full flex items-center justify-center mb-8 relative">
+            <span className="material-symbols-outlined text-[40px] text-secondary absolute animate-pulse">lock</span>
+            <div className="absolute inset-0 border-4 border-secondary rounded-full border-t-transparent animate-spin"></div>
+          </div>
+          <h2 className="font-headline-lg text-primary mb-3">Verifying Payment...</h2>
+          <p className="font-body-lg text-on-surface-variant max-w-sm">Please wait securely while we confirm your session details.</p>
         </div>
       )}
       
       {status === "success" && (
-        <div className="flex flex-col items-center">
-          <div className="w-16 h-16 bg-[#C3F2DA] rounded-full flex items-center justify-center mb-6">
-            <span className="material-symbols-outlined text-[32px] text-[#138A72]">check_circle</span>
+        <div className="flex flex-col items-center py-8">
+          <div className="w-24 h-24 bg-[#E8F8F0] rounded-full flex items-center justify-center mb-8 shadow-sm">
+            <span className="material-symbols-outlined text-[56px] text-[#138A72]">check_circle</span>
           </div>
-          <h2 className="font-headline-lg text-primary mb-2">Payment Successful!</h2>
-          <p className="font-body-md text-on-surface-variant mb-8">
-            Your session has been confirmed and a Google Meet link has been generated. You will receive a confirmation email shortly.
+          <h2 className="font-display-sm font-bold text-primary mb-4">Payment Successful!</h2>
+          <p className="font-body-lg text-on-surface-variant mb-10 max-w-md">
+            Your session has been successfully booked. You will receive an email confirmation with your Google Meet link shortly.
           </p>
           <button 
             onClick={() => router.push("/dashboard")}
-            className="w-full bg-secondary text-on-secondary font-label-md py-3.5 rounded-lg hover:opacity-90 active:scale-[0.98] transition-all duration-200 shadow-sm"
+            className="w-full max-w-sm bg-secondary text-on-secondary font-label-lg font-bold py-4 rounded-xl hover:opacity-90 active:scale-[0.98] transition-all duration-200 shadow-sm"
           >
             Go to My Dashboard
           </button>
@@ -75,17 +78,17 @@ function SuccessContent() {
       )}
 
       {status === "error" && (
-        <div className="flex flex-col items-center">
-          <div className="w-16 h-16 bg-error-container rounded-full flex items-center justify-center mb-6">
-            <span className="material-symbols-outlined text-[32px] text-error">error</span>
+        <div className="flex flex-col items-center py-8">
+          <div className="w-24 h-24 bg-error-container rounded-full flex items-center justify-center mb-8 shadow-sm">
+            <span className="material-symbols-outlined text-[56px] text-error">error</span>
           </div>
-          <h2 className="font-headline-md text-primary mb-2">Verification Failed</h2>
-          <p className="font-body-md text-on-surface-variant mb-8">
-            We couldn't verify your payment. If you were charged, please contact support.
+          <h2 className="font-display-sm font-bold text-primary mb-4">Verification Failed</h2>
+          <p className="font-body-lg text-on-surface-variant mb-10 max-w-md">
+            We couldn&apos;t verify your payment. If you were charged, please contact our support team immediately.
           </p>
           <button 
             onClick={() => router.push("/dashboard")}
-            className="w-full border border-outline text-primary font-label-md py-3.5 rounded-lg hover:bg-surface-container-low active:scale-[0.98] transition-all duration-200"
+            className="w-full max-w-sm border-2 border-outline-variant text-primary font-label-lg font-bold py-4 rounded-xl hover:bg-surface-container-low active:scale-[0.98] transition-all duration-200"
           >
             Return to Dashboard
           </button>

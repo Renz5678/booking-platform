@@ -6,7 +6,7 @@ from slowapi.errors import RateLimitExceeded
 from app.config import settings
 from app.core.rate_limit import limiter
 from app.middleware.security_headers import SecurityHeadersMiddleware
-from app.routers import auth, availability, bookings, counselors, payments, admin
+from app.routers import admin, auth, availability, bookings, counselors, payments
 
 app = FastAPI(
     title="Alaga API",

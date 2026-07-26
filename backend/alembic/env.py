@@ -19,7 +19,7 @@ if config.config_file_name is not None:
 # add your model's MetaData object here
 # for 'autogenerate' support
 from app.db.base import Base
-import app.models  # load all models
+
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
@@ -28,6 +28,7 @@ target_metadata = Base.metadata
 # ... etc.
 
 import os
+
 from dotenv import load_dotenv
 
 load_dotenv()

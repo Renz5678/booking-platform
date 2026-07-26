@@ -1,35 +1,32 @@
 import asyncio
 import logging
 import secrets
-from datetime import datetime, timezone, timedelta
-from pydantic import BaseModel
+import urllib.parse
+from datetime import datetime, timedelta, timezone
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
+from app.config import settings
+from app.core.encryption import encrypt_token
 from app.core.rate_limit import limiter
 from app.core.security import get_current_user
 from app.db.session import get_db
-from app.config import settings
+from app.models.counselor_profile import CounselorProfile
 from app.models.user import RoleEnum, User
 from app.schemas.user import UserCreate, UserLogin, UserResponse
 from app.services.auth_service import (
     create_access_token,
-    create_verification_token,
     get_password_hash,
     verify_captcha,
-    verify_email_token,
     verify_password,
 )
 from app.services.email_service import send_verification_email
-
-import urllib.parse
-import httpx
-from fastapi.responses import RedirectResponse
-from app.core.encryption import encrypt_token
-from app.models.counselor_profile import CounselorProfile
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])

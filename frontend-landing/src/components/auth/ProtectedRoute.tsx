@@ -61,7 +61,7 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
         }
 
         setLoading(false);
-      } catch (err) {
+      } catch (_err) {
         // Not authenticated or error
         router.push("/login");
       }

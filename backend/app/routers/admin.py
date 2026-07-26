@@ -1,14 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
 
 from app.core.security import require_role
 from app.db.session import get_db
 from app.models.counselor_profile import CounselorProfile
 from app.models.user import User
-from app.schemas.counselor import CounselorProfilePrivateResponse
 from app.schemas.booking import BookingResponse
-from sqlalchemy.orm import selectinload
+from app.schemas.counselor import CounselorProfilePrivateResponse
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -70,6 +70,7 @@ async def get_analytics(
 ):
     """Admin endpoint to view platform analytics."""
     from sqlalchemy import func
+
     from app.models.booking import Booking
     from app.models.payment import Payment, PaymentStatus
     

@@ -1,11 +1,13 @@
 import asyncio
+
 from app.db.session import engine
-from app.models.user import Base as UserBase
-from app.models.counselor_profile import Base as CPBase
 from app.models.availability import Base as AvBase
 from app.models.booking import Base as BookingBase
+from app.models.counselor_profile import Base as CPBase
 from app.models.intake_form import Base as IFBase
 from app.models.payment import Base as PayBase
+from app.models.user import Base as UserBase
+
 
 async def init_models():
     async with engine.begin() as conn:

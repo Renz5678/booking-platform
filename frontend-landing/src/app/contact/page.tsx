@@ -7,7 +7,7 @@ export default function ContactPage() {
     <DashboardLayout role="client" allowedRoles={["client"]}>
       <div className="max-w-2xl mx-auto">
         <h1 className="font-headline-xl text-primary mb-2">Contact Support</h1>
-        <p className="font-body-lg text-on-surface-variant mb-8">We're here to help. Send us a message and we'll get back to you shortly.</p>
+        <p className="font-body-lg text-on-surface-variant mb-8">We&apos;re here to help. Send us a message and we'll get back to you shortly.</p>
         
         <form className="bg-surface-container-lowest p-8 rounded-xl shadow-sm border border-outline-variant space-y-6">
           <div>

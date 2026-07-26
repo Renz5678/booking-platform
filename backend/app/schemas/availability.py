@@ -4,11 +4,11 @@ from pydantic import BaseModel, validator
 
 
 class AvailabilityBase(BaseModel):
+    is_recurring: bool
     day_of_week: int | None = None
     specific_date: date | None = None
     start_time: time
     end_time: time
-    is_recurring: bool
 
     @validator("day_of_week", always=True)
     def validate_day_or_date(cls, v, values):

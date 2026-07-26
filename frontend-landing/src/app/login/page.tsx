@@ -49,7 +49,7 @@ export default function LoginPage() {
       } else if (userData.role === "admin") {
         router.push("/admin/dashboard");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(err.message);
     } finally {
       setLoading(false);

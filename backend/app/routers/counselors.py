@@ -73,8 +73,9 @@ async def get_my_counselor_stats(
     if not counselor:
         raise HTTPException(status_code=404, detail="Counselor profile not found")
 
-    from app.models.booking import Booking, BookingStatus
     from sqlalchemy import func
+
+    from app.models.booking import Booking, BookingStatus
 
     result = await db.execute(
         select(func.count(Booking.id))

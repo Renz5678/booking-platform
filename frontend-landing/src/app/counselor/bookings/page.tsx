@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Booking } from "@/types";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 
 export default function CounselorBookingsPage() {
-  const [bookings, setBookings] = useState<any[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

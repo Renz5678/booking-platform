@@ -5,10 +5,10 @@ from sqlalchemy import and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
+from app.core.encryption import decrypt_token
 from app.models.booking import Booking, BookingStatus
 from app.models.counselor_profile import CounselorProfile
 from app.services.calendar_service import check_google_calendar_busy
-from app.core.encryption import decrypt_token
 
 logger = logging.getLogger(__name__)
 

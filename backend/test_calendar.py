@@ -1,6 +1,8 @@
 import asyncio
-from app.services.calendar_service import create_google_meet_event
 from datetime import datetime, timedelta, timezone
+
+from app.services.calendar_service import create_google_meet_event
+
 
 async def test_cal():
     now = datetime.now(timezone.utc)
