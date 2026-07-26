@@ -1,26 +1,87 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --color-background: #fbf9fa;
+  --color-on-primary-container: #97a9be;
+  --color-surface-container-lowest: #ffffff;
+  --color-on-tertiary-fixed-variant: #005143;
+  --color-inverse-primary: #b6c8df;
+  --color-on-surface-variant: #43474c;
+  --color-tertiary-container: #004539;
+  --color-surface-bright: #fbf9fa;
+  --color-surface-container: #efedef;
+  --color-on-background: #1b1c1d;
+  --color-surface-container-highest: #e4e2e3;
+  --color-on-primary-fixed-variant: #37485b;
+  --color-tertiary: #002d25;
+  --color-secondary-container: #7ff995;
+  --color-secondary-fixed-dim: #65de7e;
+  --color-on-error-container: #93000a;
+  --color-surface-dim: #dbd9db;
+  --color-secondary-fixed: #82fb98;
+  --color-on-tertiary: #ffffff;
+  --color-primary-container: #2d3e50;
+  --color-primary-fixed: #d2e4fb;
+  --color-outline-variant: #c4c6cd;
+  --color-on-error: #ffffff;
+  --color-tertiary-fixed-dim: #68dac0;
+  --color-primary: #172839;
+  --color-on-primary-fixed: #0a1d2d;
+  --color-surface-tint: #4f6073;
+  --color-primary-fixed-dim: #b6c8df;
+  --color-on-surface: #1b1c1d;
+  --color-surface-variant: #e4e2e3;
+  --color-on-secondary-fixed: #002109;
+  --color-on-tertiary-fixed: #00201a;
+  --color-surface-container-high: #e9e7e9;
+  --color-on-tertiary-container: #44b9a1;
+  --color-on-primary: #ffffff;
+  --color-surface: #fbf9fa;
+  --color-inverse-on-surface: #f2f0f2;
+  --color-error: #ba1a1a;
+  --color-secondary: #006e2d;
+  --color-outline: #74777d;
+  --color-surface-container-low: #f5f3f4;
+  --color-error-container: #ffdad6;
+  --color-on-secondary-fixed-variant: #005320;
+  --color-tertiary-fixed: #85f6db;
+  --color-on-secondary-container: #00722f;
+  --color-on-secondary: #ffffff;
+  --color-inverse-surface: #303032;
+
+  --spacing-section-gap: 80px;
+  --spacing-margin-desktop: 40px;
+  --spacing-unit: 8px;
+  --spacing-margin-mobile: 16px;
+  --spacing-container-max: 1200px;
+  --spacing-gutter: 24px;
+
+  --font-inter: var(--font-inter), "Inter", sans-serif;
+  --font-headline-lg: var(--font-inter);
+  --font-label-sm: var(--font-inter);
+  --font-body-md: var(--font-inter);
+  --font-body-lg: var(--font-inter);
+  --font-headline-md: var(--font-inter);
+  --font-headline-lg-mobile: var(--font-inter);
+  --font-headline-xl: var(--font-inter);
+  --font-label-md: var(--font-inter);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+@layer utilities {
+  .custom-shadow { box-shadow: 0 4px 16px rgba(45, 62, 80, 0.05); }
+  .custom-hover-shadow:hover { box-shadow: 0 6px 20px rgba(45, 62, 80, 0.08); }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  .text-headline-xl { font-size: 48px; line-height: 56px; letter-spacing: -0.02em; font-weight: 600; }
+  .text-headline-lg { font-size: 32px; line-height: 40px; letter-spacing: -0.01em; font-weight: 600; }
+  .text-headline-lg-mobile { font-size: 28px; line-height: 36px; font-weight: 600; }
+  .text-headline-md { font-size: 24px; line-height: 32px; font-weight: 500; }
+  .text-body-lg { font-size: 18px; line-height: 28px; font-weight: 400; }
+  .text-body-md { font-size: 16px; line-height: 24px; font-weight: 400; }
+  .text-label-md { font-size: 14px; line-height: 20px; letter-spacing: 0.01em; font-weight: 500; }
+  .text-label-sm { font-size: 12px; line-height: 16px; letter-spacing: 0.05em; font-weight: 600; }
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-background);
+  color: var(--color-on-background);
 }

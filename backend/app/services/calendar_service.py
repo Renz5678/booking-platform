@@ -38,6 +38,13 @@ async def create_google_meet_event(summary: str, start_time: datetime, end_time:
         "Content-Type": "application/json"
     }
     
+    # Ensure timezone info exists before sending to Google API
+    from datetime import timezone
+    if start_time.tzinfo is None:
+        start_time = start_time.replace(tzinfo=timezone.utc)
+    if end_time.tzinfo is None:
+        end_time = end_time.replace(tzinfo=timezone.utc)
+
     event_data = {
         "summary": summary,
         "description": f"Booking ID: {booking_id}",

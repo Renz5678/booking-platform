@@ -7,7 +7,10 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 load_dotenv()
 
 # If modifying these scopes, delete the file token.json.
-SCOPES = ['https://www.googleapis.com/auth/gmail.send']
+SCOPES = [
+    'https://www.googleapis.com/auth/gmail.send',
+    'https://www.googleapis.com/auth/calendar.events'
+]
 
 def main():
     client_id = os.getenv("GOOGLE_CLIENT_ID")
