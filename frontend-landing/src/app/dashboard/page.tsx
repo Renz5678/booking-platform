@@ -2,21 +2,16 @@
 
 import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import RescheduleModal from "@/components/dashboard/RescheduleModal";
 
-interface Booking {
-  id: string;
-  counselor_name: string;
-  scheduled_start: string;
-  scheduled_end: string;
-  status: string;
-  meeting_link?: string;
-}
+import { Booking } from "@/types";
 
 export default function ClientDashboardPage() {
   const [firstName, setFirstName] = useState("");
   const [upcomingBooking, setUpcomingBooking] = useState<Booking | null>(null);
   const [pastBookings, setPastBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reschedulingBooking, setReschedulingBooking] = useState<Booking | null>(null);
   const [calendarConnected, setCalendarConnected] = useState(false);
 
   useEffect(() => {
@@ -177,7 +172,7 @@ export default function ClientDashboardPage() {
                         {upcomingBooking.status === "pending_payment" ? "Pending Payment" : "Link Unavailable"}
                       </button>
                     )}
-                    <button className="text-tertiary-container hover:bg-surface-container-low font-label-md text-[14px] font-medium px-6 py-3 rounded-lg transition-colors border border-transparent hover:border-outline-variant w-full sm:w-auto">
+                    <button onClick={() => setReschedulingBooking(upcomingBooking)} className="text-tertiary-container hover:bg-surface-container-low font-label-md text-[14px] font-medium px-6 py-3 rounded-lg transition-colors border border-transparent hover:border-outline-variant w-full sm:w-auto">
                       Reschedule
                     </button>
                   </div>
@@ -248,6 +243,18 @@ export default function ClientDashboardPage() {
           </section>
         </>
       )}
+
+      {reschedulingBooking && (
+        <RescheduleModal
+          booking={reschedulingBooking}
+          onClose={() => setReschedulingBooking(null)}
+          onSuccess={() => {
+            setReschedulingBooking(null);
+            window.location.reload(); // Simple refetch
+          }}
+        />
+      )}
     </DashboardLayout>
+
   );
 }

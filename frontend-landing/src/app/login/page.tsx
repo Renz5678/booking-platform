@@ -50,7 +50,7 @@ export default function LoginPage() {
         router.push("/admin/dashboard");
       }
     } catch (err: unknown) {
-      setError(err.message);
+      setError((err as Error).message);
     } finally {
       setLoading(false);
     }

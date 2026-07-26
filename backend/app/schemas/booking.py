@@ -16,6 +16,11 @@ class BookingCreate(BookingBase):
     intake_notes: str | None = None
 
 
+class BookingRescheduleRequest(BaseModel):
+    new_scheduled_start: datetime
+    new_scheduled_end: datetime
+
+
 class BookingResponse(BookingBase):
     id: str
     client_id: str

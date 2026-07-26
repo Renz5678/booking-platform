@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 async def check_counselor_availability(
-    db: AsyncSession, counselor_id: str, start_time, end_time
+    db: AsyncSession, counselor_id: str, start_time, end_time, exclude_booking_id: str | None = None
 ) -> bool:
     """
     Checks whether a counselor has any overlapping bookings during the requested time slot.
@@ -26,39 +26,26 @@ async def check_counselor_availability(
 
     Only 'pending_payment' and 'confirmed' bookings are considered active —
     cancelled and completed bookings free up the slot.
-
-    TODO: In the future, this should also:
-      - Validate against the counselor's `Availability` schedule.
-      - Cross-check against their Google Calendar for external conflicts.
-
-    Returns:
-        True if the slot is free, False if it is already taken.
     """
-    overlapping_bookings = await db.execute(
-        select(Booking).where(
-            Booking.counselor_id == counselor_id,
-            # Only block on active bookings
-            Booking.status.in_(
-                [BookingStatus.pending_payment, BookingStatus.confirmed]
-            ),
-            # Check all three overlap cases with OR logic
-            or_(
-                and_(
-                    Booking.scheduled_start <= start_time,
-                    Booking.scheduled_end > start_time,
-                ),
-                and_(
-                    Booking.scheduled_start < end_time,
-                    Booking.scheduled_end >= end_time,
-                ),
-                and_(
-                    Booking.scheduled_start >= start_time,
-                    Booking.scheduled_end <= end_time,
-                ),
-            ),
+    
+    conditions = [
+        Booking.counselor_id == counselor_id,
+        # Only block on active bookings
+        Booking.status.in_(
+            [BookingStatus.pending_payment, BookingStatus.confirmed]
+        ),
+        # Simpler and safer overlap logic
+        and_(
+            Booking.scheduled_start < end_time,
+            Booking.scheduled_end > start_time,
         )
-    )
-    if overlapping_bookings.scalar_one_or_none():
+    ]
+    
+    if exclude_booking_id:
+        conditions.append(Booking.id != exclude_booking_id)
+
+    overlapping_bookings = await db.execute(select(Booking).where(*conditions))
+    if overlapping_bookings.scalars().first():
         return False
         
     # Check Google Calendar if connected

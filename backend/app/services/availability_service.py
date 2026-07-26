@@ -44,7 +44,7 @@ async def remove_availability_block(
 
 
 async def get_available_slots(
-    db: AsyncSession, counselor_id: str, start_date: str, end_date: str, duration_minutes: int
+    db: AsyncSession, counselor_id: str, start_date: str, end_date: str, duration_minutes: int, exclude_booking_id: str | None = None
 ) -> dict[str, dict[str, list[str]]]:
     from datetime import datetime, time, timedelta, timezone
 
@@ -80,12 +80,16 @@ async def get_available_slots(
     end_of_range = datetime.combine(e_dt, time.max).replace(tzinfo=timezone.utc)
     
     # Fetch all bookings in range
-    stmt_bookings = select(Booking).where(
+    conditions = [
         Booking.counselor_id == counselor_id,
         Booking.status.in_([BookingStatus.pending_payment, BookingStatus.confirmed]),
         Booking.scheduled_start >= start_of_range,
         Booking.scheduled_start <= end_of_range
-    )
+    ]
+    if exclude_booking_id:
+        conditions.append(Booking.id != exclude_booking_id)
+        
+    stmt_bookings = select(Booking).where(*conditions)
     booking_result = await db.execute(stmt_bookings)
     bookings = booking_result.scalars().all()
     booked_intervals = [(b.scheduled_start, b.scheduled_end) for b in bookings]

@@ -41,7 +41,7 @@ export default function SignupPage() {
 
       router.push("/login?verified=true");
     } catch (err: unknown) {
-      setOtpError(err.message);
+      setOtpError((err as Error).message);
     } finally {
       setVerifying(false);
     }
@@ -74,7 +74,7 @@ export default function SignupPage() {
 
       setSuccess(true);
     } catch (err: unknown) {
-      setError(err.message);
+      setError((err as Error).message);
     } finally {
       setLoading(false);
     }

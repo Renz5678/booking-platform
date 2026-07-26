@@ -10,6 +10,7 @@ export interface CounselorProfile {
   bio: string | null;
   specialization_tags: string[];
   google_calendar_connected: boolean;
+  is_verified: boolean;
   user: {
     id: string;
     full_name: string;
@@ -20,9 +21,10 @@ export interface Booking {
   id: string;
   client_id: string;
   counselor_id: string;
+  counselor_name?: string;
   scheduled_start: string;
   scheduled_end: string;
-  status: "pending_payment" | "confirmed" | "completed" | "cancelled";
+  status: "pending_payment" | "confirmed" | "completed" | "cancelled" | "no_show";
   meeting_link?: string;
   client?: {
     id: string;

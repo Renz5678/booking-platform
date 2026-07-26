@@ -10,7 +10,12 @@ from app.models.counselor_profile import CounselorProfile
 from app.models.intake_form import IntakeForm
 from app.models.payment import Payment, PaymentStatus
 from app.models.user import User
-from app.schemas.booking import BookingCounselorResponse, BookingCreate, BookingResponse
+from app.schemas.booking import (
+    BookingCounselorResponse,
+    BookingCreate,
+    BookingRescheduleRequest,
+    BookingResponse,
+)
 from app.services.booking_service import (
     check_counselor_availability,
     expire_booking_if_unpaid,
@@ -135,3 +140,63 @@ async def get_counselor_bookings(
         .where(Booking.counselor_id == counselor.id)
     )
     return result.scalars().all()
+
+
+@router.put("/{booking_id}/reschedule", response_model=BookingResponse)
+async def reschedule_booking(
+    booking_id: str,
+    reschedule_data: BookingRescheduleRequest,
+    current_user: User = Depends(require_role(["client"])),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Reschedules an existing booking. Only allowed for the client who made it.
+    Must retain the same duration.
+    """
+    # 1. Fetch existing booking
+    result = await db.execute(
+        select(Booking)
+        .options(
+            selectinload(Booking.counselor).selectinload(CounselorProfile.user),
+            selectinload(Booking.client)
+        )
+        .where(Booking.id == booking_id)
+    )
+    booking = result.scalar_one_or_none()
+
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    if booking.client_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to reschedule this booking")
+
+    if booking.status not in [BookingStatus.pending_payment, BookingStatus.confirmed]:
+        raise HTTPException(status_code=400, detail="Cannot reschedule a completed or cancelled booking.")
+
+    # 2. Check duration match
+    old_duration = (booking.scheduled_end - booking.scheduled_start).total_seconds()
+    new_duration = (reschedule_data.new_scheduled_end - reschedule_data.new_scheduled_start).total_seconds()
+    
+    if old_duration != new_duration:
+        raise HTTPException(status_code=400, detail="Rescheduled session must have the same duration as the original session.")
+
+    # 3. Check availability for new slots
+    is_available = await check_counselor_availability(
+        db,
+        booking.counselor_id,
+        reschedule_data.new_scheduled_start,
+        reschedule_data.new_scheduled_end,
+        exclude_booking_id=booking.id,
+    )
+    if not is_available:
+        raise HTTPException(status_code=400, detail="Counselor is not available for the requested new time block.")
+
+    # 4. Update the booking
+    # Note: We omit Google Calendar event update for MVP, just update DB
+    booking.scheduled_start = reschedule_data.new_scheduled_start
+    booking.scheduled_end = reschedule_data.new_scheduled_end
+
+    await db.commit()
+    await db.refresh(booking)
+
+    return booking

@@ -1,3 +1,4 @@
+import { AvailabilityBlock } from "@/types";
 "use client";
 
 import React, { useState, useEffect } from "react";
