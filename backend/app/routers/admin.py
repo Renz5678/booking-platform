@@ -6,19 +6,23 @@ from app.core.security import require_role
 from app.db.session import get_db
 from app.models.counselor_profile import CounselorProfile
 from app.models.user import User
-from app.schemas.counselor import CounselorProfilePublicResponse
+from app.schemas.counselor import CounselorProfilePrivateResponse
+from app.schemas.booking import BookingResponse
+from sqlalchemy.orm import selectinload
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
-@router.get("/counselors/pending", response_model=list[CounselorProfilePublicResponse])
+@router.get("/counselors/pending", response_model=list[CounselorProfilePrivateResponse])
 async def list_pending_counselors(
     current_user: User = Depends(require_role(["admin"])),
     db: AsyncSession = Depends(get_db),
 ):
     """Admin endpoint to list all counselors pending verification."""
     result = await db.execute(
-        select(CounselorProfile).where(CounselorProfile.is_verified == False)
+        select(CounselorProfile)
+        .options(selectinload(CounselorProfile.user))
+        .where(CounselorProfile.is_verified == False)
     )
     return result.scalars().all()
 
@@ -45,16 +49,18 @@ async def verify_counselor(
     
     return {"msg": "Counselor approved and verified."}
 
-@router.get("/bookings")
+@router.get("/bookings", response_model=list[BookingResponse])
 async def get_all_bookings(
     current_user: User = Depends(require_role(["admin"])),
     db: AsyncSession = Depends(get_db)
 ):
     """Admin endpoint to view all bookings platform-wide."""
     from app.models.booking import Booking
-    result = await db.execute(select(Booking))
+    result = await db.execute(
+        select(Booking)
+        .options(selectinload(Booking.client), selectinload(Booking.counselor).selectinload(CounselorProfile.user))
+    )
     bookings = result.scalars().all()
-    # Ideally, you'd use a response_model, but returning directly for MVP
     return bookings
 
 @router.get("/analytics")

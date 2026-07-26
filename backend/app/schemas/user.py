@@ -65,6 +65,8 @@ class UserResponse(BaseModel):
     email: EmailStr
     full_name: str
     role: str
+    is_active: bool = True
+    google_calendar_connected: bool = False
 
     class Config:
         from_attributes = True

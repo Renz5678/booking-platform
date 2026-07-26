@@ -25,7 +25,7 @@ class Payment(Base):
     __tablename__ = "payments"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    booking_id = Column(String, ForeignKey("bookings.id"), nullable=False, unique=True)
+    booking_id = Column(String, ForeignKey("bookings.id", ondelete="CASCADE"), nullable=False, unique=True)
 
     amount = Column(Numeric(10, 2), nullable=False)
     currency = Column(String, default="PHP", nullable=False)

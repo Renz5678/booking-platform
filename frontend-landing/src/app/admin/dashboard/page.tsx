@@ -1,174 +1,254 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 
+interface PendingCounselor {
+  id: string;
+  user: {
+    full_name: string;
+    email: string;
+  };
+  bio?: string;
+}
+
 export default function AdminDashboardPage() {
+  const [loading, setLoading] = useState(true);
+  const [totalBookings, setTotalBookings] = useState(0);
+  const [totalRevenue, setTotalRevenue] = useState("0");
+  const [todaysBookings, setTodaysBookings] = useState(0);
+  const [pendingCounselors, setPendingCounselors] = useState<PendingCounselor[]>([]);
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  async function fetchData() {
+    setLoading(true);
+    try {
+      // Fetch Analytics
+      const analyticsRes = await fetch("http://localhost:8000/admin/analytics", {
+        headers: { "Content-Type": "application/json" },
+        credentials: "include"
+      });
+      if (analyticsRes.ok) {
+        const data = await analyticsRes.json();
+        setTotalBookings(data.total_bookings);
+        // Format revenue
+        if (data.total_revenue >= 1000) {
+          setTotalRevenue((data.total_revenue / 1000).toFixed(1) + "k");
+        } else {
+          setTotalRevenue(data.total_revenue.toString());
+        }
+      }
+
+      // Fetch Pending Counselors
+      const pendingRes = await fetch("http://localhost:8000/admin/counselors/pending", {
+        headers: { "Content-Type": "application/json" },
+        credentials: "include"
+      });
+      if (pendingRes.ok) {
+        setPendingCounselors(await pendingRes.json());
+      }
+
+      // Fetch Bookings to calculate "Bookings Today"
+      const bookingsRes = await fetch("http://localhost:8000/admin/bookings", {
+        headers: { "Content-Type": "application/json" },
+        credentials: "include"
+      });
+      if (bookingsRes.ok) {
+        const bookings = await bookingsRes.json();
+        const now = new Date();
+        const startOfDay = new Date(now);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(now);
+        endOfDay.setHours(23, 59, 59, 999);
+        
+        const todayBookings = bookings.filter((b: any) => {
+          const d = new Date(b.scheduled_start);
+          return d >= startOfDay && d <= endOfDay;
+        });
+        setTodaysBookings(todayBookings.length);
+      }
+    } catch (error) {
+      console.error("Error fetching admin data:", error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const handleApprove = async (counselorId: string) => {
+    setVerifyingId(counselorId);
+    try {
+      const res = await fetch(`http://localhost:8000/admin/counselors/${counselorId}/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include"
+      });
+      if (res.ok) {
+        // Remove from list
+        setPendingCounselors(prev => prev.filter(c => c.id !== counselorId));
+      } else {
+        alert("Failed to verify counselor");
+      }
+    } catch (error) {
+      console.error("Error verifying counselor:", error);
+      alert("Failed to verify counselor");
+    } finally {
+      setVerifyingId(null);
+    }
+  };
+
+  const getInitials = (name: string) => {
+    if (!name) return "?";
+    return name.split(" ").map(n => n[0]).join("").toUpperCase().substring(0, 2);
+  };
+
   return (
     <DashboardLayout role="admin" allowedRoles={["admin"]}>
-      {/* Header */}
-      <header className="mb-6 flex justify-between items-end">
-        <div>
-          <h2 className="font-headline-lg text-[32px] font-semibold tracking-tight text-primary mb-2">Welcome back, Admin</h2>
-          <p className="font-body-md text-[16px] text-on-surface-variant">Here's what's happening today.</p>
+      {loading ? (
+        <div className="py-12 flex justify-center items-center">
+          <svg className="animate-spin h-8 w-8 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
         </div>
-        <div className="flex gap-4">
-          <button className="bg-surface-container-highest text-on-surface-variant font-label-md text-[14px] font-medium px-4 py-2 rounded-lg hover:bg-surface-container-high transition-colors flex items-center gap-2">
-            <span className="material-symbols-outlined text-[18px]">calendar_today</span>
-            Last 30 Days
-          </button>
-          <button className="bg-primary text-on-primary font-label-md text-[14px] font-medium px-4 py-2 rounded-lg hover:opacity-90 transition-opacity">
-            Generate Report
-          </button>
-        </div>
-      </header>
-
-      {/* Stat Cards Row */}
-      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-        {/* Card 1 */}
-        <div className="bg-white rounded-xl p-6 shadow-sm hover:-translate-y-0.5 hover:shadow-md transition-all border border-surface-container-highest">
-          <div className="flex justify-between items-start mb-4">
-            <h3 className="font-label-md text-[14px] font-medium text-on-surface-variant">Counselors Pending Review</h3>
-            <div className="bg-secondary-container text-on-secondary-container p-2 rounded-lg">
-              <span className="material-symbols-outlined">pending_actions</span>
+      ) : (
+        <>
+          {/* Header */}
+          <header className="mb-6 flex justify-between items-end">
+            <div>
+              <h2 className="font-headline-lg text-[32px] font-semibold tracking-tight text-primary mb-2">Welcome back, Admin</h2>
+              <p className="font-body-md text-[16px] text-on-surface-variant">Here's what's happening on the platform today.</p>
             </div>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="font-headline-xl text-[48px] font-semibold tracking-tight text-primary">12</span>
-            <span className="font-label-sm text-[12px] font-semibold tracking-wider text-error flex items-center">
-              <span className="material-symbols-outlined text-[16px]">trending_up</span> +3 this week
-            </span>
-          </div>
-        </div>
+          </header>
 
-        {/* Card 2 */}
-        <div className="bg-white rounded-xl p-6 shadow-sm hover:-translate-y-0.5 hover:shadow-md transition-all border border-surface-container-highest">
-          <div className="flex justify-between items-start mb-4">
-            <h3 className="font-label-md text-[14px] font-medium text-on-surface-variant">Bookings Today</h3>
-            <div className="bg-tertiary-fixed text-on-tertiary-fixed p-2 rounded-lg">
-              <span className="material-symbols-outlined">calendar_month</span>
-            </div>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="font-headline-xl text-[48px] font-semibold tracking-tight text-primary">145</span>
-            <span className="font-label-sm text-[12px] font-semibold tracking-wider text-secondary flex items-center">
-              <span className="material-symbols-outlined text-[16px]">trending_up</span> +12% vs yday
-            </span>
-          </div>
-        </div>
-
-        {/* Card 3 */}
-        <div className="bg-white rounded-xl p-6 shadow-sm hover:-translate-y-0.5 hover:shadow-md transition-all border border-surface-container-highest">
-          <div className="flex justify-between items-start mb-4">
-            <h3 className="font-label-md text-[14px] font-medium text-on-surface-variant">Revenue This Week</h3>
-            <div className="bg-primary-fixed text-on-primary-fixed p-2 rounded-lg">
-              <span className="material-symbols-outlined">payments</span>
-            </div>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="font-headline-xl text-[48px] font-semibold tracking-tight text-primary">$8.4k</span>
-            <span className="font-label-sm text-[12px] font-semibold tracking-wider text-secondary flex items-center">
-              <span className="material-symbols-outlined text-[16px]">trending_up</span> +5%
-            </span>
-          </div>
-        </div>
-
-        {/* Card 4 */}
-        <div className="bg-white rounded-xl p-6 shadow-sm hover:-translate-y-0.5 hover:shadow-md transition-all border border-error-container">
-          <div className="flex justify-between items-start mb-4">
-            <h3 className="font-label-md text-[14px] font-medium text-on-surface-variant">Flagged Issues</h3>
-            <div className="bg-error-container text-on-error-container p-2 rounded-lg">
-              <span className="material-symbols-outlined">flag</span>
-            </div>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="font-headline-xl text-[48px] font-semibold tracking-tight text-error">3</span>
-            <span className="font-label-sm text-[12px] font-semibold tracking-wider text-on-surface-variant">Requires attention</span>
-          </div>
-        </div>
-      </section>
-
-      {/* Main Content Area: Needs Attention Grid */}
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Counselors Needs Review */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-surface-container-highest flex flex-col h-full">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="font-headline-md text-[24px] font-medium text-primary">Pending Counselors</h3>
-            <button className="font-label-md text-[14px] font-medium text-secondary hover:underline">View All</button>
-          </div>
-          <div className="flex flex-col gap-4 flex-1">
-            {/* List Item 1 */}
-            <div className="flex items-center justify-between p-4 bg-surface-container-lowest rounded-lg border border-surface-container-highest hover:bg-surface-container-low transition-colors">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-primary-fixed text-on-primary-fixed rounded-full flex items-center justify-center font-bold">DR</div>
-                <div>
-                  <h4 className="font-label-md text-[14px] font-bold text-primary">Dr. Sarah Jenkins</h4>
-                  <p className="font-label-sm text-[12px] font-semibold tracking-wider text-on-surface-variant">Clinical Psychologist • Submitted 2 hrs ago</p>
+          {/* Stat Cards Row */}
+          <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+            {/* Card 1 */}
+            <div className="bg-white rounded-xl p-6 shadow-sm hover:-translate-y-0.5 hover:shadow-md transition-all border border-surface-container-highest">
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="font-label-md text-[14px] font-medium text-on-surface-variant">Counselors Pending Review</h3>
+                <div className="bg-secondary-container text-on-secondary-container p-2 rounded-lg">
+                  <span className="material-symbols-outlined">pending_actions</span>
                 </div>
               </div>
-              <button className="bg-surface-container-highest text-on-surface-variant px-3 py-1.5 rounded-lg font-label-sm text-[12px] font-semibold tracking-wider hover:bg-secondary-container hover:text-on-secondary-container transition-colors">Review</button>
+              <div className="flex items-baseline gap-2">
+                <span className="font-headline-xl text-[48px] font-semibold tracking-tight text-primary">{pendingCounselors.length}</span>
+              </div>
             </div>
 
-            {/* List Item 2 */}
-            <div className="flex items-center justify-between p-4 bg-surface-container-lowest rounded-lg border border-surface-container-highest hover:bg-surface-container-low transition-colors">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-tertiary-fixed text-on-tertiary-fixed rounded-full flex items-center justify-center font-bold">MW</div>
-                <div>
-                  <h4 className="font-label-md text-[14px] font-bold text-primary">Marcus Webb, LMFT</h4>
-                  <p className="font-label-sm text-[12px] font-semibold tracking-wider text-on-surface-variant">Family Therapist • Submitted 5 hrs ago</p>
+            {/* Card 2 */}
+            <div className="bg-white rounded-xl p-6 shadow-sm hover:-translate-y-0.5 hover:shadow-md transition-all border border-surface-container-highest">
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="font-label-md text-[14px] font-medium text-on-surface-variant">Total Platform Bookings</h3>
+                <div className="bg-tertiary-fixed text-on-tertiary-fixed p-2 rounded-lg">
+                  <span className="material-symbols-outlined">calendar_month</span>
                 </div>
               </div>
-              <button className="bg-surface-container-highest text-on-surface-variant px-3 py-1.5 rounded-lg font-label-sm text-[12px] font-semibold tracking-wider hover:bg-secondary-container hover:text-on-secondary-container transition-colors">Review</button>
+              <div className="flex items-baseline gap-2">
+                <span className="font-headline-xl text-[48px] font-semibold tracking-tight text-primary">{totalBookings}</span>
+                <span className="font-label-sm text-[12px] font-semibold tracking-wider text-secondary flex items-center">
+                  <span className="material-symbols-outlined text-[16px]">today</span> {todaysBookings} Today
+                </span>
+              </div>
             </div>
 
-            {/* List Item 3 */}
-            <div className="flex items-center justify-between p-4 bg-surface-container-lowest rounded-lg border border-surface-container-highest hover:bg-surface-container-low transition-colors">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-primary-fixed-dim text-on-primary-fixed rounded-full flex items-center justify-center font-bold">EL</div>
-                <div>
-                  <h4 className="font-label-md text-[14px] font-bold text-primary">Elena Rodriguez, LCSW</h4>
-                  <p className="font-label-sm text-[12px] font-semibold tracking-wider text-on-surface-variant">Social Worker • Submitted 1 day ago</p>
+            {/* Card 3 */}
+            <div className="bg-white rounded-xl p-6 shadow-sm hover:-translate-y-0.5 hover:shadow-md transition-all border border-surface-container-highest">
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="font-label-md text-[14px] font-medium text-on-surface-variant">Total Platform Revenue</h3>
+                <div className="bg-primary-fixed text-on-primary-fixed p-2 rounded-lg">
+                  <span className="material-symbols-outlined">payments</span>
                 </div>
               </div>
-              <button className="bg-surface-container-highest text-on-surface-variant px-3 py-1.5 rounded-lg font-label-sm text-[12px] font-semibold tracking-wider hover:bg-secondary-container hover:text-on-secondary-container transition-colors">Review</button>
-            </div>
-          </div>
-        </div>
-
-        {/* Reported Bookings / Issues */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-surface-container-highest flex flex-col h-full">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="font-headline-md text-[24px] font-medium text-primary flex items-center gap-2">
-              Flagged Issues <span className="bg-error-container text-on-error-container font-label-sm text-[12px] font-semibold tracking-wider px-2 py-0.5 rounded-full">3</span>
-            </h3>
-          </div>
-          <div className="flex flex-col gap-4 flex-1">
-            {/* Issue Item 1 */}
-            <div className="p-4 bg-error-container/20 border border-error-container rounded-lg">
-              <div className="flex justify-between items-start mb-2">
-                <h4 className="font-label-md text-[14px] font-bold text-on-error-container">Missed Session Dispute</h4>
-                <span className="font-label-sm text-[12px] font-semibold tracking-wider text-error">High Priority</span>
-              </div>
-              <p className="font-body-md text-[14px] text-on-surface-variant mb-3">Client #4829 disputes missed session charge with Dr. Jenkins. Both parties have submitted notes.</p>
-              <div className="flex gap-2">
-                <button className="bg-white text-on-surface-variant border border-outline-variant px-3 py-1.5 rounded-lg font-label-sm text-[12px] font-semibold tracking-wider hover:bg-surface-container-low">View Details</button>
-                <button className="bg-primary text-on-primary px-3 py-1.5 rounded-lg font-label-sm text-[12px] font-semibold tracking-wider hover:opacity-90">Resolve</button>
+              <div className="flex items-baseline gap-2">
+                <span className="font-headline-xl text-[48px] font-semibold tracking-tight text-primary">₱{totalRevenue}</span>
               </div>
             </div>
 
-            {/* Issue Item 2 */}
-            <div className="p-4 bg-surface-container-lowest border border-outline-variant rounded-lg">
-              <div className="flex justify-between items-start mb-2">
-                <h4 className="font-label-md text-[14px] font-bold text-primary">Technical: Video Failure</h4>
-                <span className="font-label-sm text-[12px] font-semibold tracking-wider text-on-surface-variant">Med Priority</span>
+            {/* Card 4 */}
+            <div className="bg-white rounded-xl p-6 shadow-sm hover:-translate-y-0.5 hover:shadow-md transition-all border border-error-container">
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="font-label-md text-[14px] font-medium text-on-surface-variant">Flagged Issues</h3>
+                <div className="bg-error-container text-on-error-container p-2 rounded-lg">
+                  <span className="material-symbols-outlined">flag</span>
+                </div>
               </div>
-              <p className="font-body-md text-[14px] text-on-surface-variant mb-3">System logged incomplete video connection for Booking #9921. Client requested refund.</p>
-              <div className="flex gap-2">
-                <button className="bg-white text-on-surface-variant border border-outline-variant px-3 py-1.5 rounded-lg font-label-sm text-[12px] font-semibold tracking-wider hover:bg-surface-container-low">View Logs</button>
+              <div className="flex items-baseline gap-2">
+                <span className="font-headline-xl text-[48px] font-semibold tracking-tight text-error">0</span>
+                <span className="font-label-sm text-[12px] font-semibold tracking-wider text-on-surface-variant">All clear</span>
               </div>
             </div>
-          </div>
-        </div>
-      </section>
+          </section>
+
+          {/* Main Content Area: Needs Attention Grid */}
+          <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Counselors Needs Review */}
+            <div className="bg-white rounded-xl p-6 shadow-sm border border-surface-container-highest flex flex-col h-full">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="font-headline-md text-[24px] font-medium text-primary">Pending Counselors</h3>
+              </div>
+              <div className="flex flex-col gap-4 flex-1">
+                {pendingCounselors.length > 0 ? (
+                  pendingCounselors.map((counselor, idx) => {
+                    const colors = [
+                      "bg-primary-fixed text-on-primary-fixed",
+                      "bg-tertiary-fixed text-on-tertiary-fixed",
+                      "bg-primary-fixed-dim text-on-primary-fixed"
+                    ];
+                    const colorClass = colors[idx % colors.length];
+
+                    return (
+                      <div key={counselor.id} className="flex items-center justify-between p-4 bg-surface-container-lowest rounded-lg border border-surface-container-highest hover:bg-surface-container-low transition-colors">
+                        <div className="flex items-center gap-4">
+                          <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold ${colorClass}`}>
+                            {getInitials(counselor.user?.full_name)}
+                          </div>
+                          <div>
+                            <h4 className="font-label-md text-[14px] font-bold text-primary">{counselor.user?.full_name}</h4>
+                            <p className="font-label-sm text-[12px] font-semibold tracking-wider text-on-surface-variant">
+                              {counselor.user?.email}
+                            </p>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => handleApprove(counselor.id)}
+                          disabled={verifyingId === counselor.id}
+                          className="bg-primary text-on-primary px-3 py-1.5 rounded-lg font-label-sm text-[12px] font-semibold tracking-wider hover:opacity-90 transition-opacity disabled:opacity-50"
+                        >
+                          {verifyingId === counselor.id ? 'Approving...' : 'Approve'}
+                        </button>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="text-center py-8 text-on-surface-variant">
+                    <span className="material-symbols-outlined text-[48px] opacity-50 mb-2">check_circle</span>
+                    <p>All counselor profiles have been reviewed.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Reported Bookings / Issues */}
+            <div className="bg-white rounded-xl p-6 shadow-sm border border-surface-container-highest flex flex-col h-full opacity-50">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="font-headline-md text-[24px] font-medium text-primary flex items-center gap-2">
+                  Flagged Issues <span className="bg-surface-container-high text-on-surface-variant font-label-sm text-[12px] font-semibold tracking-wider px-2 py-0.5 rounded-full">0</span>
+                </h3>
+              </div>
+              <div className="flex flex-col gap-4 flex-1">
+                <div className="text-center py-8 text-on-surface-variant">
+                  <span className="material-symbols-outlined text-[48px] opacity-50 mb-2">done_all</span>
+                  <p>No flagged issues requiring attention.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+        </>
+      )}
     </DashboardLayout>
   );
 }

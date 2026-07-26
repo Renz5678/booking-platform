@@ -26,8 +26,8 @@ class Booking(Base):
     __tablename__ = "bookings"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    client_id = Column(String, ForeignKey("users.id"), nullable=False)
-    counselor_id = Column(String, ForeignKey("counselor_profiles.id"), nullable=False)
+    client_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    counselor_id = Column(String, ForeignKey("counselor_profiles.id", ondelete="CASCADE"), nullable=False)
 
     scheduled_start = Column(DateTime(timezone=True), nullable=False)
     scheduled_end = Column(DateTime(timezone=True), nullable=False)

@@ -11,7 +11,7 @@ class IntakeForm(Base):
     __tablename__ = "intake_forms"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    booking_id = Column(String, ForeignKey("bookings.id"), nullable=False, unique=True)
+    booking_id = Column(String, ForeignKey("bookings.id", ondelete="CASCADE"), nullable=False, unique=True)
 
     concern_category = Column(String, nullable=False)
     notes = Column(String, nullable=True)

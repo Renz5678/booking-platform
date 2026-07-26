@@ -117,3 +117,50 @@ async def create_google_meet_event(summary: str, start_time: datetime, end_time:
         
         data = response.json()
         return data.get("hangoutLink", "https://meet.google.com/mock-link")
+
+
+async def add_event_to_calendar(
+    summary: str,
+    start_time: datetime,
+    end_time: datetime,
+    booking_id: str,
+    meet_link: str | None,
+    refresh_token: str
+) -> None:
+    """
+    Adds a session event (with an existing Meet link) to a user's Google Calendar.
+    Used to sync to the client's calendar after the counselor's event is created.
+    """
+    from datetime import timezone
+    if start_time.tzinfo is None:
+        start_time = start_time.replace(tzinfo=timezone.utc)
+    if end_time.tzinfo is None:
+        end_time = end_time.replace(tzinfo=timezone.utc)
+
+    access_token = await get_google_access_token(refresh_token)
+    url = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+
+    event_data = {
+        "summary": summary,
+        "description": f"Booking ID: {booking_id}\nJoin here: {meet_link or ''}",
+        "start": {
+            "dateTime": start_time.isoformat()
+        },
+        "end": {
+            "dateTime": end_time.isoformat()
+        },
+    }
+
+    # Include Meet link as a hangout link if available
+    if meet_link:
+        event_data["hangoutLink"] = meet_link
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(url, json=event_data, headers=headers)
+        if response.status_code not in (200, 201):
+            print(f"Failed to add event to user calendar: {response.text}")
+

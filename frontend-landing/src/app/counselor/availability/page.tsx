@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 
 // Helper to generate a simple time grid structure
@@ -10,6 +10,25 @@ const times = ["8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 P
 export default function AvailabilityPage() {
   // Store selected blocks as a Set of strings "dayIndex-timeIndex" for the MVP UI
   const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
+  const [isConnected, setIsConnected] = useState(false);
+
+  useEffect(() => {
+    async function fetchProfile() {
+      try {
+        const res = await fetch("http://localhost:8000/counselors/me/profile", {
+          headers: { "Content-Type": "application/json" },
+          credentials: 'include'
+        });
+        if (res.ok) {
+          const profile = await res.json();
+          setIsConnected(profile.google_calendar_connected);
+        }
+      } catch (err) {
+        console.error("Failed to fetch profile:", err);
+      }
+    }
+    fetchProfile();
+  }, []);
 
   const toggleSlot = (dayIndex: number, timeIndex: number) => {
     const slotKey = `${dayIndex}-${timeIndex}`;
@@ -37,10 +56,17 @@ export default function AvailabilityPage() {
           <h2 className="font-headline-xl text-[48px] font-semibold tracking-tight text-primary mb-2">My Availability</h2>
           <p className="font-body-md text-[16px] text-on-surface-variant max-w-2xl">Set your recurring weekly hours. These slots will be available for clients to book.</p>
         </div>
-        <button className="flex items-center gap-2 px-6 py-3 rounded-full border border-tertiary-container text-tertiary-container hover:bg-surface-container-highest transition-colors font-label-md text-[14px] font-medium">
-          <span className="material-symbols-outlined">calendar_today</span>
-          Connect Google Calendar
-        </button>
+        {isConnected ? (
+          <button disabled className="flex items-center gap-2 px-6 py-3 rounded-full border border-[#4FC3AA] bg-[#C3F2DA] text-[#138A72] transition-colors font-label-md text-[14px] font-medium opacity-80 cursor-not-allowed">
+            <span className="material-symbols-outlined">check_circle</span>
+            Connected to Google Calendar
+          </button>
+        ) : (
+          <a href="http://localhost:8000/auth/google/login" className="flex items-center gap-2 px-6 py-3 rounded-full border border-tertiary-container text-tertiary-container hover:bg-surface-container-highest transition-colors font-label-md text-[14px] font-medium">
+            <span className="material-symbols-outlined">calendar_today</span>
+            Connect Google Calendar
+          </a>
+        )}
       </header>
 
       {/* Calendar Container */}

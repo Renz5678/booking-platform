@@ -17,6 +17,7 @@ export default function ClientDashboardPage() {
   const [upcomingBooking, setUpcomingBooking] = useState<Booking | null>(null);
   const [pastBookings, setPastBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
+  const [calendarConnected, setCalendarConnected] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
@@ -29,6 +30,7 @@ export default function ClientDashboardPage() {
         if (userRes.ok) {
           const user = await userRes.json();
           setFirstName(user.full_name?.split(" ")[0] || "there");
+          setCalendarConnected(user.google_calendar_connected || false);
         }
 
         // Fetch Bookings
@@ -111,11 +113,25 @@ export default function ClientDashboardPage() {
   return (
     <DashboardLayout role="client" allowedRoles={["client"]}>
       {/* Header */}
-      <header>
-        <h1 className="font-headline-xl text-[48px] leading-[56px] font-semibold tracking-tight text-primary mb-2">
-          Good morning{firstName ? `, ${firstName}` : "."}
-        </h1>
-        <p className="font-body-lg text-[18px] text-on-surface-variant">Here is an overview of your therapeutic journey.</p>
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+        <div>
+          <h1 className="font-headline-xl text-[48px] leading-[56px] font-semibold tracking-tight text-primary mb-2">
+            Good morning{firstName ? `, ${firstName}` : "."}
+          </h1>
+          <p className="font-body-lg text-[18px] text-on-surface-variant">Here is an overview of your therapeutic journey.</p>
+        </div>
+        {/* Google Calendar Connect Button */}
+        {calendarConnected ? (
+          <button disabled className="flex items-center gap-2 px-5 py-2.5 rounded-full border border-[#4FC3AA] bg-[#C3F2DA] text-[#138A72] font-label-md text-[14px] font-medium opacity-80 cursor-not-allowed shrink-0">
+            <span className="material-symbols-outlined text-[18px]">check_circle</span>
+            Connected to Google Calendar
+          </button>
+        ) : (
+          <a href="http://localhost:8000/auth/google/client/login" className="flex items-center gap-2 px-5 py-2.5 rounded-full border border-tertiary-container text-tertiary-container hover:bg-surface-container-highest transition-colors font-label-md text-[14px] font-medium shrink-0">
+            <span className="material-symbols-outlined text-[18px]">calendar_today</span>
+            Connect Google Calendar
+          </a>
+        )}
       </header>
 
       {loading ? (
