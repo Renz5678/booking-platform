@@ -28,6 +28,8 @@ class User(Base):
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+    verification_otp = Column(String, nullable=True)
+    verification_otp_expires_at = Column(DateTime(timezone=True), nullable=True)
 
     counselor_profile = relationship(
         "CounselorProfile", back_populates="user", uselist=False

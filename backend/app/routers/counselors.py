@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 
 from app.core.security import require_role
 from app.db.session import get_db
@@ -61,3 +62,29 @@ async def update_my_counselor_profile(
         db, counselor, update_data
     )
     return updated_profile
+
+@router.get("/me/stats")
+async def get_my_counselor_stats(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(["counselor"])),
+):
+    """Counselor-only endpoint to get dashboard statistics."""
+    counselor = await counselor_service.get_counselor_by_user_id(db, current_user.id)
+    if not counselor:
+        raise HTTPException(status_code=404, detail="Counselor profile not found")
+
+    from app.models.booking import Booking, BookingStatus
+    from sqlalchemy import func
+
+    result = await db.execute(
+        select(func.count(Booking.id))
+        .where(Booking.counselor_id == counselor.id)
+        .where(Booking.status == BookingStatus.confirmed)
+    )
+    upcoming_sessions = result.scalar_one_or_none() or 0
+
+    return {
+        "upcoming_sessions": upcoming_sessions,
+        "is_verified": counselor.is_verified,
+        "is_active": counselor.is_active
+    }

@@ -7,6 +7,7 @@ from app.db.session import get_db
 from sqlalchemy.orm import selectinload
 from app.models.booking import Booking, BookingStatus
 from app.models.intake_form import IntakeForm
+from app.models.counselor_profile import CounselorProfile
 from app.models.payment import Payment, PaymentStatus
 from app.models.user import User
 from app.schemas.booking import BookingCreate, BookingResponse, BookingCounselorResponse
@@ -98,7 +99,10 @@ async def get_my_bookings(
     Returns bookings for the currently authenticated client.
     """
     result = await db.execute(
-        select(Booking).where(Booking.client_id == current_user.id)
+        select(Booking)
+        .options(selectinload(Booking.counselor).selectinload(CounselorProfile.user))
+        .where(Booking.client_id == current_user.id)
+        .order_by(Booking.scheduled_start.asc())
     )
     return result.scalars().all()
 

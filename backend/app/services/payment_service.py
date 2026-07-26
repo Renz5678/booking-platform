@@ -7,8 +7,10 @@ from sqlalchemy.future import select
 
 from app.models.booking import Booking, BookingStatus
 from app.models.payment import Payment, PaymentStatus
+from app.models.counselor_profile import CounselorProfile
 from app.services.email_service import send_booking_confirmation
 from app.services.calendar_service import create_google_meet_event
+from app.core.encryption import decrypt_token
 
 from app.config import settings
 
@@ -55,9 +57,9 @@ async def create_paymongo_checkout(amount: float, booking_id: str) -> str:
         return data["data"]["attributes"]["checkout_url"]
 
 
-async def simulate_payment_success(booking_id: str, db: AsyncSession):
+async def process_successful_payment(booking_id: str, db: AsyncSession):
     """
-    Simulates receiving a successful webhook from the payment provider.
+    Processes a successful payment, confirming the booking and generating a Meet link.
     """
     # Find the booking and payment
     booking_result = await db.execute(select(Booking).where(Booking.id == booking_id))
@@ -81,13 +83,25 @@ async def simulate_payment_success(booking_id: str, db: AsyncSession):
     # Confirm booking
     booking.status = BookingStatus.confirmed
 
+    # Fetch counselor profile for refresh token
+    profile_result = await db.execute(select(CounselorProfile).where(CounselorProfile.id == booking.counselor_id))
+    profile = profile_result.scalar_one_or_none()
+    
+    refresh_token = None
+    if profile and profile.google_calendar_connected and profile.google_refresh_token:
+        try:
+            refresh_token = decrypt_token(profile.google_refresh_token)
+        except Exception as e:
+            print(f"Failed to decrypt refresh token: {e}")
+
     # Generate Google Meet link
     try:
         meet_link = await create_google_meet_event(
             summary="Counseling Session",
             start_time=booking.scheduled_start,
             end_time=booking.scheduled_end,
-            booking_id=booking.id
+            booking_id=booking.id,
+            refresh_token=refresh_token
         )
         booking.meeting_link = meet_link
     except Exception as e:

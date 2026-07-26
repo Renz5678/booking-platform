@@ -44,3 +44,39 @@ async def verify_counselor(
     await db.commit()
     
     return {"msg": "Counselor approved and verified."}
+
+@router.get("/bookings")
+async def get_all_bookings(
+    current_user: User = Depends(require_role(["admin"])),
+    db: AsyncSession = Depends(get_db)
+):
+    """Admin endpoint to view all bookings platform-wide."""
+    from app.models.booking import Booking
+    result = await db.execute(select(Booking))
+    bookings = result.scalars().all()
+    # Ideally, you'd use a response_model, but returning directly for MVP
+    return bookings
+
+@router.get("/analytics")
+async def get_analytics(
+    current_user: User = Depends(require_role(["admin"])),
+    db: AsyncSession = Depends(get_db)
+):
+    """Admin endpoint to view platform analytics."""
+    from sqlalchemy import func
+    from app.models.booking import Booking
+    from app.models.payment import Payment, PaymentStatus
+    
+    bookings_res = await db.execute(select(func.count(Booking.id)))
+    total_bookings = bookings_res.scalar_one_or_none() or 0
+
+    revenue_res = await db.execute(
+        select(func.sum(Payment.amount))
+        .where(Payment.status == PaymentStatus.paid)
+    )
+    total_revenue = revenue_res.scalar_one_or_none() or 0.0
+
+    return {
+        "total_bookings": total_bookings,
+        "total_revenue": total_revenue
+    }

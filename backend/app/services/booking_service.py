@@ -6,6 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.models.booking import Booking, BookingStatus
+from app.models.counselor_profile import CounselorProfile
+from app.services.calendar_service import check_google_calendar_busy
+from app.core.encryption import decrypt_token
 
 logger = logging.getLogger(__name__)
 
@@ -55,12 +58,27 @@ async def check_counselor_availability(
             ),
         )
     )
-    # Return True if NO overlapping booking was found (slot is available).
-    return not overlapping_bookings.scalar_one_or_none()
+    if overlapping_bookings.scalar_one_or_none():
+        return False
+        
+    # Check Google Calendar if connected
+    profile_result = await db.execute(select(CounselorProfile).where(CounselorProfile.id == counselor_id))
+    profile = profile_result.scalar_one_or_none()
+    
+    if profile and profile.google_calendar_connected and profile.google_refresh_token:
+        try:
+            refresh_token = decrypt_token(profile.google_refresh_token)
+            is_busy = await check_google_calendar_busy(refresh_token, start_time, end_time)
+            if is_busy:
+                return False
+        except Exception as e:
+            logger.error("Failed to check Google Calendar busy status for counselor %s: %s", counselor_id, e)
+            
+    return True
 
 
 async def expire_booking_if_unpaid(
-    booking_id: str, db: AsyncSession, delay_minutes: int = 30
+    booking_id: str, db: AsyncSession, delay_minutes: int = 20
 ) -> None:
     """
     Background task that automatically cancels a booking if payment is not

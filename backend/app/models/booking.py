@@ -47,3 +47,11 @@ class Booking(Base):
     counselor = relationship("CounselorProfile", back_populates="bookings")
     payment = relationship("Payment", back_populates="booking", uselist=False)
     intake_form = relationship("IntakeForm", back_populates="booking", uselist=False)
+
+    @property
+    def client_name(self) -> str | None:
+        return self.client.full_name if self.client else None
+
+    @property
+    def counselor_name(self) -> str | None:
+        return self.counselor.user.full_name if self.counselor and self.counselor.user else None

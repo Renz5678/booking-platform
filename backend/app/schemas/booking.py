@@ -22,6 +22,8 @@ class BookingResponse(BookingBase):
     status: BookingStatus
     meeting_link: str | None = None
     created_at: datetime
+    client_name: str | None = None
+    counselor_name: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
