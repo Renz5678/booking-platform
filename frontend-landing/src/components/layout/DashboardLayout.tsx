@@ -81,7 +81,7 @@ export default function DashboardLayout({ children, allowedRoles, role }: Dashbo
                 </Link>
               ))}
               <Link
-                href="#"
+                href="/account"
                 className="flex items-center gap-3 text-on-surface-variant hover:bg-surface-container-high rounded-lg px-4 py-3 transition-colors"
               >
                 <span className="material-symbols-outlined">account_circle</span>
@@ -145,7 +145,7 @@ export default function DashboardLayout({ children, allowedRoles, role }: Dashbo
             </div>
 
             <div className="hidden md:flex gap-4 items-center">
-              <button className="font-label-md text-label-md text-primary hover:opacity-80 transition-opacity">Profile</button>
+              <Link href="/account" className="font-label-md text-label-md text-primary hover:opacity-80 transition-opacity">Profile</Link>
               <button onClick={handleLogout} className="font-label-md text-label-md text-error hover:opacity-80 transition-opacity font-bold">Log Out</button>
             </div>
 
@@ -171,7 +171,7 @@ export default function DashboardLayout({ children, allowedRoles, role }: Dashbo
                   {item.name}
                 </Link>
               ))}
-              <button className="py-2 text-left text-primary font-medium mt-2">Profile</button>
+              <Link href="/account" className="py-2 text-left text-primary font-medium mt-2 block">Profile</Link>
               <button onClick={handleLogout} className="py-2 text-left text-error font-medium">Log Out</button>
             </div>
           )}

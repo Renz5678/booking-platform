@@ -3,9 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { checkAuth } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -17,30 +20,13 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch("http://localhost:8000/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.detail || "Login failed");
-      }
-
-      // Login successful, now fetch role
-      const meRes = await fetch("http://localhost:8000/auth/me", {
-        credentials: "include",
-      });
+      await api.post("/auth/login", { email, password });
       
-      if (!meRes.ok) {
-        throw new Error("Failed to fetch user role");
-      }
-      
-      const userData = await meRes.json();
+      // Update global auth state
+      await checkAuth();
+
+      // Login successful, now fetch role for routing
+      const userData = await api.get("/auth/me");
       
       if (userData.role === "client") {
         router.push("/dashboard");
@@ -50,7 +36,11 @@ export default function LoginPage() {
         router.push("/admin/dashboard");
       }
     } catch (err: unknown) {
-      setError((err as Error).message);
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError((err as Error).message);
+      }
     } finally {
       setLoading(false);
     }

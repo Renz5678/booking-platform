@@ -133,3 +133,91 @@ async def send_booking_confirmation(user_email: str, booking_id: str) -> None:
     """
     # Run the blocking Gmail API call in a thread pool to avoid blocking the event loop.
     await asyncio.to_thread(_send_email_sync, user_email, subject, html_body)
+
+
+async def send_cancellation_email(
+    user_email: str, booking_id: str, refund_issued: bool
+) -> None:
+    """
+    Sends a booking cancellation confirmation email to the client.
+
+    Args:
+        user_email: The client's email address.
+        booking_id: The unique ID of the cancelled booking.
+        refund_issued: Whether a refund was issued for this cancellation.
+    """
+    subject = "Your Booking Has Been Cancelled"
+    refund_note = (
+        "<p>A full refund has been processed and will appear in your account within 3–7 business days.</p>"
+        if refund_issued
+        else "<p>As per our cancellation policy, no refund will be issued for cancellations made less than 24 hours before the session.</p>"
+    )
+
+    html_body = f"""
+    <html>
+      <body style="font-family: sans-serif; color: #333;">
+        <h2>Booking Cancelled</h2>
+        <p>Your counseling session booking has been cancelled.</p>
+        <p><strong>Booking ID:</strong> {booking_id}</p>
+        {refund_note}
+        <p>If you have any questions, please contact our support team.</p>
+      </body>
+    </html>
+    """
+    await asyncio.to_thread(_send_email_sync, user_email, subject, html_body)
+
+
+async def send_counselor_cancellation_notification(
+    client_email: str, booking_id: str
+) -> None:
+    """
+    Notifies a client that their counselor has cancelled the session.
+    A full refund is always issued in this case.
+
+    Args:
+        client_email: The client's email address.
+        booking_id: The unique ID of the cancelled booking.
+    """
+    subject = "Important: Your Counselor Has Cancelled Your Session"
+
+    html_body = f"""
+    <html>
+      <body style="font-family: sans-serif; color: #333;">
+        <h2>Session Cancelled by Counselor</h2>
+        <p>We're sorry to inform you that your counselor has had to cancel your upcoming session.</p>
+        <p><strong>Booking ID:</strong> {booking_id}</p>
+        <p>A full refund has been processed and will appear in your account within 3–7 business days.</p>
+        <p>You may book a new session with any available counselor at your convenience.</p>
+        <p>We apologize for any inconvenience caused.</p>
+      </body>
+    </html>
+    """
+    await asyncio.to_thread(_send_email_sync, client_email, subject, html_body)
+
+
+async def send_session_reminder(
+    user_email: str, booking_id: str, hours_before: int
+) -> None:
+    """
+    Sends a session reminder email to a client N hours before their session.
+
+    Args:
+        user_email: The client's email address.
+        booking_id: The unique ID of the upcoming booking.
+        hours_before: How many hours until the session (e.g., 24 or 1).
+    """
+    time_label = "24 hours" if hours_before >= 24 else "1 hour"
+    subject = f"Reminder: Your Counseling Session is in {time_label}"
+
+    html_body = f"""
+    <html>
+      <body style="font-family: sans-serif; color: #333;">
+        <h2>Session Reminder</h2>
+        <p>This is a friendly reminder that your counseling session is coming up in <strong>{time_label}</strong>.</p>
+        <p><strong>Booking ID:</strong> {booking_id}</p>
+        <p>Please make sure you are in a quiet, private space before the session begins.</p>
+        <p>Your meeting link was included in your confirmation email. If you need assistance, contact support.</p>
+      </body>
+    </html>
+    """
+    await asyncio.to_thread(_send_email_sync, user_email, subject, html_body)

@@ -68,15 +68,16 @@ async def check_google_calendar_busy(refresh_token: str, start_time: datetime, e
         return len(busy_slots) > 0
 
 
-async def create_google_meet_event(summary: str, start_time: datetime, end_time: datetime, booking_id: str, refresh_token: str | None = None) -> str:
+async def create_google_meet_event(summary: str, start_time: datetime, end_time: datetime, booking_id: str, refresh_token: str | None = None) -> tuple[str, str | None]:
     """
     Creates a Google Calendar event with a Google Meet link attached.
-    Returns the Meet link (hangoutLink).
+    Returns a tuple of (hangout_link, event_id).
+    event_id is None if the event could not be created.
     """
     token_to_use = refresh_token or settings.GOOGLE_REFRESH_TOKEN
     if not token_to_use:
         # Fallback if no refresh token is provided
-        return "https://meet.google.com/mock-link"
+        return "https://meet.google.com/mock-link", None
 
     access_token = await get_google_access_token(token_to_use)
     
@@ -118,7 +119,10 @@ async def create_google_meet_event(summary: str, start_time: datetime, end_time:
             raise HTTPException(status_code=500, detail=f"Failed to create Google Calendar event: {response.text}")
         
         data = response.json()
-        return data.get("hangoutLink", "https://meet.google.com/mock-link")
+        hangout_link = data.get("hangoutLink", "https://meet.google.com/mock-link")
+        event_id = data.get("id")  # Store the event ID for future updates/deletes
+        return hangout_link, event_id
+
 
 
 async def add_event_to_calendar(

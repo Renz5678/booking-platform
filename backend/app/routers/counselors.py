@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
+from app.core.rate_limit import limiter
 from app.core.security import require_role
 from app.db.session import get_db
 from app.models.user import User
@@ -16,9 +17,11 @@ router = APIRouter(prefix="/counselors", tags=["counselors"])
 
 
 @router.get("", response_model=list[CounselorProfilePublicResponse])
-async def list_active_counselors(db: AsyncSession = Depends(get_db)):
+@limiter.limit("30/minute")
+async def list_active_counselors(request: Request, db: AsyncSession = Depends(get_db)):
     """Public endpoint to list all active and verified counselors."""
     return await counselor_service.get_active_counselors(db)
+
 
 
 @router.get("/{counselor_id}", response_model=CounselorProfilePublicResponse)

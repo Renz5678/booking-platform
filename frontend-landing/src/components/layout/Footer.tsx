@@ -23,7 +23,7 @@ export default function Footer() {
         </div>
         <div className="flex flex-col gap-3">
           <h4 className="font-label-md text-label-md text-primary font-bold mb-2">Legal</h4>
-          <a className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="#">Privacy Policy</a>
+          <a className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="/privacy-policy">Privacy Policy</a>
           <a className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="#">Terms of Service</a>
           <a className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="#">Crisis Resources</a>
         </div>

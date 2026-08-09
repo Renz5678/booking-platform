@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import { api, ApiError } from "@/lib/api";
 
 interface CounselorProfile {
   id: string;
@@ -46,11 +47,8 @@ export default function FindCounselorPage() {
   useEffect(() => {
     const fetchCounselors = async () => {
       try {
-        const res = await fetch("http://localhost:8000/counselors");
-        if (res.ok) {
-          const data = await res.json();
-          setCounselors(data);
-        }
+        const data = await api.get("/counselors");
+        setCounselors(data);
       } catch (err) {
         console.error("Failed to fetch counselors:", err);
       } finally {
@@ -71,13 +69,8 @@ export default function FindCounselorPage() {
           const startDateStr = start.toISOString().split('T')[0];
           const endDateStr = end.toISOString().split('T')[0];
 
-          const res = await fetch(`http://localhost:8000/availability/${selectedCounselor.id}/slots?start_date=${startDateStr}&end_date=${endDateStr}&duration=${duration}`);
-          if (res.ok) {
-            const data = await res.json();
-            setAvailableWeeklySlots(data || {});
-          } else {
-            setAvailableWeeklySlots({});
-          }
+          const data = await api.get(`/availability/${selectedCounselor.id}/slots?start_date=${startDateStr}&end_date=${endDateStr}&duration=${duration}`);
+          setAvailableWeeklySlots(data || {});
         } catch (err) {
           console.error("Failed to fetch slots:", err);
           setAvailableWeeklySlots({});
@@ -120,33 +113,28 @@ export default function FindCounselorPage() {
       scheduled_start: start.toISOString(),
       scheduled_end: end.toISOString(),
       intake_concern_category: intakeCategory,
-      intake_notes: intakeNotes
+      intake_notes: intakeNotes,
+      captcha_token: "mock_captcha_token",
+      honeypot: ""
     };
 
     try {
-      const res = await fetch("http://localhost:8000/bookings/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(payload)
-      });
+      const data = await api.post("/bookings/", payload);
       
-      if (res.ok) {
-        const data = await res.json();
-        // Redirect to PayMongo checkout
-        if (data.checkout_url) {
-          window.location.href = data.checkout_url;
-        } else {
-          alert("Booking created successfully, but no checkout URL returned.");
-          setIsModalOpen(false);
-        }
+      // Redirect to PayMongo checkout
+      if (data.checkout_url) {
+        window.location.href = data.checkout_url;
       } else {
-        const errorData = await res.json();
-        alert(`Failed to book session: ${errorData.detail || 'Unknown error'}`);
+        alert("Booking created successfully, but no checkout URL returned.");
+        setIsModalOpen(false);
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Booking error:", err);
-      alert("An error occurred while booking. Please try again.");
+      if (err instanceof ApiError) {
+        alert(`Failed to book session: ${err.message}`);
+      } else {
+        alert("An error occurred while booking. Please try again.");
+      }
     } finally {
       setIsBooking(false);
     }

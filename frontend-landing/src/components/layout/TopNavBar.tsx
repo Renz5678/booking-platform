@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
 
 export default function TopNavBar() {
   const pathname = usePathname();
+  const { user, isLoading, logout } = useAuth();
   const isDashboard = pathname?.includes("/dashboard") || pathname?.includes("/counselor") || pathname?.includes("/admin") || pathname?.includes("/faq") || pathname?.includes("/contact") || pathname?.includes("/payment");
   const isAuth = pathname === "/login" || pathname === "/signup";
   
@@ -22,8 +24,29 @@ export default function TopNavBar() {
           <a className="text-on-surface-variant hover:text-secondary font-label-md hover:opacity-80 transition-opacity" href="#">Contact</a>
         </div>
         <div className="hidden md:flex space-x-4 items-center">
-          <Link href="/login" className="text-primary font-label-md hover:opacity-80 transition-opacity">Log In</Link>
-          <Link href="/signup" className="bg-secondary text-on-secondary px-6 py-2 rounded-full font-label-md hover:opacity-90 transition-opacity shadow-sm">Sign Up</Link>
+          {isLoading ? (
+            <div className="h-6 w-24 bg-surface-variant animate-pulse rounded"></div>
+          ) : user ? (
+            <>
+              <Link
+                href={user.role === 'counselor' ? '/counselor/dashboard' : user.role === 'admin' ? '/admin/dashboard' : '/dashboard'}
+                className="text-primary font-label-md hover:opacity-80 transition-opacity"
+              >
+                Dashboard
+              </Link>
+              <button
+                onClick={logout}
+                className="bg-surface-variant text-on-surface-variant px-6 py-2 rounded-full font-label-md hover:opacity-90 transition-opacity"
+              >
+                Logout
+              </button>
+            </>
+          ) : (
+            <>
+              <Link href="/login" className="text-primary font-label-md hover:opacity-80 transition-opacity">Log In</Link>
+              <Link href="/signup" className="bg-secondary text-on-secondary px-6 py-2 rounded-full font-label-md hover:opacity-90 transition-opacity shadow-sm">Sign Up</Link>
+            </>
+          )}
         </div>
         {/* Mobile Menu Toggle */}
         <button className="md:hidden text-primary">

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { api, ApiError } from "@/lib/api";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -22,26 +23,14 @@ export default function SignupPage() {
     setVerifying(true);
 
     try {
-      const res = await fetch("http://localhost:8000/auth/verify-otp", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ 
-          email, 
-          otp
-        }),
-      });
-
-      const data = await res.json();
-      
-      if (!res.ok) {
-        throw new Error(data.detail || "Verification failed");
-      }
-
+      await api.post("/auth/verify-otp", { email, otp });
       router.push("/login?verified=true");
     } catch (err: unknown) {
-      setOtpError((err as Error).message);
+      if (err instanceof ApiError) {
+        setOtpError(err.message);
+      } else {
+        setOtpError((err as Error).message);
+      }
     } finally {
       setVerifying(false);
     }
@@ -53,28 +42,20 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      const res = await fetch("http://localhost:8000/auth/signup", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ 
-          full_name: fullName, 
-          email, 
-          password,
-          captcha_token: "mock_captcha_token" // Backend expects a captcha token in MVP
-        }),
+      await api.post("/auth/signup", {
+        full_name: fullName, 
+        email, 
+        password,
+        captcha_token: "mock_captcha_token" // Backend expects a captcha token in MVP
       });
-
-      const data = await res.json();
-      
-      if (!res.ok) {
-        throw new Error(data.detail || "Signup failed");
-      }
 
       setSuccess(true);
     } catch (err: unknown) {
-      setError((err as Error).message);
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError((err as Error).message);
+      }
     } finally {
       setLoading(false);
     }

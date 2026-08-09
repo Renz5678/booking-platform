@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -14,11 +15,18 @@ class BookingBase(BaseModel):
 class BookingCreate(BookingBase):
     intake_concern_category: str
     intake_notes: str | None = None
+    captcha_token: str
+    honeypot: str | None = None
 
 
 class BookingRescheduleRequest(BaseModel):
     new_scheduled_start: datetime
     new_scheduled_end: datetime
+
+
+class BookingStatusUpdateRequest(BaseModel):
+    """Request body for counselor to mark a session as completed or no_show."""
+    status: Literal["completed", "no_show"]
 
 
 class BookingResponse(BookingBase):
@@ -33,12 +41,19 @@ class BookingResponse(BookingBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class BookingCancelResponse(BaseModel):
+    """Response body for a booking cancellation."""
+    msg: str
+    booking_id: str
+    refund_issued: bool
+
+
 class IntakeFormResponse(BaseModel):
     id: str
     concern_category: str
     notes: str | None = None
     submitted_at: datetime
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 

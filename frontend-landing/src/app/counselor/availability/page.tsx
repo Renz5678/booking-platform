@@ -1,5 +1,6 @@
-import { AvailabilityBlock } from "@/types";
 "use client";
+
+import { AvailabilityBlock } from "@/types";
 
 import React, { useState, useEffect } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";

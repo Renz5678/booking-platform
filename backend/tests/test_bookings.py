@@ -57,7 +57,8 @@ async def test_booking_flow_and_hold(async_client: AsyncClient, db: AsyncSession
         "scheduled_start": (now + timedelta(days=1)).isoformat(),
         "scheduled_end": (now + timedelta(days=1, hours=1)).isoformat(),
         "intake_concern_category": "Stress",
-        "intake_notes": "Very stressed"
+        "intake_notes": "Very stressed",
+        "captcha_token": "mock_captcha_token"
     }
     
     booking_resp = await async_client.post("/bookings/", json=booking_req, cookies=cookies)

@@ -14,7 +14,7 @@ async def test_signup_verify_login_flow(async_client: AsyncClient):
     }
     response = await async_client.post("/auth/signup", json=signup_data)
     assert response.status_code == 201
-    assert "verify" in response.json()["msg"]
+    assert "OTP" in response.json()["msg"]
     
     # Extract verification token printed to stdout (mocking email extraction)
     # Since we can't easily capture stdout in this simple test without mocking,

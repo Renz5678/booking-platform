@@ -44,7 +44,9 @@ async def test_simulated_payment_success(async_client: AsyncClient, db: AsyncSes
         "counselor_id": profile.id,
         "scheduled_start": (now + timedelta(days=2)).isoformat(),
         "scheduled_end": (now + timedelta(days=2, hours=1)).isoformat(),
-        "intake_concern_category": "Anxiety"
+        "intake_concern_category": "Anxiety",
+        "captcha_token": "mock_captcha_token",
+        "honeypot": ""
     }
     
     booking_resp = await async_client.post("/bookings/", json=booking_req, cookies=cookies)

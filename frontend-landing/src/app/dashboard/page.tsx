@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import RescheduleModal from "@/components/dashboard/RescheduleModal";
+import { api, ApiError } from "@/lib/api";
 
 import { Booking } from "@/types";
 
@@ -18,37 +19,25 @@ export default function ClientDashboardPage() {
     async function fetchData() {
       try {
         // Fetch User Info
-        const userRes = await fetch("http://localhost:8000/auth/me", {
-          headers: { "Content-Type": "application/json" },
-          credentials: 'include'
-        });
-        if (userRes.ok) {
-          const user = await userRes.json();
-          setFirstName(user.full_name?.split(" ")[0] || "there");
-          setCalendarConnected(user.google_calendar_connected || false);
-        }
+        const user = await api.get("/auth/me");
+        setFirstName(user.full_name?.split(" ")[0] || "there");
+        setCalendarConnected(user.google_calendar_connected || false);
 
         // Fetch Bookings
-        const bookingsRes = await fetch("http://localhost:8000/bookings/me", {
-          headers: { "Content-Type": "application/json" },
-          credentials: 'include'
-        });
-        if (bookingsRes.ok) {
-          const bookings: Booking[] = await bookingsRes.json();
-          
-          const now = new Date();
-          const upcoming = bookings.filter(b => 
-            (b.status === "confirmed" || b.status === "pending_payment") && 
-            new Date(b.scheduled_start) > now
-          ).sort((a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime());
-          
-          const past = bookings.filter(b => 
-            b.status === "completed" || b.status === "cancelled" || b.status === "no_show" || new Date(b.scheduled_start) <= now
-          ).sort((a, b) => new Date(b.scheduled_start).getTime() - new Date(a.scheduled_start).getTime());
+        const bookings: Booking[] = await api.get("/bookings/me");
+        
+        const now = new Date();
+        const upcoming = bookings.filter(b => 
+          (b.status === "confirmed" || b.status === "pending_payment") && 
+          new Date(b.scheduled_start) > now
+        ).sort((a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime());
+        
+        const past = bookings.filter(b => 
+          b.status === "completed" || b.status === "cancelled" || b.status === "no_show" || new Date(b.scheduled_start) <= now
+        ).sort((a, b) => new Date(b.scheduled_start).getTime() - new Date(a.scheduled_start).getTime());
 
-          setUpcomingBooking(upcoming.length > 0 ? upcoming[0] : null);
-          setPastBookings(past);
-        }
+        setUpcomingBooking(upcoming.length > 0 ? upcoming[0] : null);
+        setPastBookings(past);
       } catch (error) {
         console.error("Failed to fetch dashboard data:", error);
       } finally {
@@ -174,6 +163,19 @@ export default function ClientDashboardPage() {
                     )}
                     <button onClick={() => setReschedulingBooking(upcomingBooking)} className="text-tertiary-container hover:bg-surface-container-low font-label-md text-[14px] font-medium px-6 py-3 rounded-lg transition-colors border border-transparent hover:border-outline-variant w-full sm:w-auto">
                       Reschedule
+                    </button>
+                    <button onClick={async () => {
+                      if(confirm("Are you sure you want to cancel this booking?")) {
+                        try {
+                          await api.post(`/bookings/${upcomingBooking.id}/cancel`, {});
+                          alert("Booking cancelled.");
+                          window.location.reload();
+                        } catch (err: unknown) {
+                          alert(`Failed to cancel booking: ${err instanceof ApiError ? err.message : (err as Error).message}`);
+                        }
+                      }
+                    }} className="text-error hover:bg-error-container hover:text-on-error-container font-label-md text-[14px] font-medium px-6 py-3 rounded-lg transition-colors border border-transparent hover:border-error w-full sm:w-auto">
+                      Cancel
                     </button>
                   </div>
                 </div>

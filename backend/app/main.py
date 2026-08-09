@@ -4,9 +4,11 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
+from app.core.exceptions import AlagaException, alaga_exception_handler
 from app.core.rate_limit import limiter
+from app.middleware.logging import AuditLoggingMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
-from app.routers import admin, auth, availability, bookings, counselors, payments
+from app.routers import admin, auth, availability, bookings, calendar, contact, counselors, payments
 
 app = FastAPI(
     title="Alaga API",
@@ -16,7 +18,9 @@ app = FastAPI(
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(AlagaException, alaga_exception_handler)
 
+app.add_middleware(AuditLoggingMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
@@ -29,8 +33,10 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(counselors.router)
 app.include_router(availability.router)
+app.include_router(calendar.router)
 app.include_router(bookings.router)
 app.include_router(payments.router)
+app.include_router(contact.router)
 app.include_router(admin.router)
 
 
