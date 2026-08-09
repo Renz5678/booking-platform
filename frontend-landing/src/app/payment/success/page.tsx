@@ -2,13 +2,14 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { api } from "@/lib/api";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 
 function SuccessContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const bookingId = searchParams.get("booking_id");
-  const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
+  const [status, setStatus] = useState<"loading" | "success" | "error" | "pending">("loading");
 
   useEffect(() => {
     async function verifyPayment() {
@@ -17,30 +18,32 @@ function SuccessContent() {
         return;
       }
 
-      try {
-        // Since we are bypassing webhooks for local development, we call simulate-success
-        // In production, the webhook would have handled this, but calling it again is idempotent.
-        const res = await fetch(`http://localhost:8000/payments/simulate-success/${bookingId}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-        });
-
-        if (res.ok) {
-          setStatus("success");
-        } else {
-          // It might already be paid
-          const errorData = await res.json();
-          if (errorData.detail === "Already paid") {
-            setStatus("success");
-          } else {
-            setStatus("error");
-          }
+      let attempts = 0;
+      const maxAttempts = 15; // 30 seconds total (15 * 2s)
+      
+      const checkStatus = async () => {
+        if (attempts >= maxAttempts) {
+          setStatus("pending");
+          return;
         }
-      } catch (err) {
-        console.error("Verification error:", err);
-        setStatus("error");
-      }
+        
+        try {
+          const res = await api.get(`/bookings/${bookingId}`);
+          if (res.status === "confirmed") {
+            setStatus("success");
+          } else if (res.status === "cancelled") {
+            setStatus("error");
+          } else {
+            attempts++;
+            setTimeout(checkStatus, 2000);
+          }
+        } catch (err) {
+          console.error("Verification error:", err);
+          setStatus("error");
+        }
+      };
+      
+      checkStatus();
     }
 
     verifyPayment();
@@ -91,6 +94,24 @@ function SuccessContent() {
             className="w-full max-w-sm border-2 border-outline-variant text-primary font-label-lg font-bold py-4 rounded-xl hover:bg-surface-container-low active:scale-[0.98] transition-all duration-200"
           >
             Return to Dashboard
+          </button>
+        </div>
+      )}
+
+      {status === "pending" && (
+        <div className="flex flex-col items-center py-8">
+          <div className="w-24 h-24 bg-surface-container rounded-full flex items-center justify-center mb-8 shadow-sm">
+            <span className="material-symbols-outlined text-[56px] text-primary">schedule</span>
+          </div>
+          <h2 className="font-display-sm font-bold text-primary mb-4">Payment Pending</h2>
+          <p className="font-body-lg text-on-surface-variant mb-10 max-w-md">
+            We are still waiting for confirmation from the payment provider. Please check your dashboard later to see the updated status.
+          </p>
+          <button 
+            onClick={() => router.push("/dashboard")}
+            className="w-full max-w-sm border-2 border-outline-variant text-primary font-label-lg font-bold py-4 rounded-xl hover:bg-surface-container-low active:scale-[0.98] transition-all duration-200"
+          >
+            Go to My Dashboard
           </button>
         </div>
       )}
