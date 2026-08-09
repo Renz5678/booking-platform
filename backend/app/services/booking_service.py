@@ -64,50 +64,35 @@ async def check_counselor_availability(
     return True
 
 
-async def expire_booking_if_unpaid(
-    booking_id: str, db: AsyncSession, delay_minutes: int = 20
-) -> None:
+
+async def cancel_stale_pending_bookings(db: AsyncSession, max_age_minutes: int = 15) -> int:
     """
-    Background task that automatically cancels a booking if payment is not
-    completed within the hold window (default: 30 minutes).
-
-    This implements the "slot hold" feature — when a client initiates a booking,
-    the slot is reserved with status 'pending_payment'. If they don't pay in time,
-    this task cancels it and frees the slot for other clients.
-
-    Args:
-        booking_id: The ID of the booking to check and potentially cancel.
-        db: The async database session to use for the query.
-        delay_minutes: How long to wait before checking (default: 30 minutes).
-
-    IMPORTANT — Production Note:
-        Sleeping in-memory works for MVP but is not resilient to server restarts.
-        In production, replace this with a task queue (Celery + Redis) or a
-        scheduled database sweeper (cron job) that checks for stale bookings on startup.
+    Sweeps the database for bookings in 'pending_payment' status that are older
+    than max_age_minutes and cancels them to free up the slot.
+    Returns the number of cancelled bookings.
     """
-    logger.info(
-        "Slot hold started for booking %s. Will expire in %d minutes.",
-        booking_id,
-        delay_minutes,
+    from datetime import datetime, timedelta, timezone
+    
+    cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=max_age_minutes)
+    
+    # Find stale bookings
+    result = await db.execute(
+        select(Booking).where(
+            and_(
+                Booking.status == BookingStatus.pending_payment,
+                Booking.created_at < cutoff_time
+            )
+        )
     )
-
-    # Sleep without blocking the async event loop using asyncio.sleep.
-    await asyncio.sleep(delay_minutes * 60)
-
-    # After the hold window, re-fetch the booking from the DB to check its current status.
-    result = await db.execute(select(Booking).where(Booking.id == booking_id))
-    booking = result.scalar_one_or_none()
-
-    if booking and booking.status == BookingStatus.pending_payment:
-        # Payment was not completed — cancel the booking to free up the slot.
+    stale_bookings = result.scalars().all()
+    
+    count = 0
+    for booking in stale_bookings:
         booking.status = BookingStatus.cancelled
+        count += 1
+        
+    if count > 0:
         await db.commit()
-        logger.info(
-            "Booking %s automatically cancelled due to payment timeout.", booking_id
-        )
-    else:
-        logger.info(
-            "Booking %s slot hold expired but booking was already resolved (status: %s).",
-            booking_id,
-            booking.status if booking else "not found",
-        )
+        logger.info("Swept and cancelled %d stale pending_payment bookings.", count)
+        
+    return count

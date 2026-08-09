@@ -17,4 +17,10 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="Asia/Manila",
     enable_utc=True,
+    beat_schedule={
+        "expire-stale-bookings-every-5-minutes": {
+            "task": "app.tasks.reminders.expire_stale_bookings_task",
+            "schedule": 300.0,  # 5 minutes in seconds
+        }
+    }
 )

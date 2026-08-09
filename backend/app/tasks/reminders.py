@@ -49,3 +49,22 @@ def send_session_reminder_task(user_email: str, booking_id: str, hours_before: i
         logger.error("Failed to process reminder task for booking %s: %s", booking_id, str(e))
         raise
 
+
+@celery_app.task(name="app.tasks.reminders.expire_stale_bookings_task")
+def expire_stale_bookings_task():
+    """
+    Periodic task to sweep and cancel stale pending_payment bookings.
+    """
+    from app.db.session import async_session_maker
+    from app.services.booking_service import cancel_stale_pending_bookings
+    
+    async def _sweep():
+        async with async_session_maker() as db:
+            return await cancel_stale_pending_bookings(db, max_age_minutes=15)
+            
+    try:
+        count = _run_async(_sweep())
+        return f"Swept {count} bookings"
+    except Exception as e:
+        logger.error("Failed to run stale bookings sweeper: %s", str(e))
+        raise

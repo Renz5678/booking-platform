@@ -22,10 +22,7 @@ from app.schemas.booking import (
     BookingResponse,
     BookingStatusUpdateRequest,
 )
-from app.services.booking_service import (
-    check_counselor_availability,
-    expire_booking_if_unpaid,
-)
+from app.services.booking_service import check_counselor_availability
 from app.services.email_service import (
     send_cancellation_email,
     send_counselor_cancellation_notification,
