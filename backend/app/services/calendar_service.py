@@ -3,7 +3,10 @@ from datetime import datetime
 import httpx
 from fastapi import HTTPException
 
+import logging
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 async def get_google_access_token(refresh_token: str | None = None) -> str:
@@ -168,5 +171,37 @@ async def add_event_to_calendar(
     async with httpx.AsyncClient() as client:
         response = await client.post(url, json=event_data, headers=headers)
         if response.status_code not in (200, 201):
-            print(f"Failed to add event to user calendar: {response.text}")
+            logger.error("Failed to add event to user calendar: %s", response.text)
+
+
+async def delete_calendar_event(refresh_token: str, event_id: str) -> None:
+    access_token = await get_google_access_token(refresh_token)
+    url = f"https://www.googleapis.com/calendar/v3/calendars/primary/events/{event_id}"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    async with httpx.AsyncClient() as client:
+        response = await client.delete(url, headers=headers)
+        if response.status_code not in (204, 404):
+            logger.error("Failed to delete Google Calendar event %s: %s", event_id, response.text)
+
+async def update_calendar_event(refresh_token: str, event_id: str, new_start: datetime, new_end: datetime) -> None:
+    access_token = await get_google_access_token(refresh_token)
+    url = f"https://www.googleapis.com/calendar/v3/calendars/primary/events/{event_id}"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+    from datetime import timezone
+    if new_start.tzinfo is None:
+        new_start = new_start.replace(tzinfo=timezone.utc)
+    if new_end.tzinfo is None:
+        new_end = new_end.replace(tzinfo=timezone.utc)
+        
+    event_data = {
+        "start": {"dateTime": new_start.isoformat()},
+        "end": {"dateTime": new_end.isoformat()}
+    }
+    async with httpx.AsyncClient() as client:
+        response = await client.patch(url, json=event_data, headers=headers)
+        if response.status_code != 200:
+            logger.error("Failed to update Google Calendar event %s: %s", event_id, response.text)
 

@@ -19,7 +19,7 @@ from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models.counselor_profile import CounselorProfile
 from app.models.user import RoleEnum, User
-from app.schemas.user import UserCreate, UserLogin, UserResponse
+from app.schemas.user import UserCreate, UserLogin, UserResponse, AcceptInviteRequest
 from app.services.auth_service import (
     create_access_token,
     create_refresh_token,
@@ -119,6 +119,32 @@ async def verify_otp(data: OTPVerify, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
     return {"msg": "Email successfully verified"}
+
+
+@router.post("/accept-invite")
+async def accept_invite(data: AcceptInviteRequest, db: AsyncSession = Depends(get_db)):
+    """Accept counselor invite and set password."""
+    result = await db.execute(select(User).where(User.email == data.email))
+    user = result.scalar_one_or_none()
+    
+    if not user or user.invite_token != data.token:
+        raise HTTPException(status_code=400, detail="Invalid token or email")
+        
+    now = datetime.now(timezone.utc)
+    expires_at = user.invite_token_expires_at
+    if expires_at and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+        
+    if not expires_at or expires_at < now:
+        raise HTTPException(status_code=400, detail="Invite token expired")
+        
+    user.password_hash = get_password_hash(data.password)
+    user.is_verified = True
+    user.invite_token = None
+    user.invite_token_expires_at = None
+    
+    await db.commit()
+    return {"msg": "Invite accepted. You can now log in."}
 
 
 @router.post("/login")

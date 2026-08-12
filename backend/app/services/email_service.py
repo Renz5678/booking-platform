@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import logging
+from datetime import datetime, timezone
 from email.message import EmailMessage
 
 from google.auth.exceptions import GoogleAuthError
@@ -110,23 +111,36 @@ async def send_verification_email(user_email: str, otp: str) -> None:
     await asyncio.to_thread(_send_email_sync, user_email, subject, html_body)
 
 
-async def send_booking_confirmation(user_email: str, booking_id: str) -> None:
+async def send_booking_confirmation(
+    user_email: str, 
+    booking_id: str, 
+    counselor_name: str, 
+    session_start: datetime, 
+    meeting_link: str
+) -> None:
     """
     Sends a booking confirmation email after a payment is successfully processed.
 
     Args:
         user_email: The client's email address.
         booking_id: The unique ID of the confirmed booking.
+        counselor_name: Name of the counselor.
+        session_start: Session start time.
+        meeting_link: Google Meet link.
     """
     subject = "Your Session is Confirmed! ✅"
+    
+    start_str = session_start.strftime("%Y-%m-%d %I:%M %p UTC")
 
     html_body = f"""
     <html>
       <body style="font-family: sans-serif; color: #333;">
         <h2>Booking Confirmed</h2>
         <p>Great news! Your counseling session has been paid and confirmed.</p>
+        <p><strong>Counselor:</strong> {counselor_name}</p>
+        <p><strong>Session Time:</strong> {start_str}</p>
+        <p><strong>Meeting Link:</strong> <a href="{meeting_link}">{meeting_link}</a></p>
         <p><strong>Booking ID:</strong> {booking_id}</p>
-        <p>You will receive a separate email with your session details and meeting link.</p>
         <p>We look forward to seeing you!</p>
       </body>
     </html>
@@ -195,6 +209,29 @@ async def send_counselor_cancellation_notification(
     await asyncio.to_thread(_send_email_sync, client_email, subject, html_body)
 
 
+async def send_admin_cancellation_alert(
+    booking_id: str, counselor_name: str, client_name: str
+) -> None:
+    """
+    Notifies the admin when a counselor cancels a session.
+    """
+    if not settings.ADMIN_EMAIL:
+        return
+        
+    subject = "Alert: Counselor Cancelled Session"
+
+    html_body = f"""
+    <html>
+      <body style="font-family: sans-serif; color: #333;">
+        <h2>Counselor Cancellation Alert</h2>
+        <p>Counselor <strong>{counselor_name}</strong> has cancelled a session with client <strong>{client_name}</strong>.</p>
+        <p><strong>Booking ID:</strong> {booking_id}</p>
+      </body>
+    </html>
+    """
+    await asyncio.to_thread(_send_email_sync, settings.ADMIN_EMAIL, subject, html_body)
+
+
 async def send_session_reminder(
     user_email: str, booking_id: str, hours_before: int
 ) -> None:
@@ -221,3 +258,51 @@ async def send_session_reminder(
     </html>
     """
     await asyncio.to_thread(_send_email_sync, user_email, subject, html_body)
+
+
+def generate_ics_content(title: str, start: datetime, end: datetime, location: str, description: str) -> str:
+    """Generates an .ics file content."""
+    dtstart = start.strftime('%Y%m%dT%H%M%SZ')
+    dtend = end.strftime('%Y%m%dT%H%M%SZ')
+    dtstamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    
+    ics = f"""BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Alaga Counseling//EN
+BEGIN:VEVENT
+UID:{dtstamp}-{start.strftime('%Y%m%d')}@alaga.com
+DTSTAMP:{dtstamp}
+DTSTART:{dtstart}
+DTEND:{dtend}
+SUMMARY:{title}
+DESCRIPTION:{description}
+LOCATION:{location}
+END:VEVENT
+END:VCALENDAR"""
+    return ics
+
+def generate_google_calendar_link(title: str, start: datetime, end: datetime, location: str) -> str:
+    """Generates a Google Calendar 'Add to Calendar' link."""
+    dtstart = start.strftime('%Y%m%dT%H%M%SZ')
+    dtend = end.strftime('%Y%m%dT%H%M%SZ')
+    import urllib.parse
+    
+    base_url = "https://calendar.google.com/calendar/render?action=TEMPLATE"
+    params = f"&text={urllib.parse.quote(title)}&dates={dtstart}/{dtend}&location={urllib.parse.quote(location)}"
+    return base_url + params
+
+
+async def send_counselor_invite_email(email: str, invite_token: str) -> None:
+    subject = "You've been invited to Alaga Counseling"
+    link = f"{settings.FRONTEND_URL}/counselor/setup?token={invite_token}"
+    html_body = f"""
+    <html>
+      <body>
+        <h2>Counselor Invitation</h2>
+        <p>You have been invited to join Alaga Counseling as a counselor.</p>
+        <p>Please click the link below to set up your account:</p>
+        <a href="{link}">{link}</a>
+      </body>
+    </html>
+    """
+    await asyncio.to_thread(_send_email_sync, email, subject, html_body)

@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.core.encryption import decrypt_token
@@ -198,9 +199,11 @@ async def process_successful_payment(
     # Confirm booking
     booking.status = BookingStatus.confirmed
 
-    # Fetch counselor profile for refresh token
+    # Fetch counselor profile for refresh token and name
     profile_result = await db.execute(
-        select(CounselorProfile).where(CounselorProfile.id == booking.counselor_id)
+        select(CounselorProfile)
+        .options(selectinload(CounselorProfile.user))
+        .where(CounselorProfile.id == booking.counselor_id)
     )
     profile = profile_result.scalar_one_or_none()
 
@@ -249,7 +252,17 @@ async def process_successful_payment(
 
     # Send confirmation email to the actual client email
     if client:
-        await send_booking_confirmation(client.email, booking.id)
+        counselor_name = "Your Counselor"
+        if profile and profile.user:
+            counselor_name = profile.user.full_name
+            
+        await send_booking_confirmation(
+            client.email, 
+            booking.id,
+            counselor_name,
+            booking.scheduled_start,
+            booking.meeting_link or ""
+        )
         
         # Schedule reminder emails
         from datetime import timedelta
@@ -266,18 +279,24 @@ async def process_successful_payment(
         if time_until_session > timedelta(hours=24):
             # Schedule 24h reminder
             reminder_time_24 = start_time - timedelta(hours=24)
-            send_session_reminder_task.apply_async(
-                args=[client.email, booking.id, 24],
-                eta=reminder_time_24
-            )
+            try:
+                send_session_reminder_task.apply_async(
+                    args=[client.email, booking.id, 24],
+                    eta=reminder_time_24
+                )
+            except Exception as e:
+                logger.error("Failed to schedule 24h reminder for booking %s: %s", booking.id, e)
             
         if time_until_session > timedelta(hours=1):
             # Schedule 1h reminder
             reminder_time_1 = start_time - timedelta(hours=1)
-            send_session_reminder_task.apply_async(
-                args=[client.email, booking.id, 1],
-                eta=reminder_time_1
-            )
+            try:
+                send_session_reminder_task.apply_async(
+                    args=[client.email, booking.id, 1],
+                    eta=reminder_time_1
+                )
+            except Exception as e:
+                logger.error("Failed to schedule 1h reminder for booking %s: %s", booking.id, e)
     else:
         logger.warning("Could not send confirmation email: client not found for booking %s", booking_id)
 

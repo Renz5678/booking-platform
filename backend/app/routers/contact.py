@@ -1,9 +1,10 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
+from app.core.rate_limit import limiter
 from app.models.contact_message import ContactMessage
 from app.routers.auth import verify_captcha
 from app.schemas.contact import ContactMessageCreate
@@ -14,7 +15,9 @@ router = APIRouter(prefix="/contact", tags=["contact"])
 
 
 @router.post("/", response_model=dict, status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/minute")
 async def submit_contact_form(
+    request: Request,
     data: ContactMessageCreate,
     db: AsyncSession = Depends(get_db),
 ):

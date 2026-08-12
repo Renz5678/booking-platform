@@ -25,7 +25,8 @@ async def list_active_counselors(request: Request, db: AsyncSession = Depends(ge
 
 
 @router.get("/{counselor_id}", response_model=CounselorProfilePublicResponse)
-async def get_counselor(counselor_id: str, db: AsyncSession = Depends(get_db)):
+@limiter.limit("60/minute")
+async def get_counselor(request: Request, counselor_id: str, db: AsyncSession = Depends(get_db)):
     """Public endpoint to view a specific counselor's profile."""
     counselor = await counselor_service.get_counselor_by_id(db, counselor_id)
     if not counselor:
@@ -39,7 +40,9 @@ async def get_counselor(counselor_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/me/profile", response_model=CounselorProfilePrivateResponse)
+@limiter.limit("60/minute")
 async def get_my_counselor_profile(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["counselor"])),
 ):

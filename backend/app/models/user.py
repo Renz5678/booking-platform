@@ -34,6 +34,8 @@ class User(Base):
     google_calendar_connected = Column(Boolean, default=False, nullable=False)
     failed_login_attempts = Column(Integer, default=0, nullable=False)
     locked_until = Column(DateTime(timezone=True), nullable=True)
+    invite_token = Column(String, nullable=True)
+    invite_token_expires_at = Column(DateTime(timezone=True), nullable=True)
 
     counselor_profile = relationship(
         "CounselorProfile", back_populates="user", uselist=False

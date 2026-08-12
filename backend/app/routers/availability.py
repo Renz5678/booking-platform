@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import require_role
 from app.db.session import get_db
+from app.core.rate_limit import limiter
 from app.models.user import User
 from app.schemas.availability import AvailabilityCreate, AvailabilityResponse
 from app.services import availability_service, counselor_service
@@ -22,7 +23,9 @@ async def get_availability(counselor_id: str, db: AsyncSession = Depends(get_db)
 
 
 @router.get("/{counselor_id}/slots")
+@limiter.limit("30/minute")
 async def get_counselor_slots(
+    request: Request,
     counselor_id: str, 
     start_date: str, 
     end_date: str, 

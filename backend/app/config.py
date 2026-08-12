@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     RECAPTCHA_SECRET_KEY: str = ""
     RECAPTCHA_SITE_KEY: str = ""
+    ADMIN_EMAIL: str = ""
+    SENTRY_DSN: str | None = None
+    SENTRY_ENVIRONMENT: str = "development"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

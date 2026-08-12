@@ -1,5 +1,7 @@
 import logging
 import urllib.parse
+import hmac as hmac_lib
+import hashlib
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -26,7 +28,9 @@ async def google_login(current_user: User = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Only counselors can connect Google Calendar")
         
     redirect_uri = f"{settings.FRONTEND_URL}/api/auth/google/callback"
-    state = str(current_user.id)
+    state_payload = str(current_user.id)
+    state_sig = hmac_lib.new(settings.JWT_SECRET.encode(), state_payload.encode(), hashlib.sha256).hexdigest()[:16]
+    state = f"{state_sig}:{state_payload}"
     
     auth_url = (
         "https://accounts.google.com/o/oauth2/v2/auth?"
@@ -45,7 +49,12 @@ async def google_login(current_user: User = Depends(get_current_user)):
 async def google_callback(code: str, state: str, db: AsyncSession = Depends(get_db)):
     """Handles the Google OAuth callback, exchanges code for tokens, and saves them."""
     redirect_uri = f"{settings.FRONTEND_URL}/api/auth/google/callback"
-    user_id = state
+    if ":" not in state:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+    received_sig, user_id = state.split(":", 1)
+    expected_sig = hmac_lib.new(settings.JWT_SECRET.encode(), user_id.encode(), hashlib.sha256).hexdigest()[:16]
+    if not hmac_lib.compare_digest(received_sig, expected_sig):
+        raise HTTPException(status_code=400, detail="OAuth state verification failed")
     
     token_url = "https://oauth2.googleapis.com/token"
     payload = {
@@ -92,7 +101,9 @@ async def google_client_login(current_user: User = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Only clients can use this endpoint")
 
     redirect_uri = f"{settings.FRONTEND_URL}/api/auth/google/client/callback"
-    state = str(current_user.id)
+    state_payload = str(current_user.id)
+    state_sig = hmac_lib.new(settings.JWT_SECRET.encode(), state_payload.encode(), hashlib.sha256).hexdigest()[:16]
+    state = f"{state_sig}:{state_payload}"
 
     auth_url = (
         "https://accounts.google.com/o/oauth2/v2/auth?"
@@ -111,7 +122,12 @@ async def google_client_login(current_user: User = Depends(get_current_user)):
 async def google_client_callback(code: str, state: str, db: AsyncSession = Depends(get_db)):
     """Handles the Google OAuth callback for clients, saves their refresh token."""
     redirect_uri = f"{settings.FRONTEND_URL}/api/auth/google/client/callback"
-    user_id = state
+    if ":" not in state:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+    received_sig, user_id = state.split(":", 1)
+    expected_sig = hmac_lib.new(settings.JWT_SECRET.encode(), user_id.encode(), hashlib.sha256).hexdigest()[:16]
+    if not hmac_lib.compare_digest(received_sig, expected_sig):
+        raise HTTPException(status_code=400, detail="OAuth state verification failed")
 
     token_url = "https://oauth2.googleapis.com/token"
     payload = {

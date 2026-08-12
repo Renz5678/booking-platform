@@ -12,6 +12,7 @@ class CounselorProfile(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
     bio = Column(String, nullable=True)
+    photo_url = Column(String, nullable=True)
     specialization_tags = Column(JSON, default=list)
     credentials_url = Column(String, nullable=True)
     is_verified = Column(Boolean, default=False)

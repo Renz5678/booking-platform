@@ -1,12 +1,14 @@
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Request
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
 from app.core.security import get_current_user, require_role
+from app.core.rate_limit import limiter
 from app.db.session import get_db
 from app.models.booking import Booking, BookingStatus
 from app.models.counselor_profile import CounselorProfile
@@ -26,6 +28,8 @@ from app.services.booking_service import check_counselor_availability
 from app.services.email_service import (
     send_cancellation_email,
     send_counselor_cancellation_notification,
+    send_admin_cancellation_alert,
+    generate_ics_content,
 )
 from app.services.payment_service import create_paymongo_checkout, refund_payment
 
@@ -35,7 +39,9 @@ router = APIRouter(prefix="/bookings", tags=["bookings"])
 
 
 @router.post("/", response_model=dict, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
 async def create_booking(
+    request: Request,
     booking_data: BookingCreate,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
@@ -207,8 +213,60 @@ async def get_booking_detail(
     return booking
 
 
+@router.get("/{booking_id}/ics")
+async def download_booking_ics(
+    booking_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Returns an .ics file for a given booking.
+    Accessible by the booking's client, the assigned counselor, or an admin.
+    """
+    result = await db.execute(
+        select(Booking)
+        .options(
+            selectinload(Booking.counselor).selectinload(CounselorProfile.user),
+            selectinload(Booking.client),
+        )
+        .where(Booking.id == booking_id)
+    )
+    booking = result.scalar_one_or_none()
+
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    is_client = booking.client_id == current_user.id
+    is_admin = current_user.role.value == "admin"
+    is_counselor = (
+        current_user.role.value == "counselor"
+        and booking.counselor
+        and booking.counselor.user_id == current_user.id
+    )
+
+    if not (is_client or is_admin or is_counselor):
+        raise HTTPException(status_code=403, detail="Not authorized to view this booking")
+
+    counselor_name = booking.counselor.user.full_name if booking.counselor and booking.counselor.user else "Counselor"
+    title = f"Counseling Session with {counselor_name}"
+    description = f"Counseling session booked via Alaga Counseling. Booking ID: {booking.id}"
+    location = booking.meeting_link or "Online (Link to be provided)"
+    
+    ics_content = generate_ics_content(
+        title=title,
+        start=booking.scheduled_start,
+        end=booking.scheduled_end,
+        location=location,
+        description=description,
+    )
+    
+    return Response(content=ics_content, media_type="text/calendar", headers={"Content-Disposition": f'attachment; filename="booking_{booking_id}.ics"'})
+
+
 @router.post("/{booking_id}/cancel", response_model=BookingCancelResponse)
+@limiter.limit("20/minute")
 async def cancel_booking(
+    request: Request,
     booking_id: str,
     current_user: User = Depends(require_role(["client"])),
     db: AsyncSession = Depends(get_db),
@@ -286,7 +344,9 @@ async def counselor_cancel_booking(
     """
     # Find the counselor's profile
     counselor_result = await db.execute(
-        select(CounselorProfile).where(CounselorProfile.user_id == current_user.id)
+        select(CounselorProfile)
+        .options(selectinload(CounselorProfile.user))
+        .where(CounselorProfile.user_id == current_user.id)
     )
     counselor = counselor_result.scalar_one_or_none()
 
@@ -338,6 +398,14 @@ async def counselor_cancel_booking(
                 booking_id,
                 e,
             )
+            
+    # Notify admin
+    counselor_name = counselor.user.full_name if counselor and counselor.user else "Unknown Counselor"
+    client_name = client.full_name if client else "Unknown Client"
+    try:
+        await send_admin_cancellation_alert(booking_id, counselor_name, client_name)
+    except Exception as e:
+        logger.error("Failed to send admin cancellation alert for booking %s: %s", booking_id, e)
 
     return BookingCancelResponse(
         msg="Booking cancelled. Client has been notified.",
@@ -414,7 +482,9 @@ async def update_booking_status(
 
 
 @router.put("/{booking_id}/reschedule", response_model=BookingResponse)
+@limiter.limit("20/minute")
 async def reschedule_booking(
+    request: Request,
     booking_id: str,
     reschedule_data: BookingRescheduleRequest,
     current_user: User = Depends(require_role(["client"])),

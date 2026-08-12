@@ -16,6 +16,7 @@ from app.models.content import SiteContent
 from app.schemas.booking import BookingResponse
 from app.schemas.content import ContentResponse, ContentUpdate
 from app.schemas.counselor import CounselorProfilePrivateResponse
+from app.schemas.user import CounselorInviteRequest
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,52 @@ async def list_pending_counselors(
     )
     return result.scalars().all()
 
+
+@router.post("/counselors/invite", response_model=dict)
+async def invite_counselor(
+    data: CounselorInviteRequest,
+    current_user: User = Depends(require_role(["admin"])),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: Invite a new counselor."""
+    result = await db.execute(select(User).where(User.email == data.email))
+    if result.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    import secrets
+    from datetime import datetime, timedelta, timezone
+    from app.services.auth_service import get_password_hash
+    from app.models.user import RoleEnum
+    
+    invite_token = secrets.token_urlsafe(32)
+    temp_password = secrets.token_urlsafe(16)
+    
+    new_user = User(
+        email=data.email,
+        full_name=data.full_name,
+        password_hash=get_password_hash(temp_password),
+        role=RoleEnum.counselor,
+        is_verified=False,
+        invite_token=invite_token,
+        invite_token_expires_at=datetime.now(timezone.utc) + timedelta(days=7)
+    )
+    db.add(new_user)
+    await db.flush()
+    
+    profile = CounselorProfile(
+        user_id=new_user.id,
+        bio="",
+        specialties=[],
+        hourly_rate=0.0
+    )
+    db.add(profile)
+    await db.commit()
+    
+    from app.services.email_service import send_counselor_invite_email
+    import asyncio
+    asyncio.create_task(send_counselor_invite_email(data.email, invite_token))
+    
+    return {"msg": "Invite sent successfully."}
 
 @router.post("/counselors/{counselor_id}/verify", response_model=dict)
 async def verify_counselor(
