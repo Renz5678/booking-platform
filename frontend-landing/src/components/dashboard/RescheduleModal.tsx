@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { Booking } from "@/types";
+import { api } from "@/lib/api";
 
 interface RescheduleModalProps {
   booking: Booking;
@@ -41,13 +42,8 @@ export default function RescheduleModal({ booking, onClose, onSuccess }: Resched
         const startDateStr = start.toISOString().split('T')[0];
         const endDateStr = end.toISOString().split('T')[0];
 
-        const res = await fetch(`http://localhost:8000/availability/${booking.counselor_id}/slots?start_date=${startDateStr}&end_date=${endDateStr}&duration=60&exclude_booking_id=${booking.id}`);
-        if (res.ok) {
-          const data = await res.json();
-          setAvailableWeeklySlots(data || {});
-        } else {
-          setAvailableWeeklySlots({});
-        }
+        const data = await api.get(`/availability/${booking.counselor_id}/slots?start_date=${startDateStr}&end_date=${endDateStr}&duration=60&exclude_booking_id=${booking.id}`);
+        setAvailableWeeklySlots(data || {});
       } catch (err) {
         console.error("Failed to fetch slots:", err);
         setAvailableWeeklySlots({});
@@ -72,25 +68,15 @@ export default function RescheduleModal({ booking, onClose, onSuccess }: Resched
     const endD = new Date(`${dateStr}T${(endHour + 1).toString().padStart(2, '0')}:00:00Z`);
     
     try {
-      const res = await fetch(`http://localhost:8000/bookings/${booking.id}/reschedule`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          new_scheduled_start: startD.toISOString(),
-          new_scheduled_end: endD.toISOString(),
-        })
+      await api.put(`/bookings/${booking.id}/reschedule`, {
+        new_scheduled_start: startD.toISOString(),
+        new_scheduled_end: endD.toISOString(),
       });
       
-      if (res.ok) {
-        onSuccess();
-      } else {
-        const errorData = await res.json();
-        setErrorMsg(errorData.detail || "Failed to reschedule booking.");
-      }
-    } catch (err) {
+      onSuccess();
+    } catch (err: any) {
       console.error(err);
-      setErrorMsg("An error occurred while rescheduling.");
+      setErrorMsg(err.message || "An error occurred while rescheduling.");
     } finally {
       setIsSubmitting(false);
     }

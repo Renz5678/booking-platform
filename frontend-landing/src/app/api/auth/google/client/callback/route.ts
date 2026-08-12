@@ -6,8 +6,9 @@ export async function GET(request: Request) {
   const state = url.searchParams.get("state");
 
   if (code && state) {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     return NextResponse.redirect(
-      `http://localhost:8000/auth/google/client/callback?code=${code}&state=${state}`
+      `${apiUrl}/auth/google/client/callback?code=${code}&state=${state}`
     );
   }
 

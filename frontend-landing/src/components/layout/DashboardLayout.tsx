@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import ProtectedRoute, { clearAuthCache } from "../auth/ProtectedRoute";
+import { api } from "@/lib/api";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -18,10 +19,7 @@ export default function DashboardLayout({ children, allowedRoles, role }: Dashbo
 
   const handleLogout = async () => {
     try {
-      await fetch("http://localhost:8000/auth/logout", {
-        method: "POST",
-        credentials: "include"
-      });
+      await api.post("/auth/logout", {});
       clearAuthCache();
       router.push("/");
     } catch (err) {

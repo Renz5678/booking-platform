@@ -4,6 +4,9 @@ import { AvailabilityBlock } from "@/types";
 
 import React, { useState, useEffect } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import { api } from "@/lib/api";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // Helper to generate a simple time grid structure
 const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -24,34 +27,23 @@ export default function AvailabilityPage() {
     async function fetchData() {
       setIsLoading(true);
       try {
-        const profileRes = await fetch("http://localhost:8000/counselors/me/profile", {
-          headers: { "Content-Type": "application/json" },
-          credentials: 'include'
-        });
-        if (profileRes.ok) {
-          const profile = await profileRes.json();
-          setIsConnected(profile.google_calendar_connected);
-        }
+        const profile = await api.get("/counselors/me/profile");
+        setIsConnected(profile.google_calendar_connected);
 
-        const blocksRes = await fetch("http://localhost:8000/availability/me/blocks", {
-          credentials: 'include'
-        });
-        if (blocksRes.ok) {
-          const blocks = await blocksRes.json();
-          setExistingBlocks(blocks);
-          
-          const newSet = new Set<string>();
-          blocks.forEach((b: AvailabilityBlock) => {
-            if (b.is_recurring && b.day_of_week !== null) {
-              const startHour = parseInt(b.start_time.split(":")[0]);
-              const timeIndex = startHour - 8;
-              if (timeIndex >= 0 && timeIndex < times.length) {
-                newSet.add(`${b.day_of_week}-${timeIndex}`);
-              }
+        const blocks = await api.get("/availability/me/blocks");
+        setExistingBlocks(blocks);
+        
+        const newSet = new Set<string>();
+        blocks.forEach((b: AvailabilityBlock) => {
+          if (b.is_recurring && b.day_of_week !== null) {
+            const startHour = parseInt(b.start_time.split(":")[0]);
+            const timeIndex = startHour - 8;
+            if (timeIndex >= 0 && timeIndex < times.length) {
+              newSet.add(`${b.day_of_week}-${timeIndex}`);
             }
-          });
-          setSelectedSlots(newSet);
-        }
+          }
+        });
+        setSelectedSlots(newSet);
       } catch (err) {
         console.error("Failed to fetch data:", err);
       } finally {
@@ -93,10 +85,7 @@ export default function AvailabilityPage() {
     try {
       // 1. Delete all existing blocks (simple sync approach)
       for (const block of existingBlocks) {
-        await fetch(`http://localhost:8000/availability/me/blocks/${block.id}`, {
-          method: "DELETE",
-          credentials: 'include'
-        });
+        await api.delete(`/availability/me/blocks/${block.id}`);
       }
 
       // 2. Create new blocks
@@ -116,16 +105,8 @@ export default function AvailabilityPage() {
           is_recurring: true
         };
 
-        const res = await fetch("http://localhost:8000/availability/me/blocks", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: 'include',
-          body: JSON.stringify(payload)
-        });
-        
-        if (res.ok) {
-          createdBlocks.push(await res.json());
-        }
+        const res = await api.post("/availability/me/blocks", payload);
+        createdBlocks.push(res);
       }
       
       setExistingBlocks(createdBlocks);
@@ -152,7 +133,7 @@ export default function AvailabilityPage() {
             Connected to Google Calendar
           </button>
         ) : (
-          <a href="http://localhost:8000/auth/google/login" className="flex items-center gap-2 px-6 py-3 rounded-full border border-tertiary-container text-tertiary-container hover:bg-surface-container-highest transition-colors font-label-md text-[14px] font-medium">
+          <a href={`${API_URL}/auth/google/login`} className="flex items-center gap-2 px-6 py-3 rounded-full border border-tertiary-container text-tertiary-container hover:bg-surface-container-highest transition-colors font-label-md text-[14px] font-medium">
             <span className="material-symbols-outlined">calendar_today</span>
             Connect Google Calendar
           </a>

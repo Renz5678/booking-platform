@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { api } from "@/lib/api";
 
 interface User {
   id: string;
@@ -39,15 +40,7 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
 
     const verifyAuth = async () => {
       try {
-        const res = await fetch("http://localhost:8000/auth/me", {
-          credentials: "include",
-        });
-
-        if (!res.ok) {
-          throw new Error("Not authenticated");
-        }
-
-        const data: User = await res.json();
+        const data: User = await api.get("/auth/me");
         cachedUser = data;
         setUser(data);
 

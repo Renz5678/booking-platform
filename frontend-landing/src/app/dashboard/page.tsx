@@ -112,7 +112,7 @@ export default function ClientDashboardPage() {
             Connected to Google Calendar
           </button>
         ) : (
-          <a href="http://localhost:8000/auth/google/client/login" className="flex items-center gap-2 px-5 py-2.5 rounded-full border border-tertiary-container text-tertiary-container hover:bg-surface-container-highest transition-colors font-label-md text-[14px] font-medium shrink-0">
+          <a href={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/auth/google/client/login`} className="flex items-center gap-2 px-5 py-2.5 rounded-full border border-tertiary-container text-tertiary-container hover:bg-surface-container-highest transition-colors font-label-md text-[14px] font-medium shrink-0">
             <span className="material-symbols-outlined text-[18px]">calendar_today</span>
             Connect Google Calendar
           </a>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import { api } from "@/lib/api";
 
 interface Booking {
   id: string;
@@ -24,25 +25,13 @@ export default function CounselorDashboardPage() {
     async function fetchData() {
       try {
         // Fetch User Info
-        const userRes = await fetch("http://localhost:8000/auth/me", {
-          headers: { "Content-Type": "application/json" },
-          credentials: 'include'
-        });
-        if (userRes.ok) {
-          const user = await userRes.json();
-          const names = user.full_name?.split(" ");
-          setLastName(names && names.length > 1 ? names[names.length - 1] : user.full_name);
-          setIsActive(user.is_active);
-        }
+        const user = await api.get("/auth/me");
+        const names = user.full_name?.split(" ");
+        setLastName(names && names.length > 1 ? names[names.length - 1] : user.full_name);
+        setIsActive(user.is_active);
 
         // Fetch Bookings
-        const bookingsRes = await fetch("http://localhost:8000/bookings/counselor/me", {
-          headers: { "Content-Type": "application/json" },
-          credentials: 'include'
-        });
-        
-        if (bookingsRes.ok) {
-          const bookings: Booking[] = await bookingsRes.json();
+        const bookings: Booking[] = await api.get("/bookings/counselor/me");
           
           const now = new Date();
           const startOfWeek = new Date(now);
@@ -71,7 +60,6 @@ export default function CounselorDashboardPage() {
           setSessionsThisWeek(weekSessions.length);
           setNewBookings(newB.length);
           setTodaysBookings(todaySessions);
-        }
       } catch (error) {
         console.error("Failed to fetch dashboard data:", error);
       } finally {

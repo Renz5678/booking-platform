@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import { api } from "@/lib/api";
 
 interface PendingCounselor {
   id: string;
@@ -28,49 +29,31 @@ export default function AdminDashboardPage() {
     setLoading(true);
     try {
       // Fetch Analytics
-      const analyticsRes = await fetch("http://localhost:8000/admin/analytics", {
-        headers: { "Content-Type": "application/json" },
-        credentials: "include"
-      });
-      if (analyticsRes.ok) {
-        const data = await analyticsRes.json();
-        setTotalBookings(data.total_bookings);
-        // Format revenue
-        if (data.total_revenue >= 1000) {
-          setTotalRevenue((data.total_revenue / 1000).toFixed(1) + "k");
-        } else {
-          setTotalRevenue(data.total_revenue.toString());
-        }
+      const analyticsData = await api.get("/admin/analytics");
+      setTotalBookings(analyticsData.total_bookings);
+      if (analyticsData.total_revenue >= 1000) {
+        setTotalRevenue((analyticsData.total_revenue / 1000).toFixed(1) + "k");
+      } else {
+        setTotalRevenue(analyticsData.total_revenue.toString());
       }
 
       // Fetch Pending Counselors
-      const pendingRes = await fetch("http://localhost:8000/admin/counselors/pending", {
-        headers: { "Content-Type": "application/json" },
-        credentials: "include"
-      });
-      if (pendingRes.ok) {
-        setPendingCounselors(await pendingRes.json());
-      }
+      const pendingData = await api.get("/admin/counselors/pending");
+      setPendingCounselors(pendingData);
 
       // Fetch Bookings to calculate "Bookings Today"
-      const bookingsRes = await fetch("http://localhost:8000/admin/bookings", {
-        headers: { "Content-Type": "application/json" },
-        credentials: "include"
+      const bookingsData = await api.get("/admin/bookings");
+      const now = new Date();
+      const startOfDay = new Date(now);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(now);
+      endOfDay.setHours(23, 59, 59, 999);
+      
+      const todayBookings = bookingsData.filter((b: any) => {
+        const d = new Date(b.scheduled_start);
+        return d >= startOfDay && d <= endOfDay;
       });
-      if (bookingsRes.ok) {
-        const bookings = await bookingsRes.json();
-        const now = new Date();
-        const startOfDay = new Date(now);
-        startOfDay.setHours(0, 0, 0, 0);
-        const endOfDay = new Date(now);
-        endOfDay.setHours(23, 59, 59, 999);
-        
-        const todayBookings = bookings.filter((b: any) => {
-          const d = new Date(b.scheduled_start);
-          return d >= startOfDay && d <= endOfDay;
-        });
-        setTodaysBookings(todayBookings.length);
-      }
+      setTodaysBookings(todayBookings.length);
     } catch (error) {
       console.error("Error fetching admin data:", error);
     } finally {
@@ -81,17 +64,9 @@ export default function AdminDashboardPage() {
   const handleApprove = async (counselorId: string) => {
     setVerifyingId(counselorId);
     try {
-      const res = await fetch(`http://localhost:8000/admin/counselors/${counselorId}/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include"
-      });
-      if (res.ok) {
-        // Remove from list
-        setPendingCounselors(prev => prev.filter(c => c.id !== counselorId));
-      } else {
-        alert("Failed to verify counselor");
-      }
+      await api.post(`/admin/counselors/${counselorId}/verify`, {});
+      // Remove from list
+      setPendingCounselors(prev => prev.filter(c => c.id !== counselorId));
     } catch (error) {
       console.error("Error verifying counselor:", error);
       alert("Failed to verify counselor");
