@@ -133,15 +133,34 @@ async def login(
     result = await db.execute(select(User).where(User.email == login_data.email))
     user = result.scalar_one_or_none()
 
+    if user:
+        locked_until = user.locked_until
+        if locked_until and locked_until.tzinfo is None:
+            locked_until = locked_until.replace(tzinfo=timezone.utc)
+        if locked_until and locked_until > datetime.now(timezone.utc):
+            remaining = (locked_until - datetime.now(timezone.utc)).total_seconds() // 60
+            raise HTTPException(
+                status_code=429,
+                detail=f"Account locked. Try again in {int(remaining) + 1} minutes."
+            )
+
     if not user or not verify_password(login_data.password, user.password_hash):
-        # Use a generic error message to prevent user enumeration attacks.
-        # An attacker should not be able to distinguish between "wrong password"
-        # and "email not found" from the response.
+        if user:
+            user.failed_login_attempts += 1
+            if user.failed_login_attempts >= 5:
+                user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=15)
+            await db.commit()
+            
         logger.warning("Failed login attempt for email: %s", login_data.email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
         )
+
+    # Success: reset lock fields
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    await db.commit()
 
     if not user.is_verified:
         raise HTTPException(

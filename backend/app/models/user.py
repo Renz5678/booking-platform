@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Enum, String, Text, Integer
 from sqlalchemy.orm import relationship
 
 from app.db.base import Base
@@ -32,6 +32,8 @@ class User(Base):
     verification_otp_expires_at = Column(DateTime(timezone=True), nullable=True)
     google_refresh_token = Column(Text, nullable=True)
     google_calendar_connected = Column(Boolean, default=False, nullable=False)
+    failed_login_attempts = Column(Integer, default=0, nullable=False)
+    locked_until = Column(DateTime(timezone=True), nullable=True)
 
     counselor_profile = relationship(
         "CounselorProfile", back_populates="user", uselist=False
