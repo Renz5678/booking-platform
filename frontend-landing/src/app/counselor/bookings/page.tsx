@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { Booking } from "@/types";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import { api } from "@/lib/api";
+import Link from "next/link";
 
 export default function CounselorBookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -11,11 +13,8 @@ export default function CounselorBookingsPage() {
   useEffect(() => {
     const fetchBookings = async () => {
       try {
-        const res = await fetch("http://localhost:8000/bookings/counselor/me", {
-          credentials: "include"
-        });
-        if (res.ok) {
-          const data = await res.json();
+        const data = await api.get("/bookings/counselor/me");
+        if (data) {
           setBookings(data);
         }
       } catch (err) {
@@ -53,14 +52,20 @@ export default function CounselorBookingsPage() {
         ) : (
           <div className="space-y-4">
             {bookings.map((booking, idx) => (
-              <div key={idx} className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 flex justify-between items-center shadow-sm hover:-translate-y-1 hover:shadow-md transition-all duration-300">
+              <Link 
+                key={idx} 
+                href={`/counselor/bookings/${booking.id}`}
+                className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 flex justify-between items-center shadow-sm hover:-translate-y-1 hover:shadow-md transition-all duration-300 block"
+              >
                 <div>
                   <p className="font-headline-md text-primary font-bold">Booking #{booking.id.substring(0, 8)}</p>
                   <p className="font-label-md text-on-surface-variant mt-1">Status: <span className="uppercase text-secondary font-bold">{booking.status}</span></p>
                   <p className="font-label-sm text-on-surface-variant mt-1">{new Date(booking.scheduled_start).toLocaleString()}</p>
                 </div>
-                <button className="bg-secondary text-on-secondary px-4 py-2 rounded-lg font-label-md hover:opacity-90 active:scale-[0.98] transition-all duration-200">View Details</button>
-              </div>
+                <div className="bg-secondary text-on-secondary px-4 py-2 rounded-lg font-label-md hover:opacity-90 active:scale-[0.98] transition-all duration-200 inline-block">
+                  View Details
+                </div>
+              </Link>
             ))}
           </div>
         )}
