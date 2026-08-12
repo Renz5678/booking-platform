@@ -1,5 +1,44 @@
+"use client";
+
 import Image from "next/image";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
+
 export default function Home() {
+  const [quotes, setQuotes] = useState<string[]>([
+    "Seeking help is not a sign of weakness; it's a testament to your commitment to well-being and personal growth."
+  ]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  useEffect(() => {
+    const fetchQuotes = async () => {
+      try {
+        const data = await api.get("/admin/content");
+        const quoteItem = data.find((item: any) => item.key === "homepage_quotes");
+        if (quoteItem && quoteItem.value) {
+          try {
+            const parsed = JSON.parse(quoteItem.value);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setQuotes(parsed);
+            }
+          } catch (e) {
+            console.error("Failed to parse quotes JSON", e);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch quotes", err);
+      }
+    };
+    fetchQuotes();
+  }, []);
+
+  useEffect(() => {
+    if (quotes.length <= 1) return;
+    const interval = setInterval(() => {
+      setCurrentIndex(i => (i + 1) % quotes.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [quotes]);
   return (
     <>
       {/* Hero Section */}
@@ -24,10 +63,14 @@ export default function Home() {
       <section className="bg-surface-container-low py-12 px-margin-mobile md:px-margin-desktop my-section-gap">
         <div className="max-w-3xl mx-auto text-center">
           <span className="material-symbols-outlined text-on-tertiary-container text-4xl mb-4 opacity-50" style={{ fontVariationSettings: "'FILL' 1" }}>format_quote</span>
-          <p className="font-headline-lg text-headline-lg text-primary mb-6">
-            &quot;Seeking help is not a sign of weakness; it&apos;s a testament to your commitment to well-being and personal growth.&quot;
+          <p key={currentIndex} className="font-headline-lg text-headline-lg text-primary mb-6 transition-opacity duration-500 ease-in-out opacity-100">
+            &quot;{quotes[currentIndex]}&quot;
           </p>
-          <div className="h-1 w-16 bg-on-tertiary-container mx-auto rounded-full"></div>
+          <div className="flex justify-center gap-2 mb-6">
+            {quotes.length > 1 && quotes.map((_, i) => (
+              <div key={i} className={`h-2 w-2 rounded-full ${i === currentIndex ? 'bg-primary' : 'bg-surface-variant'}`} />
+            ))}
+          </div>
         </div>
       </section>
 
