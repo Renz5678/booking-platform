@@ -2,8 +2,12 @@ from datetime import datetime, timedelta, timezone
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+import httpx
+import logging
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -52,21 +56,24 @@ def verify_email_token(token: str) -> str | None:
         return None
 
 
-# Stub for CAPTCHA verification
 async def verify_captcha(token: str) -> bool:
     """
-    TODO: Verify the CAPTCHA token with Google reCAPTCHA v3 / hCaptcha API.
-    You will need to pass the token and your secret key to their verification endpoint.
-    For MVP scaffolding, we'll return True to allow signup to proceed if a token is present.
+    Verify the CAPTCHA token with Google reCAPTCHA v3 API.
     """
     if not token:
         return False
-    # Example (uncomment and install httpx when ready):
-    # async with httpx.AsyncClient() as client:
-    #     response = await client.post("https://www.google.com/recaptcha/api/siteverify", data={
-    #         "secret": "YOUR_SECRET_KEY",
-    #         "response": token
-    #     })
-    #     result = response.json()
-    #     return result.get("success", False) and result.get("score", 0.0) >= 0.5
-    return True
+        
+    if not settings.RECAPTCHA_SECRET_KEY:
+        logger.warning("RECAPTCHA_SECRET_KEY is not set. Skipping CAPTCHA verification (dev mode fallback).")
+        return True
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "https://www.google.com/recaptcha/api/siteverify",
+            data={
+                "secret": settings.RECAPTCHA_SECRET_KEY,
+                "response": token
+            }
+        )
+        result = response.json()
+        return result.get("success", False) and result.get("score", 0.0) >= 0.5

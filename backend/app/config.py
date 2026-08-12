@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     FRONTEND_URL: str
     ENVIRONMENT: str = "development"  # Set to "production" to disable dev-only endpoints
     REDIS_URL: str = "redis://localhost:6379/0"
+    RECAPTCHA_SECRET_KEY: str = ""
+    RECAPTCHA_SITE_KEY: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
