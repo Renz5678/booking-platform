@@ -22,9 +22,12 @@ from app.models.user import RoleEnum, User
 from app.schemas.user import UserCreate, UserLogin, UserResponse
 from app.services.auth_service import (
     create_access_token,
+    create_refresh_token,
+    decode_refresh_token,
     get_password_hash,
     verify_captcha,
     verify_password,
+    REFRESH_TOKEN_EXPIRE_DAYS,
 )
 from app.services.email_service import send_verification_email
 
@@ -148,6 +151,7 @@ async def login(
 
     # Issue token
     access_token = create_access_token(data={"sub": str(user.id)})
+    refresh_token = create_refresh_token(data={"sub": str(user.id)})
 
     is_production = getattr(settings, "FRONTEND_URL", "").startswith("https")
 
@@ -160,6 +164,15 @@ async def login(
         samesite="lax",
         max_age=30 * 60,  # 30 minutes
     )
+    
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=is_production,
+        samesite="lax",
+        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+    )
 
     return {"msg": "Login successful"}
 
@@ -168,7 +181,57 @@ async def login(
 async def logout(response: Response):
     """Logout by clearing the JWT cookie."""
     response.delete_cookie("access_token")
+    response.delete_cookie("refresh_token")
     return {"msg": "Logout successful"}
+
+
+@router.post("/refresh")
+async def refresh_token(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
+    """Refresh the access and refresh tokens using the existing refresh token cookie."""
+    refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token missing")
+
+    user_id_str = decode_refresh_token(refresh_token)
+    if not user_id_str:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token")
+
+    try:
+        user_id = int(user_id_str)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token subject")
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if not user or not user.is_verified:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+
+    # Issue new tokens
+    new_access_token = create_access_token(data={"sub": str(user.id)})
+    new_refresh_token = create_refresh_token(data={"sub": str(user.id)})
+
+    is_production = getattr(settings, "FRONTEND_URL", "").startswith("https")
+
+    response.set_cookie(
+        key="access_token",
+        value=new_access_token,
+        httponly=True,
+        secure=is_production,
+        samesite="lax",
+        max_age=30 * 60,
+    )
+    
+    response.set_cookie(
+        key="refresh_token",
+        value=new_refresh_token,
+        httponly=True,
+        secure=is_production,
+        samesite="lax",
+        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+    )
+
+    return {"msg": "Tokens refreshed"}
 
 
 @router.get("/me", response_model=UserResponse)
