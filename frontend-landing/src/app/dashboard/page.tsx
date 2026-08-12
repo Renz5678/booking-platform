@@ -6,6 +6,7 @@ import RescheduleModal from "@/components/dashboard/RescheduleModal";
 import { api, ApiError } from "@/lib/api";
 
 import { Booking } from "@/types";
+import Link from "next/link";
 
 export default function ClientDashboardPage() {
   const [firstName, setFirstName] = useState("");
@@ -196,45 +197,44 @@ export default function ClientDashboardPage() {
           <section className="mt-12">
             <div className="flex justify-between items-end mb-6">
               <h2 className="font-headline-md text-[24px] font-medium text-primary">Past Sessions</h2>
-              {pastBookings.length > 3 && (
-                <a href="#" className="font-label-md text-[14px] font-medium text-secondary hover:underline">View all</a>
-              )}
             </div>
             
             {pastBookings.length > 0 ? (
               <div className="bg-surface rounded-xl shadow-ambient overflow-hidden">
                 {pastBookings.slice(0, 3).map((booking, idx) => (
-                  <div key={booking.id} className={`flex flex-col sm:flex-row justify-between items-start sm:items-center p-6 hover:bg-surface-container-low transition-colors gap-4 ${idx !== pastBookings.slice(0,3).length - 1 ? 'border-b border-surface-variant' : ''}`}>
-                    <div className="flex items-center gap-4">
-                      <div className="bg-surface-container w-12 h-12 rounded-full flex items-center justify-center text-primary-container shrink-0">
-                        <span className="material-symbols-outlined">person</span>
+                  <Link href={`/dashboard/bookings/${booking.id}`} key={booking.id} className={`block p-6 hover:bg-surface-container-low transition-colors ${idx !== pastBookings.slice(0,3).length - 1 ? 'border-b border-surface-variant' : ''}`}>
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className="bg-surface-container w-12 h-12 rounded-full flex items-center justify-center text-primary-container shrink-0">
+                          <span className="material-symbols-outlined">person</span>
+                        </div>
+                        <div>
+                          <p className="font-label-md text-[14px] font-bold text-primary">{booking.counselor_name}</p>
+                          <p className="font-label-sm text-[12px] text-on-surface-variant">{formatDate(booking.scheduled_start)}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-label-md text-[14px] font-bold text-primary">{booking.counselor_name}</p>
-                        <p className="font-label-sm text-[12px] text-on-surface-variant">{formatDate(booking.scheduled_start)}</p>
+                      <div className="flex items-center gap-6 w-full sm:w-auto justify-between sm:justify-end">
+                        {booking.status === "completed" && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-[12px] font-semibold">
+                            <span className="material-symbols-outlined text-[16px]">check_circle</span> Completed
+                          </span>
+                        )}
+                        {booking.status === "cancelled" && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-variant text-on-surface-variant font-label-sm text-[12px] font-semibold">
+                            <span className="material-symbols-outlined text-[16px]">cancel</span> Cancelled
+                          </span>
+                        )}
+                        {(booking.status === "pending_payment" || booking.status === "confirmed") && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-tertiary-container text-on-tertiary-container font-label-sm text-[12px] font-semibold">
+                            <span className="material-symbols-outlined text-[16px]">schedule</span> Past
+                          </span>
+                        )}
+                        <span className={`font-label-md text-[14px] font-medium text-tertiary-container hover:underline flex items-center gap-1 ${booking.status === 'cancelled' ? 'invisible' : ''}`}>
+                          Details <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                        </span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-6 w-full sm:w-auto justify-between sm:justify-end">
-                      {booking.status === "completed" && (
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-[12px] font-semibold">
-                          <span className="material-symbols-outlined text-[16px]">check_circle</span> Completed
-                        </span>
-                      )}
-                      {booking.status === "cancelled" && (
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-variant text-on-surface-variant font-label-sm text-[12px] font-semibold">
-                          <span className="material-symbols-outlined text-[16px]">cancel</span> Cancelled
-                        </span>
-                      )}
-                      {(booking.status === "pending_payment" || booking.status === "confirmed") && (
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-tertiary-container text-on-tertiary-container font-label-sm text-[12px] font-semibold">
-                          <span className="material-symbols-outlined text-[16px]">schedule</span> Past
-                        </span>
-                      )}
-                      <button className={`font-label-md text-[14px] font-medium text-tertiary-container hover:underline flex items-center gap-1 ${booking.status === 'cancelled' ? 'invisible' : ''}`}>
-                        Receipt <span className="material-symbols-outlined text-[16px]">download</span>
-                      </button>
-                    </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             ) : (
