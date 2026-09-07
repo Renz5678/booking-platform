@@ -76,8 +76,7 @@ async def invite_counselor(
     profile = CounselorProfile(
         user_id=new_user.id,
         bio="",
-        specialties=[],
-        hourly_rate=0.0
+        specialization_tags=[],
     )
     db.add(profile)
     await db.commit()
