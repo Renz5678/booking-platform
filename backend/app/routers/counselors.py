@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -68,6 +68,66 @@ async def update_my_counselor_profile(
         db, counselor, update_data
     )
     return updated_profile
+
+
+@router.post("/me/photo", response_model=dict)
+@limiter.limit("5/minute")
+async def upload_counselor_photo(
+    request: Request,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(["counselor"])),
+):
+    """Counselor-only endpoint to upload a profile photo via Cloudinary."""
+    from app.config import settings
+    if not settings.CLOUDINARY_URL:
+        raise HTTPException(status_code=500, detail="Photo uploads are not configured (CLOUDINARY_URL missing).")
+        
+    counselor = await counselor_service.get_counselor_by_user_id(db, current_user.id)
+    if not counselor:
+        raise HTTPException(status_code=404, detail="Counselor profile not found")
+
+    import cloudinary
+    import cloudinary.uploader
+    from urllib.parse import urlparse
+    
+    # Parse CLOUDINARY_URL to configure the SDK
+    # Format: cloudinary://api_key:api_secret@cloud_name
+    parsed_url = urlparse(settings.CLOUDINARY_URL)
+    api_key = parsed_url.username
+    api_secret = parsed_url.password
+    cloud_name = parsed_url.hostname
+
+    cloudinary.config(
+        cloud_name=cloud_name,
+        api_key=api_key,
+        api_secret=api_secret,
+        secure=True
+    )
+
+    try:
+        # Upload the file stream directly to Cloudinary
+        upload_result = cloudinary.uploader.upload(
+            file.file,
+            folder="counselor_profiles",
+            public_id=f"counselor_{counselor.id}",
+            overwrite=True,
+            resource_type="image",
+        )
+        
+        secure_url = upload_result.get("secure_url")
+        if not secure_url:
+            raise HTTPException(status_code=500, detail="Failed to get secure URL from Cloudinary")
+            
+        counselor.photo_url = secure_url
+        await db.commit()
+        
+        return {"msg": "Photo uploaded successfully", "photo_url": secure_url}
+        
+    except Exception as e:
+        import logging
+        logging.error("Cloudinary upload failed: %s", str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to upload photo: {str(e)}")
 
 @router.get("/me/stats")
 async def get_my_counselor_stats(

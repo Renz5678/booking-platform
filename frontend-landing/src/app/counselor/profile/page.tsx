@@ -13,6 +13,7 @@ interface CounselorProfile {
   is_verified: boolean;
   is_active: boolean;
   credentials_url?: string;
+  photo_url?: string;
 }
 
 export default function CounselorProfilePage() {
@@ -28,9 +29,14 @@ export default function CounselorProfilePage() {
 
   // Credential upload state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState({ text: "", type: "" });
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Photo upload state
+  const [selectedPhoto, setSelectedPhoto] = useState<File | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoMessage, setPhotoMessage] = useState({ text: "", type: "" });
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchProfile();
@@ -112,6 +118,50 @@ export default function CounselorProfilePage() {
     }
   };
 
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      if (file.size > 2 * 1024 * 1024) {
+        setPhotoMessage({ text: "Photo exceeds 2MB limit.", type: "error" });
+        setSelectedPhoto(null);
+        if (photoInputRef.current) photoInputRef.current.value = "";
+        return;
+      }
+      setSelectedPhoto(file);
+      setPhotoMessage({ text: "", type: "" });
+    }
+  };
+
+  const handlePhotoUpload = async () => {
+    if (!selectedPhoto) return;
+    setUploadingPhoto(true);
+    setPhotoMessage({ text: "", type: "" });
+    try {
+      const formData = new FormData();
+      formData.append("file", selectedPhoto);
+      
+      const res = await fetch(`${API_URL}/counselors/me/photo`, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData
+      });
+      
+      if (!res.ok) throw new Error("Upload failed");
+      
+      const data = await res.json();
+      setProfile(prev => prev ? { ...prev, photo_url: data.photo_url } : null);
+      setSelectedPhoto(null);
+      if (photoInputRef.current) photoInputRef.current.value = "";
+      setPhotoMessage({ text: "Profile photo updated!", type: "success" });
+    } catch (err) {
+      console.error(err);
+      setPhotoMessage({ text: "Failed to upload photo.", type: "error" });
+    } finally {
+      setUploadingPhoto(false);
+      setTimeout(() => setPhotoMessage({ text: "", type: "" }), 3000);
+    }
+  };
+
   return (
     <DashboardLayout role="counselor" allowedRoles={["counselor"]}>
       <div className="max-w-3xl mx-auto space-y-8">
@@ -143,6 +193,52 @@ export default function CounselorProfilePage() {
                   <span className="material-symbols-outlined">pending</span> Pending Verification
                 </div>
               )}
+            </div>
+
+            {/* Profile Photo Section */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-surface-container-highest relative">
+              {photoMessage.text && (
+                <div className={`absolute top-4 right-6 px-3 py-1 rounded font-label-sm ${photoMessage.type === 'success' ? 'bg-secondary text-on-secondary' : 'bg-error text-on-error'}`}>
+                  {photoMessage.text}
+                </div>
+              )}
+              
+              <h2 className="font-headline-md text-primary mb-6 border-b border-surface-variant pb-2">Profile Photo</h2>
+              
+              <div className="flex flex-col sm:flex-row items-center gap-6">
+                <div className="shrink-0">
+                  {profile.photo_url ? (
+                    <img src={profile.photo_url} alt="Profile" className="w-32 h-32 rounded-full object-cover border-4 border-surface-variant" />
+                  ) : (
+                    <div className="w-32 h-32 rounded-full bg-surface-variant flex items-center justify-center text-on-surface-variant">
+                      <span className="material-symbols-outlined text-[48px]">person</span>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex-1 w-full sm:w-auto">
+                  <p className="font-body-sm text-on-surface-variant mb-3">Upload a professional headshot. This will be visible to clients when booking sessions.</p>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                    <input 
+                      type="file" 
+                      accept=".jpg,.jpeg,.png"
+                      onChange={handlePhotoChange}
+                      ref={photoInputRef}
+                      className="font-body-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary-fixed file:text-on-primary-fixed hover:file:bg-primary-fixed/80"
+                    />
+                    {selectedPhoto && (
+                      <button 
+                        onClick={handlePhotoUpload}
+                        disabled={uploadingPhoto}
+                        className="bg-primary text-on-primary px-4 py-2 rounded-lg font-label-md disabled:opacity-50 min-w-[120px]"
+                      >
+                        {uploadingPhoto ? "Uploading..." : "Save Photo"}
+                      </button>
+                    )}
+                  </div>
+                  <p className="font-body-xs text-on-surface-variant mt-2 opacity-70">Accepted formats: JPG, PNG. Max size: 2MB.</p>
+                </div>
+              </div>
             </div>
 
             {/* Profile Info Section */}

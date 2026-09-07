@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     RECAPTCHA_SECRET_KEY: str = ""
     RECAPTCHA_SITE_KEY: str = ""
     ADMIN_EMAIL: str = ""
+    CLOUDINARY_URL: str | None = None
     SENTRY_DSN: str | None = None
     SENTRY_ENVIRONMENT: str = "development"
 

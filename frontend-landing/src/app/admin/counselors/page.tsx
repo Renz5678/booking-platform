@@ -108,7 +108,21 @@ export default function AdminCounselorsPage() {
       fetchCounselors();
     } catch (err) {
       console.error(err);
-      alert("Failed to deactivate");
+      alert("Failed to deactivate counselor");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleReactivate = async (id: string) => {
+    if (!confirm("Are you sure you want to reactivate this counselor?")) return;
+    setActionLoading(`reactivate-${id}`);
+    try {
+      await api.post(`/admin/counselors/${id}/reactivate`, {});
+      fetchCounselors();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to reactivate counselor");
     } finally {
       setActionLoading(null);
     }
@@ -211,6 +225,15 @@ export default function AdminCounselorsPage() {
                     className="bg-error-container text-on-error-container px-4 py-2 rounded-lg font-label-md hover:opacity-90 disabled:opacity-50"
                   >
                     Deactivate
+                  </button>
+                )}
+                {activeTab === "deactivated" && (
+                  <button 
+                    onClick={() => handleReactivate(c.id)}
+                    disabled={actionLoading === `reactivate-${c.id}`}
+                    className="bg-secondary text-on-secondary px-4 py-2 rounded-lg font-label-md hover:opacity-90 disabled:opacity-50"
+                  >
+                    Reactivate
                   </button>
                 )}
               </div>

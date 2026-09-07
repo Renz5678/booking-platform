@@ -186,9 +186,34 @@ async def deactivate_counselor(
     counselor.is_active = False
     await db.commit()
 
-    logger.info("Admin %s deactivated counselor %s.", current_user.id, counselor_id)
+    logger.info("Admin %s deactivated counselor %s", current_user.id, counselor_id)
 
     return {"msg": "Counselor deactivated.", "counselor_id": counselor_id}
+
+
+@router.post("/counselors/{counselor_id}/reactivate", response_model=dict)
+async def reactivate_counselor(
+    counselor_id: str,
+    current_user: User = Depends(require_role(["admin"])),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Admin: Reactivate a previously deactivated counselor.
+    Sets is_active=True.
+    """
+    result = await db.execute(
+        select(CounselorProfile).where(CounselorProfile.id == counselor_id)
+    )
+    counselor = result.scalar_one_or_none()
+
+    if not counselor:
+        raise HTTPException(status_code=404, detail="Counselor not found")
+
+    counselor.is_active = True
+    await db.commit()
+
+    logger.info("Admin %s reactivated counselor %s", current_user.id, counselor_id)
+    return {"msg": "Counselor reactivated.", "counselor_id": counselor_id}
 
 
 # ---------------------------------------------------------------------------

@@ -14,6 +14,7 @@ export default function ClientBookingDetailPage({ params }: { params: Promise<{ 
   const [booking, setBooking] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [reschedulingBooking, setReschedulingBooking] = useState<Booking | null>(null);
+  const [downloadingReceipt, setDownloadingReceipt] = useState(false);
 
   useEffect(() => {
     fetchBooking();
@@ -40,7 +41,31 @@ export default function ClientBookingDetailPage({ params }: { params: Promise<{ 
       alert(`Failed to cancel booking: ${err instanceof ApiError ? err.message : (err as Error).message}`);
     }
   };
-
+  const handleDownloadReceipt = async () => {
+    setDownloadingReceipt(true);
+    try {
+      // Use fetch directly to handle the blob response while keeping credentials
+      const res = await fetch(`${API_URL}/bookings/${booking.id}/receipt`, {
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error("Failed to download receipt");
+      
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `receipt_${booking.id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to download receipt.");
+    } finally {
+      setDownloadingReceipt(false);
+    }
+  };
   if (loading) {
     return (
       <DashboardLayout role="client" allowedRoles={["client"]}>
@@ -157,12 +182,14 @@ export default function ClientBookingDetailPage({ params }: { params: Promise<{ 
             </div>
             
             <div className="mt-6">
-              <a 
-                href={`${API_URL}/bookings/${booking.id}/receipt`}
-                className="inline-flex items-center gap-2 text-tertiary hover:underline font-label-md"
+              <button 
+                onClick={handleDownloadReceipt}
+                disabled={downloadingReceipt}
+                className="inline-flex items-center gap-2 text-tertiary hover:underline font-label-md disabled:opacity-50"
               >
-                <span className="material-symbols-outlined text-[18px]">receipt_long</span> Download Receipt
-              </a>
+                <span className="material-symbols-outlined text-[18px]">receipt_long</span> 
+                {downloadingReceipt ? "Downloading..." : "Download Receipt"}
+              </button>
             </div>
           </div>
         </div>

@@ -1,11 +1,14 @@
 import logging
 from datetime import datetime, timezone
+import io
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
 
 from app.core.security import get_current_user, require_role
 from app.core.rate_limit import limiter
@@ -600,3 +603,93 @@ async def reschedule_booking(
     await db.refresh(booking)
 
     return booking
+
+
+@router.get("/{booking_id}/receipt", response_class=Response)
+@limiter.limit("5/minute")
+async def download_receipt(
+    request: Request,
+    booking_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Downloads a PDF receipt for a confirmed or cancelled booking.
+    Only accessible by the client who owns the booking or an admin.
+    """
+    result = await db.execute(
+        select(Booking)
+        .options(selectinload(Booking.client), selectinload(Booking.counselor).selectinload(CounselorProfile.user))
+        .where(Booking.id == booking_id)
+    )
+    booking = result.scalar_one_or_none()
+
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    if booking.client_id != current_user.id and current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Not authorized to download this receipt")
+
+    if booking.status == BookingStatus.pending_payment:
+        raise HTTPException(status_code=400, detail="Receipts are only available for paid bookings")
+
+    try:
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.units import inch
+        import io
+
+        buffer = io.BytesIO()
+        p = canvas.Canvas(buffer, pagesize=letter)
+        p.setTitle(f"Receipt - {booking.id}")
+
+        # Header
+        p.setFont("Helvetica-Bold", 24)
+        p.drawString(1 * inch, 10 * inch, "Alaga Counseling")
+        
+        p.setFont("Helvetica", 12)
+        p.drawString(1 * inch, 9.6 * inch, "Official Receipt")
+        p.drawString(1 * inch, 9.4 * inch, "Manila, Philippines")
+        p.drawString(1 * inch, 9.2 * inch, "support@alaga.ph")
+        
+        # Receipt details
+        p.setFont("Helvetica-Bold", 14)
+        p.drawString(1 * inch, 8.5 * inch, "Payment Details")
+        
+        p.setFont("Helvetica", 12)
+        y_pos = 8.1 * inch
+        line_height = 0.3 * inch
+        
+        details = [
+            ("Booking ID:", booking.id),
+            ("Date Issued:", booking.updated_at.strftime("%Y-%m-%d %H:%M:%S UTC")),
+            ("Client Name:", booking.client.full_name if booking.client else "Unknown"),
+            ("Client Email:", booking.client.email if booking.client else "Unknown"),
+            ("Counselor:", booking.counselor.user.full_name if booking.counselor and booking.counselor.user else "Unknown"),
+            ("Session Start:", booking.scheduled_start.strftime("%Y-%m-%d %H:%M:%S UTC")),
+            ("Status:", booking.status.value.title()),
+            ("Amount Paid:", f"PHP {booking.amount_paid:,.2f}" if booking.amount_paid else "PHP 0.00"),
+        ]
+        
+        for label, value in details:
+            p.drawString(1 * inch, y_pos, label)
+            p.drawString(2.5 * inch, y_pos, str(value))
+            y_pos -= line_height
+
+        p.showPage()
+        p.save()
+
+        buffer.seek(0)
+        
+        headers = {
+            "Content-Disposition": f'attachment; filename="receipt_{booking.id}.pdf"'
+        }
+        
+        return Response(content=buffer.getvalue(), media_type="application/pdf", headers=headers)
+        
+    except ImportError:
+        logger.error("reportlab is not installed. Cannot generate PDF receipts.")
+        raise HTTPException(status_code=500, detail="PDF generation is currently unavailable")
+    except Exception as e:
+        logger.error("Failed to generate receipt: %s", str(e))
+        raise HTTPException(status_code=500, detail="Failed to generate receipt")
