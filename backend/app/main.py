@@ -53,3 +53,41 @@ app.include_router(admin.router)
 async def health_check():
     """Health check endpoint to verify the API is running."""
     return {"status": "ok"}
+
+
+@app.on_event("startup")
+async def validate_production_config():
+    """
+    On startup, warn loudly if the app is running in production mode with
+    known-weak or missing secrets. This is a last-resort safety net — real
+    secret management should be handled via the deployment environment variables.
+    """
+    import logging as _logging
+    _startup_logger = _logging.getLogger("startup.security")
+
+    if settings.ENVIRONMENT == "production":
+        weak_jwt_defaults = {"supersecret", "secret", "changeme", "your-secret-key"}
+        if not settings.JWT_SECRET or settings.JWT_SECRET in weak_jwt_defaults:
+            _startup_logger.critical(
+                "SECURITY WARNING: JWT_SECRET is using a known weak default value in "
+                "production! All JWTs can be forged. Rotate the secret immediately."
+            )
+
+        if not settings.RECAPTCHA_SECRET_KEY:
+            _startup_logger.critical(
+                "SECURITY WARNING: RECAPTCHA_SECRET_KEY is not set in production! "
+                "Bot protection on signup, booking, and contact forms is DISABLED."
+            )
+
+        if settings.ENCRYPTION_KEY and settings.ENCRYPTION_KEY[:4].isdigit():
+            _startup_logger.critical(
+                "SECURITY WARNING: ENCRYPTION_KEY appears to use a sequential numeric "
+                "default in production. Google OAuth refresh tokens are NOT securely "
+                "encrypted. Rotate the key immediately."
+            )
+
+        if settings.PAYMONGO_SECRET_KEY.startswith("sk_test_"):
+            _startup_logger.warning(
+                "WARNING: PAYMONGO_SECRET_KEY is a test key in production mode. "
+                "Real payments will NOT be processed."
+            )
