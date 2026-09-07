@@ -25,6 +25,8 @@ from app.schemas.booking import (
     BookingStatusUpdateRequest,
 )
 from app.services.booking_service import check_counselor_availability
+from app.services.calendar_service import delete_calendar_event, update_calendar_event
+from app.core.encryption import decrypt_token
 from app.services.email_service import (
     send_cancellation_email,
     send_counselor_cancellation_notification,
@@ -316,6 +318,19 @@ async def cancel_booking(
     booking.status = BookingStatus.cancelled
     await db.commit()
 
+    # Clean up Google Calendar event if one was created
+    if booking.google_calendar_event_id:
+        try:
+            profile_result = await db.execute(
+                select(CounselorProfile).where(CounselorProfile.id == booking.counselor_id)
+            )
+            cal_profile = profile_result.scalar_one_or_none()
+            if cal_profile and cal_profile.google_calendar_connected and cal_profile.google_refresh_token:
+                refresh_token = decrypt_token(cal_profile.google_refresh_token)
+                await delete_calendar_event(refresh_token, booking.google_calendar_event_id)
+        except Exception as e:
+            logger.error("Failed to delete calendar event for booking %s: %s", booking_id, e)
+
     # Send cancellation email
     client = booking.client
     if client:
@@ -386,6 +401,19 @@ async def counselor_cancel_booking(
 
     booking.status = BookingStatus.cancelled
     await db.commit()
+
+    # Clean up Google Calendar event if one was created
+    if booking.google_calendar_event_id:
+        try:
+            profile_result = await db.execute(
+                select(CounselorProfile).where(CounselorProfile.id == booking.counselor_id)
+            )
+            cal_profile = profile_result.scalar_one_or_none()
+            if cal_profile and cal_profile.google_calendar_connected and cal_profile.google_refresh_token:
+                refresh_token = decrypt_token(cal_profile.google_refresh_token)
+                await delete_calendar_event(refresh_token, booking.google_calendar_event_id)
+        except Exception as e:
+            logger.error("Failed to delete calendar event for counselor-cancel booking %s: %s", booking_id, e)
 
     # Notify the client immediately
     client = booking.client
@@ -545,11 +573,30 @@ async def reschedule_booking(
             detail="Counselor is not available for the requested new time block.",
         )
 
-    # 4. Update the booking
+    # 4. Update the booking times
     booking.scheduled_start = reschedule_data.new_scheduled_start
     booking.scheduled_end = reschedule_data.new_scheduled_end
 
     await db.commit()
+
+    # Update Google Calendar event to reflect new time
+    if booking.google_calendar_event_id:
+        try:
+            profile_result = await db.execute(
+                select(CounselorProfile).where(CounselorProfile.id == booking.counselor_id)
+            )
+            cal_profile = profile_result.scalar_one_or_none()
+            if cal_profile and cal_profile.google_calendar_connected and cal_profile.google_refresh_token:
+                refresh_token = decrypt_token(cal_profile.google_refresh_token)
+                await update_calendar_event(
+                    refresh_token,
+                    booking.google_calendar_event_id,
+                    reschedule_data.new_scheduled_start,
+                    reschedule_data.new_scheduled_end,
+                )
+        except Exception as e:
+            logger.error("Failed to update calendar event for reschedule booking %s: %s", booking_id, e)
+
     await db.refresh(booking)
 
     return booking
