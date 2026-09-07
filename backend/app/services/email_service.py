@@ -112,36 +112,55 @@ async def send_verification_email(user_email: str, otp: str) -> None:
 
 
 async def send_booking_confirmation(
-    user_email: str, 
-    booking_id: str, 
-    counselor_name: str, 
-    session_start: datetime, 
-    meeting_link: str
+    user_email: str,
+    booking_id: str,
+    counselor_name: str,
+    session_start: datetime,
+    session_end: datetime,
+    meeting_link: str,
 ) -> None:
     """
     Sends a booking confirmation email after a payment is successfully processed.
+    Includes the Google Meet link, a Google Calendar deep link, and an ICS download link.
 
     Args:
         user_email: The client's email address.
         booking_id: The unique ID of the confirmed booking.
         counselor_name: Name of the counselor.
         session_start: Session start time.
+        session_end: Session end time.
         meeting_link: Google Meet link.
     """
     subject = "Your Session is Confirmed! ✅"
-    
+
     start_str = session_start.strftime("%Y-%m-%d %I:%M %p UTC")
+
+    # Generate an 'Add to Google Calendar' deep link
+    gcal_link = generate_google_calendar_link(
+        title=f"Counseling Session with {counselor_name}",
+        start=session_start,
+        end=session_end,
+        location=meeting_link or "Online",
+    )
+
+    # ICS download is served by the backend API
+    ics_url = f"{settings.FRONTEND_URL.rstrip('/')}/api/bookings/{booking_id}/ics"
 
     html_body = f"""
     <html>
       <body style="font-family: sans-serif; color: #333;">
-        <h2>Booking Confirmed</h2>
+        <h2>Booking Confirmed ✅</h2>
         <p>Great news! Your counseling session has been paid and confirmed.</p>
         <p><strong>Counselor:</strong> {counselor_name}</p>
         <p><strong>Session Time:</strong> {start_str}</p>
         <p><strong>Meeting Link:</strong> <a href="{meeting_link}">{meeting_link}</a></p>
         <p><strong>Booking ID:</strong> {booking_id}</p>
-        <p>We look forward to seeing you!</p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+        <p>
+          <a href="{gcal_link}" style="background:#4285F4;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;margin-right:10px;">📅 Add to Google Calendar</a>
+          <a href="{ics_url}" style="background:#f5f5f5;color:#333;padding:10px 18px;border-radius:6px;text-decoration:none;border:1px solid #ddd;">⬇️ Download .ics (Apple / Outlook)</a>
+        </p>
+        <p style="margin-top:20px;">We look forward to seeing you!</p>
       </body>
     </html>
     """
@@ -233,7 +252,7 @@ async def send_admin_cancellation_alert(
 
 
 async def send_session_reminder(
-    user_email: str, booking_id: str, hours_before: int
+    user_email: str, booking_id: str, hours_before: int, meeting_link: str = ""
 ) -> None:
     """
     Sends a session reminder email to a client N hours before their session.
@@ -242,18 +261,26 @@ async def send_session_reminder(
         user_email: The client's email address.
         booking_id: The unique ID of the upcoming booking.
         hours_before: How many hours until the session (e.g., 24 or 1).
+        meeting_link: The Google Meet link for the session.
     """
     time_label = "24 hours" if hours_before >= 24 else "1 hour"
     subject = f"Reminder: Your Counseling Session is in {time_label}"
 
+    meet_section = (
+        f'<p><strong>Meeting Link:</strong> <a href="{meeting_link}">{meeting_link}</a></p>'
+        if meeting_link
+        else "<p>Your meeting link was included in your confirmation email.</p>"
+    )
+
     html_body = f"""
     <html>
       <body style="font-family: sans-serif; color: #333;">
-        <h2>Session Reminder</h2>
+        <h2>Session Reminder ⏰</h2>
         <p>This is a friendly reminder that your counseling session is coming up in <strong>{time_label}</strong>.</p>
         <p><strong>Booking ID:</strong> {booking_id}</p>
+        {meet_section}
         <p>Please make sure you are in a quiet, private space before the session begins.</p>
-        <p>Your meeting link was included in your confirmation email. If you need assistance, contact support.</p>
+        <p>If you need assistance, contact our support team.</p>
       </body>
     </html>
     """
@@ -302,6 +329,35 @@ async def send_counselor_invite_email(email: str, invite_token: str) -> None:
         <p>You have been invited to join Alaga Counseling as a counselor.</p>
         <p>Please click the link below to set up your account:</p>
         <a href="{link}">{link}</a>
+      </body>
+    </html>
+    """
+    await asyncio.to_thread(_send_email_sync, email, subject, html_body)
+
+
+async def send_counselor_rejection_email(email: str, reason: str = "") -> None:
+    """
+    Notifies a counselor applicant that their application was not approved.
+
+    Args:
+        email: The counselor's email address.
+        reason: Optional rejection reason provided by the admin.
+    """
+    subject = "Update on Your Alaga Counselor Application"
+    reason_section = (
+        f"<p><strong>Reason:</strong> {reason}</p>"
+        if reason
+        else ""
+    )
+    html_body = f"""
+    <html>
+      <body style="font-family: sans-serif; color: #333;">
+        <h2>Application Update</h2>
+        <p>Thank you for your interest in joining Alaga Counseling as a licensed counselor.</p>
+        <p>After careful review, we are unable to approve your application at this time.</p>
+        {reason_section}
+        <p>If you believe this was an error or would like further clarification, please reach out to our support team.</p>
+        <p>We appreciate your interest and wish you all the best.</p>
       </body>
     </html>
     """

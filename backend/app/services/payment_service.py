@@ -261,6 +261,7 @@ async def process_successful_payment(
             booking.id,
             counselor_name,
             booking.scheduled_start,
+            booking.scheduled_end,
             booking.meeting_link or ""
         )
         
