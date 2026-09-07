@@ -49,7 +49,10 @@ async def paymongo_webhook(
     if expected_signature != sig_parts.get("te") and expected_signature != sig_parts.get("li"):
         raise HTTPException(status_code=400, detail="Invalid signature")
 
-    payload = await request.json()
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
     event = payload.get("data", {})
     event_type = event.get("attributes", {}).get("type")
 

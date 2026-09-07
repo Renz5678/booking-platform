@@ -28,7 +28,9 @@ async def _send_reminder_if_confirmed(user_email: str, booking_id: str, hours_be
         booking = result.scalar_one_or_none()
 
         if booking and booking.status == BookingStatus.confirmed:
-            await send_session_reminder(user_email, booking_id, hours_before)
+            await send_session_reminder(
+                user_email, booking_id, hours_before, booking.meeting_link or ""
+            )
             return True
         else:
             logger.info("Booking %s is no longer confirmed. Skipping reminder.", booking_id)
