@@ -89,7 +89,8 @@ async def signup(
 
 
 @router.post("/verify-otp")
-async def verify_otp(data: OTPVerify, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/15minute")
+async def verify_otp(request: Request, data: OTPVerify, db: AsyncSession = Depends(get_db)):
     """Verify a user's email address using the 6-digit OTP."""
     result = await db.execute(select(User).where(User.email == data.email))
     user = result.scalar_one_or_none()
@@ -122,7 +123,8 @@ async def verify_otp(data: OTPVerify, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/accept-invite")
-async def accept_invite(data: AcceptInviteRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/hour")
+async def accept_invite(request: Request, data: AcceptInviteRequest, db: AsyncSession = Depends(get_db)):
     """Accept counselor invite and set password."""
     result = await db.execute(select(User).where(User.email == data.email))
     user = result.scalar_one_or_none()
