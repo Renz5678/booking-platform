@@ -125,10 +125,10 @@ export default function CounselorBookingDetailPage({ params }: { params: Promise
               <p><strong className="text-on-surface-variant w-24 inline-block">End:</strong> {sessionEnd.toLocaleString()}</p>
             </div>
             
-            {booking.google_meet_link && (
+            {booking.meeting_link && (
               <div className="mt-6">
                 <a 
-                  href={booking.google_meet_link} 
+                  href={booking.meeting_link} 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="inline-flex items-center justify-center gap-2 w-full bg-primary text-on-primary px-4 py-3 rounded-lg font-label-lg hover:bg-primary/90 transition-colors"
