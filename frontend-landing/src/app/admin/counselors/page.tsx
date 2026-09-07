@@ -50,9 +50,8 @@ export default function AdminCounselorsPage() {
         // Usually an admin would need /admin/counselors, but we'll fallback to /counselors
         // if that's what's available. Assuming /admin/counselors exists for all based on prompt.
         try {
-          // Let's try to get them. If there's an issue, we just show empty.
-          // The prompt says "Other tabs fetch all counselors and filter client-side"
-          const data = await api.get("/counselors");
+          // Use admin endpoint so deactivated and unverified counselors are included
+          const data = await api.get("/admin/counselors/all");
           const all: Counselor[] = data || [];
           if (activeTab === "active") {
             setCounselors(all.filter(c => c.is_verified && c.is_active));

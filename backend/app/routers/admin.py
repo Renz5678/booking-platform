@@ -42,6 +42,20 @@ async def list_pending_counselors(
     return result.scalars().all()
 
 
+@router.get("/counselors/all", response_model=list[CounselorProfilePrivateResponse])
+async def list_all_counselors(
+    current_user: User = Depends(require_role(["admin"])),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: List ALL counselors regardless of verification or active status."""
+    result = await db.execute(
+        select(CounselorProfile)
+        .options(selectinload(CounselorProfile.user))
+        .order_by(CounselorProfile.is_verified.asc(), CounselorProfile.is_active.desc())
+    )
+    return result.scalars().all()
+
+
 @router.post("/counselors/invite", response_model=dict)
 async def invite_counselor(
     data: CounselorInviteRequest,
@@ -133,6 +147,13 @@ async def reject_counselor(
     counselor.is_verified = False
     counselor.is_active = False
     await db.commit()
+
+    from app.services.email_service import send_counselor_rejection_email
+    import asyncio
+    if counselor.user and counselor.user.email:
+        asyncio.create_task(
+            send_counselor_rejection_email(counselor.user.email, reason or "")
+        )
 
     logger.info(
         "Admin %s rejected counselor %s. Reason: %s",
