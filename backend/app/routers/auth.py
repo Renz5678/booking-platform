@@ -19,7 +19,7 @@ from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models.counselor_profile import CounselorProfile
 from app.models.user import RoleEnum, User
-from app.schemas.user import UserCreate, UserLogin, UserResponse, AcceptInviteRequest
+from app.schemas.user import UserCreate, UserLogin, UserResponse, AcceptInviteRequest, UserUpdateRequest, ChangePasswordRequest
 from app.services.auth_service import (
     create_access_token,
     create_refresh_token,
@@ -285,4 +285,34 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
+@router.put("/me", response_model=UserResponse)
+async def update_me(
+    update_data: UserUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update the authenticated user's display name."""
+    current_user.full_name = update_data.full_name
+    await db.commit()
+    await db.refresh(current_user)
+    return current_user
 
+
+@router.post("/change-password")
+@limiter.limit("5/15minute")
+async def change_password(
+    request: Request,
+    data: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Change the authenticated user's password after verifying the current one."""
+    if not verify_password(data.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+    current_user.password_hash = get_password_hash(data.new_password)
+    await db.commit()
+    logger.info("Password changed for user %s", current_user.id)
+    return {"msg": "Password changed successfully"}
