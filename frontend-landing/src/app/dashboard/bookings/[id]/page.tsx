@@ -182,20 +182,30 @@ export default function ClientBookingDetailPage({ params }: { params: Promise<{ 
             </div>
             
             <div className="mt-6">
-              <button 
-                onClick={handleDownloadReceipt}
-                disabled={downloadingReceipt}
-                className="inline-flex items-center gap-2 text-tertiary hover:underline font-label-md disabled:opacity-50"
-              >
-                <span className="material-symbols-outlined text-[18px]">receipt_long</span> 
-                {downloadingReceipt ? "Downloading..." : "Download Receipt"}
-              </button>
+              {booking.status === "confirmed" || booking.status === "completed" ? (
+                <button 
+                  onClick={handleDownloadReceipt}
+                  disabled={downloadingReceipt}
+                  className="inline-flex items-center gap-2 text-tertiary hover:underline font-label-md disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-[18px]">receipt_long</span> 
+                  {downloadingReceipt ? "Downloading..." : "Download Receipt"}
+                </button>
+              ) : booking.status === "pending_payment" ? (
+                <a 
+                  href={`/payment/success?booking_id=${booking.id}`}
+                  className="inline-flex items-center gap-2 text-tertiary hover:underline font-label-md"
+                >
+                  <span className="material-symbols-outlined text-[18px]">payments</span> 
+                  View Payment Instructions
+                </a>
+              ) : null}
             </div>
           </div>
         </div>
 
         {/* Action Buttons */}
-        {isConfirmed && !hasStarted && (
+        {(isConfirmed || booking.status === "pending_payment") && !hasStarted && (
           <div className="bg-white p-6 rounded-xl shadow-sm border border-surface-container-highest">
             <h2 className="font-headline-md text-primary mb-4">Session Actions</h2>
             <div className="flex gap-4">

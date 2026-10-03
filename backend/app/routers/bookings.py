@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timezone
 import io
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
+from app.config import settings
 from app.core.security import get_current_user, require_role
 from app.core.rate_limit import limiter
 from app.db.session import get_db
@@ -17,8 +18,8 @@ from app.models.booking import Booking, BookingStatus
 from app.models.counselor_profile import CounselorProfile
 from app.models.intake_form import IntakeForm
 from app.models.payment import Payment, PaymentStatus
-from app.models.user import User
-from app.routers.auth import verify_captcha
+from app.models.user import User, RoleEnum
+from app.services.auth_service import verify_captcha
 from app.schemas.booking import (
     BookingCancelResponse,
     BookingCounselorResponse,
@@ -34,9 +35,10 @@ from app.services.email_service import (
     send_cancellation_email,
     send_counselor_cancellation_notification,
     send_admin_cancellation_alert,
+    send_payment_pending_email,
     generate_ics_content,
 )
-from app.services.payment_service import create_paymongo_checkout, refund_payment
+from app.services.payment_service import refund_payment, process_successful_payment
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +50,6 @@ router = APIRouter(prefix="/bookings", tags=["bookings"])
 async def create_booking(
     request: Request,
     booking_data: BookingCreate,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -122,21 +123,37 @@ async def create_booking(
         amount=amount,
         currency="PHP",
         status=PaymentStatus.pending,
+        provider="gcash_manual",
     )
     db.add(payment)
 
     await db.commit()
 
-    # 7. Call payment service to get checkout URL
-    checkout_url = await create_paymongo_checkout(amount, new_booking.id)
+    # 7. Send GCash payment instructions email to the client
+    try:
+        await send_payment_pending_email(
+            current_user.email,
+            str(new_booking.id),
+            float(amount),
+        )
+    except Exception as e:
+        logger.error("Failed to send payment pending email for booking %s: %s", new_booking.id, e)
 
-    # 8. Start background task to expire booking in 15 minutes if unpaid
-    background_tasks.add_task(expire_booking_if_unpaid, new_booking.id, db, 15)
-
+    # Slot expiry is handled by the Celery Beat sweeper (every 5 minutes) — no in-process timer needed.
     return {
-        "msg": "Booking initiated. Please complete payment within 15 minutes.",
-        "booking_id": new_booking.id,
-        "checkout_url": checkout_url,
+        "msg": "Booking created. Please send your GCash payment within 15 minutes to confirm your slot.",
+        "booking_id": str(new_booking.id),
+        "amount": float(amount),
+        "currency": "PHP",
+        "gcash_number": settings.GCASH_NUMBER or "See confirmation email",
+        "gcash_name": settings.GCASH_NAME or "Alaga Counseling",
+        "reference": str(new_booking.id),
+        "instructions": (
+            f"Send PHP {float(amount):,.2f} to GCash number "
+            f"{settings.GCASH_NUMBER or '[configured GCash number]'} "
+            f"({settings.GCASH_NAME or 'Alaga Counseling'}). "
+            f"Use your Booking ID as the GCash reference/note: {new_booking.id}"
+        ),
     }
 
 
@@ -445,6 +462,93 @@ async def counselor_cancel_booking(
     )
 
 
+@router.post("/{booking_id}/mark-paid", response_model=BookingResponse)
+async def mark_booking_paid(
+    booking_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Counselor or Admin confirms that a GCash payment has been received and
+    manually marks the booking as paid.
+
+    This triggers:
+    - Booking status: pending_payment → confirmed
+    - Google Meet link generation and calendar event creation
+    - Confirmation email with meeting details sent to the client
+    - Session reminder tasks scheduled via Celery
+
+    Permissions:
+    - Counselors can only confirm payment for their own bookings.
+    - Admins can confirm payment for any booking.
+    """
+    if current_user.role.value not in ["counselor", "admin"]:
+        raise HTTPException(status_code=403, detail="Only counselors or admins can confirm payments")
+
+    result = await db.execute(
+        select(Booking)
+        .options(
+            selectinload(Booking.counselor).selectinload(CounselorProfile.user),
+            selectinload(Booking.client),
+        )
+        .where(Booking.id == booking_id)
+    )
+    booking = result.scalar_one_or_none()
+
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    # Counselors may only confirm payment for their own clients' bookings
+    if current_user.role.value == "counselor":
+        counselor_result = await db.execute(
+            select(CounselorProfile).where(CounselorProfile.user_id == current_user.id)
+        )
+        counselor = counselor_result.scalar_one_or_none()
+        if not counselor or booking.counselor_id != counselor.id:
+            raise HTTPException(status_code=403, detail="Not authorized to confirm this booking's payment")
+
+    if booking.status == BookingStatus.confirmed:
+        raise HTTPException(status_code=400, detail="This booking is already confirmed.")
+
+    if booking.status != BookingStatus.pending_payment:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot confirm payment for a booking with status '{booking.status.value}'.",
+        )
+
+    # Delegate to the shared payment confirmation service — handles calendar event,
+    # confirmation email to client, and Celery reminder scheduling.
+    from app.models.payment import PaymentMethod
+
+    try:
+        await process_successful_payment(
+            booking_id,
+            db,
+            payment_method=PaymentMethod.gcash,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(
+            "Failed to process manual payment confirmation for booking %s: %s",
+            booking_id,
+            e,
+        )
+        raise HTTPException(status_code=500, detail="Failed to confirm payment. Please try again.")
+
+    # Re-fetch the updated booking to return the confirmed state
+    result = await db.execute(
+        select(Booking)
+        .options(
+            selectinload(Booking.counselor).selectinload(CounselorProfile.user),
+            selectinload(Booking.client),
+        )
+        .where(Booking.id == booking_id)
+    )
+    updated_booking = result.scalar_one_or_none()
+    return updated_booking
+
+
 @router.put("/{booking_id}/status", response_model=BookingResponse)
 async def update_booking_status(
     booking_id: str,
@@ -619,7 +723,11 @@ async def download_receipt(
     """
     result = await db.execute(
         select(Booking)
-        .options(selectinload(Booking.client), selectinload(Booking.counselor).selectinload(CounselorProfile.user))
+        .options(
+            selectinload(Booking.client),
+            selectinload(Booking.counselor).selectinload(CounselorProfile.user),
+            selectinload(Booking.payment),
+        )
         .where(Booking.id == booking_id)
     )
     booking = result.scalar_one_or_none()
@@ -627,7 +735,7 @@ async def download_receipt(
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
 
-    if booking.client_id != current_user.id and current_user.role != RoleEnum.admin:
+    if booking.client_id != current_user.id and current_user.role.value != "admin":
         raise HTTPException(status_code=403, detail="Not authorized to download this receipt")
 
     if booking.status == BookingStatus.pending_payment:
@@ -660,15 +768,23 @@ async def download_receipt(
         y_pos = 8.1 * inch
         line_height = 0.3 * inch
         
+        # Resolve payment-derived fields safely
+        date_issued = (
+            booking.payment.paid_at.strftime("%Y-%m-%d %H:%M:%S UTC")
+            if booking.payment and booking.payment.paid_at
+            else booking.created_at.strftime("%Y-%m-%d %H:%M:%S UTC")
+        )
+        amount_paid = float(booking.payment.amount) if booking.payment else 0.0
+
         details = [
             ("Booking ID:", booking.id),
-            ("Date Issued:", booking.updated_at.strftime("%Y-%m-%d %H:%M:%S UTC")),
+            ("Date Issued:", date_issued),
             ("Client Name:", booking.client.full_name if booking.client else "Unknown"),
             ("Client Email:", booking.client.email if booking.client else "Unknown"),
             ("Counselor:", booking.counselor.user.full_name if booking.counselor and booking.counselor.user else "Unknown"),
             ("Session Start:", booking.scheduled_start.strftime("%Y-%m-%d %H:%M:%S UTC")),
             ("Status:", booking.status.value.title()),
-            ("Amount Paid:", f"PHP {booking.amount_paid:,.2f}" if booking.amount_paid else "PHP 0.00"),
+            ("Amount Paid:", f"PHP {amount_paid:,.2f}"),
         ]
         
         for label, value in details:

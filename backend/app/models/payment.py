@@ -19,6 +19,7 @@ class PaymentMethod(str, enum.Enum):
     gcash = "gcash"
     maya = "maya"
     card = "card"
+    grab_pay = "grab_pay"
 
 
 class Payment(Base):

@@ -12,7 +12,7 @@ export default function CrisisBanner() {
   if (!isVisible || isDashboard || isAuth) return null;
 
   return (
-    <div className="bg-on-tertiary-container text-primary font-label-md py-3 px-4 md:px-margin-desktop sticky top-0 z-50 flex flex-col sm:flex-row justify-between items-center text-center sm:text-left shadow-sm relative">
+    <div className="bg-on-tertiary-container text-primary font-label-md py-3 px-4 md:px-12 sticky top-0 z-50 flex flex-col sm:flex-row justify-between items-center text-center sm:text-left shadow-sm relative">
       <p>In immediate danger? Call the National Mental Health Crisis Hotline.</p>
       <div className="flex items-center gap-4 mt-2 sm:mt-0">
         <button className="bg-primary text-on-primary px-4 py-2 rounded-full font-label-sm hover:opacity-90 transition-opacity shrink-0">

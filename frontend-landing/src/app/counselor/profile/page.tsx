@@ -29,6 +29,7 @@ export default function CounselorProfilePage() {
 
   // Credential upload state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState({ text: "", type: "" });
   const fileInputRef = useRef<HTMLInputElement>(null);
 

@@ -120,7 +120,7 @@ export default function DashboardLayout({ children, allowedRoles, role }: Dashbo
       <div className="text-on-background font-body-md antialiased min-h-screen flex flex-col bg-[#E1F4F1]">
         {/* Navigation */}
         <nav className="bg-surface docked full-width shadow-sm z-40 relative">
-          <div className="flex justify-between items-center px-4 md:px-margin-desktop py-4 max-w-[1200px] mx-auto">
+          <div className="flex justify-between items-center px-4 md:px-12 py-4 max-w-[1200px] mx-auto">
             <Link href="/" className="font-headline-md text-headline-md font-bold text-primary">
               Alaga
             </Link>
@@ -176,7 +176,7 @@ export default function DashboardLayout({ children, allowedRoles, role }: Dashbo
         </nav>
 
         {/* Main Content Area */}
-        <main className="flex-grow w-full max-w-[1200px] mx-auto px-4 md:px-margin-desktop py-8 flex flex-col gap-8">
+        <main className="flex-grow w-full max-w-[1200px] mx-auto px-4 md:px-12 py-8 flex flex-col gap-8">
           {children}
         </main>
       </div>

@@ -11,36 +11,11 @@ from app.services import availability_service, counselor_service
 router = APIRouter(prefix="/availability", tags=["availability"])
 
 
-@router.get("/{counselor_id}", response_model=list[AvailabilityResponse])
-async def get_availability(counselor_id: str, db: AsyncSession = Depends(get_db)):
-    """Public endpoint to view a counselor's availability blocks."""
-    # First verify the counselor exists and is active
-    counselor = await counselor_service.get_counselor_by_id(db, counselor_id)
-    if not counselor or not (counselor.is_verified and counselor.is_active):
-        raise HTTPException(status_code=404, detail="Counselor not found or inactive")
-
-    return await availability_service.get_counselor_availability(db, counselor_id)
-
-
-@router.get("/{counselor_id}/slots")
-@limiter.limit("30/minute")
-async def get_counselor_slots(
-    request: Request,
-    counselor_id: str, 
-    start_date: str, 
-    end_date: str, 
-    duration: int = 50, 
-    exclude_booking_id: str | None = None,
-    db: AsyncSession = Depends(get_db)
-):
-    """Public endpoint to get available slots for a counselor on a specific date range with a given duration."""
-    counselor = await counselor_service.get_counselor_by_id(db, counselor_id)
-    if not counselor or not (counselor.is_verified and counselor.is_active):
-        raise HTTPException(status_code=404, detail="Counselor not found or inactive")
-
-    slots = await availability_service.get_available_slots(db, counselor_id, start_date, end_date, duration, exclude_booking_id)
-    return slots
-
+# ---------------------------------------------------------------------------
+# Counselor self-management routes
+# IMPORTANT: These /me/* routes MUST be registered before the /{counselor_id}
+# wildcard route, or FastAPI will match "me" as a counselor_id and return 404.
+# ---------------------------------------------------------------------------
 
 
 @router.get("/me/blocks", response_model=list[AvailabilityResponse])
@@ -92,3 +67,40 @@ async def delete_my_availability(
     )
     if not success:
         raise HTTPException(status_code=404, detail="Availability block not found")
+
+
+# ---------------------------------------------------------------------------
+# Public read-only routes (registered AFTER /me/* to avoid wildcard shadowing)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{counselor_id}", response_model=list[AvailabilityResponse])
+async def get_availability(counselor_id: str, db: AsyncSession = Depends(get_db)):
+    """Public endpoint to view a counselor's availability blocks."""
+    counselor = await counselor_service.get_counselor_by_id(db, counselor_id)
+    if not counselor or not (counselor.is_verified and counselor.is_active):
+        raise HTTPException(status_code=404, detail="Counselor not found or inactive")
+
+    return await availability_service.get_counselor_availability(db, counselor_id)
+
+
+@router.get("/{counselor_id}/slots")
+@limiter.limit("30/minute")
+async def get_counselor_slots(
+    request: Request,
+    counselor_id: str,
+    start_date: str,
+    end_date: str,
+    duration: int = 50,
+    exclude_booking_id: str | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Public endpoint to get available slots for a counselor on a specific date range with a given duration."""
+    counselor = await counselor_service.get_counselor_by_id(db, counselor_id)
+    if not counselor or not (counselor.is_verified and counselor.is_active):
+        raise HTTPException(status_code=404, detail="Counselor not found or inactive")
+
+    slots = await availability_service.get_available_slots(
+        db, counselor_id, start_date, end_date, duration, exclude_booking_id
+    )
+    return slots

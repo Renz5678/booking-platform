@@ -9,6 +9,8 @@ from app.models.payment import Base as PayBase
 from app.models.user import Base as UserBase
 
 
+from app.models.content import Base as ContentBase
+
 async def init_models():
     async with engine.begin() as conn:
         await conn.run_sync(UserBase.metadata.create_all)
@@ -17,5 +19,6 @@ async def init_models():
         await conn.run_sync(BookingBase.metadata.create_all)
         await conn.run_sync(IFBase.metadata.create_all)
         await conn.run_sync(PayBase.metadata.create_all)
+        await conn.run_sync(ContentBase.metadata.create_all)
 
 asyncio.run(init_models())

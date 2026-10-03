@@ -13,7 +13,7 @@ export default function TopNavBar() {
   if (isDashboard || isAuth) return null;
   return (
     <nav className="bg-surface docked full-width top-0 shadow-sm relative z-40">
-      <div className="flex justify-between items-center px-margin-desktop py-4 max-w-container-max mx-auto">
+      <div className="flex justify-between items-center px-6 md:px-12 py-4 max-w-7xl mx-auto">
         <div className="font-headline-md text-headline-md font-bold text-primary">
           Alaga
         </div>

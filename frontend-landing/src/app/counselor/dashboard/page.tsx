@@ -19,6 +19,7 @@ export default function CounselorDashboardPage() {
   const [sessionsThisWeek, setSessionsThisWeek] = useState(0);
   const [newBookings, setNewBookings] = useState(0);
   const [todaysBookings, setTodaysBookings] = useState<Booking[]>([]);
+  const [pendingBookings, setPendingBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -57,9 +58,13 @@ export default function CounselorDashboardPage() {
             return d >= startOfDay && d <= endOfDay && (b.status === "confirmed" || b.status === "pending_payment" || b.status === "completed");
           }).sort((a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime());
 
+          const pending = bookings.filter(b => b.status === "pending_payment")
+            .sort((a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime());
+
           setSessionsThisWeek(weekSessions.length);
           setNewBookings(newB.length);
           setTodaysBookings(todaySessions);
+          setPendingBookings(pending);
       } catch (error) {
         console.error("Failed to fetch dashboard data:", error);
       } finally {
@@ -218,6 +223,56 @@ export default function CounselorDashboardPage() {
               )}
             </div>
           </section>
+
+          {/* Pending Payments */}
+          {pendingBookings.length > 0 && (
+            <section className="bg-surface-container-lowest rounded-xl shadow-ambient p-6 md:p-8 border border-white mt-8">
+              <div className="flex items-center justify-between mb-6 pb-4 border-b border-surface-container">
+                <h2 className="font-headline-md text-[24px] font-medium text-primary flex items-center gap-2">
+                  <span className="material-symbols-outlined text-tertiary">payments</span>
+                  Pending Payments
+                </h2>
+              </div>
+
+              <div className="space-y-4">
+                {pendingBookings.map((booking) => (
+                  <div key={booking.id} className="bg-surface border border-surface-container-highest rounded-xl p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4 pl-3.5">
+                      <div className="w-12 h-12 rounded-full bg-surface-container-high text-on-surface-variant font-headline-md text-[24px] font-medium flex items-center justify-center shrink-0">
+                        {getInitials(booking.client_name)}
+                      </div>
+                      <div>
+                        <h4 className="font-label-md text-[14px] font-bold text-primary">{booking.client_name}</h4>
+                        <div className="flex items-center gap-3 mt-1 font-label-sm text-[12px] font-semibold tracking-wider text-on-surface-variant">
+                          <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">schedule</span> {formatTimeRange(booking.scheduled_start, booking.scheduled_end)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-3">
+                      <button 
+                        onClick={async () => {
+                          try {
+                            const res = await api.post(`/bookings/${booking.id}/mark-paid`, {});
+                            if (res) {
+                              setPendingBookings(prev => prev.filter(b => b.id !== booking.id));
+                              setTodaysBookings(prev => prev.map(b => b.id === booking.id ? res : b));
+                            }
+                          } catch (err) {
+                            console.error("Failed to mark as paid", err);
+                            alert("Failed to confirm payment.");
+                          }
+                        }}
+                        className="text-on-tertiary bg-tertiary hover:opacity-90 transition-opacity font-label-md text-[14px] font-medium px-4 py-2 rounded-lg w-full md:w-auto"
+                      >
+                        Mark as Paid
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
         </>
       )}
     </DashboardLayout>

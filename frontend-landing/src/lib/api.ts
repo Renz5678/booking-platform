@@ -45,7 +45,12 @@ async function fetchApi(endpoint: string, options: RequestOptions = {}) {
   }
 
   if (!response.ok) {
-    const errorMessage = data?.detail || data?.msg || response.statusText || "An API error occurred";
+    let errorMessage = data?.detail || data?.msg || response.statusText || "An API error occurred";
+    
+    // Handle FastAPI validation error arrays (e.g. 422 Unprocessable Entity)
+    if (Array.isArray(errorMessage)) {
+      errorMessage = errorMessage.map((err: any) => err.msg || "Invalid input").join(", ");
+    }
     throw new ApiError(response.status, errorMessage, data);
   }
 

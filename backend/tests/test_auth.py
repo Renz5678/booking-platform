@@ -1,10 +1,11 @@
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 pytestmark = pytest.mark.asyncio
 
-async def test_signup_verify_login_flow(async_client: AsyncClient):
+async def test_signup_verify_login_flow(async_client: AsyncClient, db: AsyncSession):
     # 1. Signup
     signup_data = {
         "full_name": "Test User",
@@ -15,12 +16,13 @@ async def test_signup_verify_login_flow(async_client: AsyncClient):
     response = await async_client.post("/auth/signup", json=signup_data)
     assert response.status_code == 201
     assert "OTP" in response.json()["msg"]
-    
-    # Extract verification token printed to stdout (mocking email extraction)
-    # Since we can't easily capture stdout in this simple test without mocking,
-    # let's directly generate a token using the service for testing purposes.
-    from app.services.auth_service import create_verification_token
-    token = create_verification_token(signup_data["email"])
+    # Extract verification OTP (since it's a test, we fetch the OTP directly from DB)
+    from sqlalchemy.future import select
+    from app.models.user import User
+
+    result = await db.execute(select(User).where(User.email == signup_data["email"]))
+    user = result.scalar_one_or_none()
+    otp = user.verification_otp
 
     # 2. Login rejected before verification
     login_data = {
@@ -31,8 +33,8 @@ async def test_signup_verify_login_flow(async_client: AsyncClient):
     assert login_resp.status_code == 401
     assert "verify your email" in login_resp.json()["detail"]
 
-    # 3. Verify email
-    verify_resp = await async_client.get(f"/auth/verify-email?token={token}")
+    # 3. Verify email with OTP
+    verify_resp = await async_client.post("/auth/verify-otp", json={"email": signup_data["email"], "otp": otp})
     assert verify_resp.status_code == 200
 
     # 4. Login successful
@@ -64,22 +66,27 @@ async def test_honeypot_rejection(async_client: AsyncClient):
     assert login_resp.status_code == 401
 
 async def test_rate_limiting(async_client: AsyncClient):
-    signup_data = {
+    from app.core.rate_limit import limiter
+    limiter.enabled = True
+    try:
+        signup_data = {
         "full_name": "Rate User",
         "email": "rate@example.com",
         "password": "Password123",
         "captcha_token": "dummy_token"
     }
     
-    # We set 5/15minute in the router
-    # Send 5 requests (1 real, 4 duplicate emails which return 400 but still count against limit)
-    for _ in range(5):
-        await async_client.post("/auth/signup", json=signup_data)
-        
-    # The 6th request should be rate limited
-    response = await async_client.post("/auth/signup", json=signup_data)
-    assert response.status_code == 429
-    assert "Rate limit exceeded" in response.json().get("detail", response.json().get("error", ""))
+        # We set 5/15minute in the router
+        # Send 5 requests (1 real, 4 duplicate emails which return 400 but still count against limit)
+        for _ in range(5):
+            await async_client.post("/auth/signup", json=signup_data)
+            
+        # The 6th request should be rate limited
+        response = await async_client.post("/auth/signup", json=signup_data)
+        assert response.status_code == 429
+        assert "Rate limit exceeded" in response.json().get("detail", response.json().get("error", ""))
+    finally:
+        limiter.enabled = False
 
 async def test_protected_routes_unauthorized(async_client: AsyncClient):
     # No token

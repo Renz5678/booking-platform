@@ -16,27 +16,11 @@ from app.services import counselor_service
 router = APIRouter(prefix="/counselors", tags=["counselors"])
 
 
-@router.get("", response_model=list[CounselorProfilePublicResponse])
-@limiter.limit("30/minute")
-async def list_active_counselors(request: Request, db: AsyncSession = Depends(get_db)):
-    """Public endpoint to list all active and verified counselors."""
-    return await counselor_service.get_active_counselors(db)
-
-
-
-@router.get("/{counselor_id}", response_model=CounselorProfilePublicResponse)
-@limiter.limit("60/minute")
-async def get_counselor(request: Request, counselor_id: str, db: AsyncSession = Depends(get_db)):
-    """Public endpoint to view a specific counselor's profile."""
-    counselor = await counselor_service.get_counselor_by_id(db, counselor_id)
-    if not counselor:
-        raise HTTPException(status_code=404, detail="Counselor not found")
-
-    # Only return if active and verified (unless an admin is viewing, but we keep this public for now)
-    if not (counselor.is_verified and counselor.is_active):
-        raise HTTPException(status_code=404, detail="Counselor not found")
-
-    return counselor
+# ---------------------------------------------------------------------------
+# Counselor self-management routes
+# IMPORTANT: These /me/* routes MUST be registered before the /{counselor_id}
+# wildcard route, or FastAPI will match "me" as a counselor_id and return 404.
+# ---------------------------------------------------------------------------
 
 
 @router.get("/me/profile", response_model=CounselorProfilePrivateResponse)
@@ -81,8 +65,11 @@ async def upload_counselor_photo(
     """Counselor-only endpoint to upload a profile photo via Cloudinary."""
     from app.config import settings
     if not settings.CLOUDINARY_URL:
-        raise HTTPException(status_code=500, detail="Photo uploads are not configured (CLOUDINARY_URL missing).")
-        
+        raise HTTPException(
+            status_code=500,
+            detail="Photo uploads are not configured (CLOUDINARY_URL missing).",
+        )
+
     counselor = await counselor_service.get_counselor_by_user_id(db, current_user.id)
     if not counselor:
         raise HTTPException(status_code=404, detail="Counselor profile not found")
@@ -90,7 +77,7 @@ async def upload_counselor_photo(
     import cloudinary
     import cloudinary.uploader
     from urllib.parse import urlparse
-    
+
     # Parse CLOUDINARY_URL to configure the SDK
     # Format: cloudinary://api_key:api_secret@cloud_name
     parsed_url = urlparse(settings.CLOUDINARY_URL)
@@ -102,11 +89,10 @@ async def upload_counselor_photo(
         cloud_name=cloud_name,
         api_key=api_key,
         api_secret=api_secret,
-        secure=True
+        secure=True,
     )
 
     try:
-        # Upload the file stream directly to Cloudinary
         upload_result = cloudinary.uploader.upload(
             file.file,
             folder="counselor_profiles",
@@ -114,20 +100,24 @@ async def upload_counselor_photo(
             overwrite=True,
             resource_type="image",
         )
-        
+
         secure_url = upload_result.get("secure_url")
         if not secure_url:
-            raise HTTPException(status_code=500, detail="Failed to get secure URL from Cloudinary")
-            
+            raise HTTPException(
+                status_code=500, detail="Failed to get secure URL from Cloudinary"
+            )
+
         counselor.photo_url = secure_url
         await db.commit()
-        
+
         return {"msg": "Photo uploaded successfully", "photo_url": secure_url}
-        
+
     except Exception as e:
         import logging
+
         logging.error("Cloudinary upload failed: %s", str(e))
         raise HTTPException(status_code=500, detail=f"Failed to upload photo: {str(e)}")
+
 
 @router.get("/me/stats")
 async def get_my_counselor_stats(
@@ -140,7 +130,6 @@ async def get_my_counselor_stats(
         raise HTTPException(status_code=404, detail="Counselor profile not found")
 
     from sqlalchemy import func
-
     from app.models.booking import Booking, BookingStatus
 
     result = await db.execute(
@@ -153,5 +142,34 @@ async def get_my_counselor_stats(
     return {
         "upcoming_sessions": upcoming_sessions,
         "is_verified": counselor.is_verified,
-        "is_active": counselor.is_active
+        "is_active": counselor.is_active,
     }
+
+
+# ---------------------------------------------------------------------------
+# Public read-only routes (registered AFTER /me/* to avoid wildcard shadowing)
+# ---------------------------------------------------------------------------
+
+
+@router.get("", response_model=list[CounselorProfilePublicResponse])
+@limiter.limit("30/minute")
+async def list_active_counselors(request: Request, db: AsyncSession = Depends(get_db)):
+    """Public endpoint to list all active and verified counselors."""
+    return await counselor_service.get_active_counselors(db)
+
+
+@router.get("/{counselor_id}", response_model=CounselorProfilePublicResponse)
+@limiter.limit("60/minute")
+async def get_counselor(
+    request: Request, counselor_id: str, db: AsyncSession = Depends(get_db)
+):
+    """Public endpoint to view a specific counselor's profile."""
+    counselor = await counselor_service.get_counselor_by_id(db, counselor_id)
+    if not counselor:
+        raise HTTPException(status_code=404, detail="Counselor not found")
+
+    # Only return if active and verified
+    if not (counselor.is_verified and counselor.is_active):
+        raise HTTPException(status_code=404, detail="Counselor not found")
+
+    return counselor

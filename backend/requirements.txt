@@ -18,3 +18,9 @@ redis==5.0.7
 cloudinary==1.36.0
 python-multipart==0.0.9
 reportlab==4.2.0
+# Gmail API (used for transactional emails)
+google-auth>=2.28.0
+google-auth-oauthlib>=1.2.0
+google-api-python-client>=2.123.0
+# Sentry for error monitoring (configure SENTRY_DSN in .env to enable)
+sentry-sdk[fastapi]>=1.45.0

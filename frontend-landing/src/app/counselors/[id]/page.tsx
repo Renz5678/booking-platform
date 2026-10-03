@@ -124,47 +124,18 @@ export default function PublicCounselorProfilePage({ params }: { params: Promise
         </div>
       </div>
 
-      <div className="bg-white p-8 rounded-2xl shadow-ambient">
-        <h2 className="font-headline-lg text-primary mb-6">Book a Session</h2>
-        
-        <div className="flex flex-col sm:flex-row gap-4 items-end mb-6">
-          <div className="w-full sm:w-auto">
-            <label className="block font-label-md text-on-surface-variant mb-1">Select Date</label>
-            <input 
-              type="date" 
-              value={selectedDate}
-              min={new Date().toISOString().split("T")[0]}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="w-full sm:w-[200px] border border-surface-variant rounded-lg p-3 font-body-md"
-            />
-          </div>
-        </div>
-
-        <div>
-          {slotsLoading ? (
-            <div className="flex gap-4 animate-pulse">
-              <div className="h-12 w-24 bg-surface-variant rounded-lg"></div>
-              <div className="h-12 w-24 bg-surface-variant rounded-lg"></div>
-              <div className="h-12 w-24 bg-surface-variant rounded-lg"></div>
-            </div>
-          ) : slots.length > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-              {slots.map((slot, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handleBook(slot.start)}
-                  className="bg-surface-container-lowest border border-outline-variant text-on-surface px-4 py-3 rounded-lg font-label-md hover:bg-primary hover:text-on-primary hover:border-primary transition-colors text-center"
-                >
-                  {new Date(slot.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p className="text-on-surface-variant font-body-md bg-surface-container-lowest p-6 rounded-xl border border-outline-variant text-center">
-              No available slots on this date.
-            </p>
-          )}
-        </div>
+      <div className="bg-white p-8 rounded-2xl shadow-ambient text-center">
+        <h2 className="font-headline-lg text-primary mb-4">Book a Session with {counselor.user?.full_name}</h2>
+        <p className="font-body-md text-on-surface-variant mb-8 max-w-md mx-auto">
+          View full availability and schedule your session directly through our unified booking system.
+        </p>
+        <button 
+          onClick={() => router.push('/counselors')}
+          className="bg-secondary text-on-secondary font-label-lg font-bold py-4 px-8 rounded-xl hover:opacity-90 active:scale-[0.98] transition-all duration-200 shadow-sm inline-flex items-center gap-2"
+        >
+          <span className="material-symbols-outlined">calendar_month</span>
+          View Availability & Book
+        </button>
       </div>
     </div>
   );

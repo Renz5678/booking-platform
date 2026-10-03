@@ -40,10 +40,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setError(null);
     } catch (err) {
       setUser(null);
-      if (err instanceof ApiError && err.status === 401) {
-        // Expected when not logged in
-      } else {
-        console.error("Auth check failed:", err);
+      // 401 = not logged in (expected). NetworkError = backend offline (also expected in dev).
+      // Only log genuinely unexpected errors (e.g. 500 server errors).
+      if (err instanceof ApiError && err.status >= 500) {
+        console.error("Auth check failed with server error:", err);
       }
     } finally {
       setIsLoading(false);

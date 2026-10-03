@@ -121,11 +121,11 @@ export default function FindCounselorPage() {
     try {
       const data = await api.post("/bookings/", payload);
       
-      // Redirect to PayMongo checkout
-      if (data.checkout_url) {
-        window.location.href = data.checkout_url;
+      // Redirect to GCash Success/Instructions page
+      if (data.booking_id) {
+        window.location.href = `/payment/success?booking_id=${data.booking_id}`;
       } else {
-        alert("Booking created successfully, but no checkout URL returned.");
+        alert("Booking created successfully, but no booking ID returned.");
         setIsModalOpen(false);
       }
     } catch (err: unknown) {
@@ -468,8 +468,8 @@ export default function FindCounselorPage() {
                         </>
                       ) : (
                         <>
-                          <span className="material-symbols-outlined text-[20px]">lock</span>
-                          Proceed to Secure Payment
+                          <span className="material-symbols-outlined text-[20px]">payments</span>
+                          Proceed to GCash Details
                         </>
                       )}
                     </button>

@@ -32,53 +32,25 @@ def _get_paymongo_auth_header() -> str:
 
 async def create_paymongo_checkout(amount: float, booking_id: str) -> str:
     """
-    Creates a payment link via PayMongo Checkout API.
-    Amount is assumed to be in PHP (float). PayMongo expects cents (integer).
+    DISABLED: Automated PayMongo Checkout Session creation.
+
+    The platform currently uses a manual GCash payment flow — clients send
+    payment directly to the counselor's GCash, and the counselor confirms via
+    the dashboard (POST /bookings/{id}/mark-paid).
+
+    To re-enable automated PayMongo payments:
+    1. Set PAYMONGO_SECRET_KEY and PAYMONGO_WEBHOOK_SECRET in .env
+    2. Add `reference_number: str(booking_id)` to the checkout payload below
+    3. Remove the NotImplementedError and restore the original function body
+    4. Restore the checkout URL return in POST /bookings/ in routers/bookings.py
+    5. Re-register the PayMongo webhook in the PayMongo dashboard pointing to
+       POST /payments/webhook
     """
-    amount_cents = int(amount * 100)
-
-    b64_auth = _get_paymongo_auth_header()
-    headers = {
-        "accept": "application/json",
-        "content-type": "application/json",
-        "authorization": f"Basic {b64_auth}",
-    }
-
-    frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:3000")
-
-    payload = {
-        "data": {
-            "attributes": {
-                "send_email_receipt": False,
-                "show_description": True,
-                "show_line_items": True,
-                "description": f"Counseling Session Booking {booking_id}",
-                "line_items": [
-                    {
-                        "currency": "PHP",
-                        "amount": amount_cents,
-                        "name": "Counseling Session",
-                        "quantity": 1,
-                    }
-                ],
-                "payment_method_types": ["gcash", "paymaya", "card", "grab_pay"],
-                "success_url": f"{frontend_url}/payment/success?booking_id={booking_id}",
-                "cancel_url": f"{frontend_url}/counselors",
-            }
-        }
-    }
-
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            f"{PAYMONGO_BASE_URL}/checkout_sessions",
-            json=payload,
-            headers=headers,
-        )
-        if response.status_code != 200:
-            raise Exception(f"Failed to create PayMongo checkout: {response.text}")
-
-        data = response.json()
-        return data["data"]["attributes"]["checkout_url"]
+    raise NotImplementedError(
+        "PayMongo checkout is currently disabled. "
+        "The platform uses manual GCash payment confirmation. "
+        "See the docstring of this function for re-enablement steps."
+    )
 
 
 async def refund_payment(booking_id: str, db: AsyncSession) -> bool:

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
+import { useGoogleReCaptcha } from "react-google-recaptcha-v3";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -16,6 +17,7 @@ export default function SignupPage() {
   const [otp, setOtp] = useState("");
   const [otpError, setOtpError] = useState("");
   const [verifying, setVerifying] = useState(false);
+  const { executeRecaptcha } = useGoogleReCaptcha();
 
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,11 +44,17 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
+      if (!executeRecaptcha) {
+        throw new Error("reCAPTCHA not loaded yet. Please try again in a moment.");
+      }
+
+      const captchaToken = await executeRecaptcha("signup");
+
       await api.post("/auth/signup", {
         full_name: fullName, 
         email, 
         password,
-        captcha_token: "mock_captcha_token" // Backend expects a captcha token in MVP
+        captcha_token: captchaToken
       });
 
       setSuccess(true);

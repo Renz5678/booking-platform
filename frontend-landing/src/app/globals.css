@@ -1,84 +1,119 @@
 @import "tailwindcss";
 
 @theme {
-  --color-background: #fbf9fa;
-  --color-on-primary-container: #97a9be;
-  --color-surface-container-lowest: #ffffff;
-  --color-on-tertiary-fixed-variant: #005143;
-  --color-inverse-primary: #b6c8df;
-  --color-on-surface-variant: #43474c;
-  --color-tertiary-container: #004539;
-  --color-surface-bright: #fbf9fa;
-  --color-surface-container: #efedef;
-  --color-on-background: #1b1c1d;
-  --color-surface-container-highest: #e4e2e3;
-  --color-on-primary-fixed-variant: #37485b;
-  --color-tertiary: #002d25;
-  --color-secondary-container: #7ff995;
-  --color-secondary-fixed-dim: #65de7e;
-  --color-on-error-container: #93000a;
-  --color-surface-dim: #dbd9db;
-  --color-secondary-fixed: #82fb98;
-  --color-on-tertiary: #ffffff;
-  --color-primary-container: #2d3e50;
-  --color-primary-fixed: #d2e4fb;
-  --color-outline-variant: #c4c6cd;
-  --color-on-error: #ffffff;
-  --color-tertiary-fixed-dim: #68dac0;
-  --color-primary: #172839;
-  --color-on-primary-fixed: #0a1d2d;
-  --color-surface-tint: #4f6073;
-  --color-primary-fixed-dim: #b6c8df;
-  --color-on-surface: #1b1c1d;
-  --color-surface-variant: #e4e2e3;
-  --color-on-secondary-fixed: #002109;
-  --color-on-tertiary-fixed: #00201a;
-  --color-surface-container-high: #e9e7e9;
-  --color-on-tertiary-container: #44b9a1;
-  --color-on-primary: #ffffff;
-  --color-surface: #fbf9fa;
-  --color-inverse-on-surface: #f2f0f2;
-  --color-error: #ba1a1a;
-  --color-secondary: #006e2d;
-  --color-outline: #74777d;
-  --color-surface-container-low: #f5f3f4;
-  --color-error-container: #ffdad6;
-  --color-on-secondary-fixed-variant: #005320;
-  --color-tertiary-fixed: #85f6db;
-  --color-on-secondary-container: #00722f;
-  --color-on-secondary: #ffffff;
-  --color-inverse-surface: #303032;
+  --color-background: #F2F5F3;
+  --color-surface: #FFFFFF;
+  --color-surface-bright: #FFFFFF;
+  --color-surface-dim: #E9ECEB;
+  --color-surface-container-lowest: #FFFFFF;
+  --color-surface-container-low: #F6F8F7;
+  --color-surface-container: #EAEFec;
+  --color-surface-container-high: #E2E8E5;
+  --color-surface-container-highest: #D7DFDB;
+  
+  --color-primary: #123C2A;
+  --color-on-primary: #FFFFFF;
+  --color-primary-container: #2A5A44;
+  --color-on-primary-container: #D8F2E4;
+  --color-primary-fixed: #A9DABF;
+  --color-on-primary-fixed: #042115;
+  --color-primary-fixed-dim: #84C5A5;
+  --color-on-primary-fixed-variant: #0D3021;
+  
+  --color-secondary: #486555;
+  --color-on-secondary: #FFFFFF;
+  --color-secondary-container: #CCEAE0;
+  --color-on-secondary-container: #072115;
+  --color-secondary-fixed: #C5E5D5;
+  --color-on-secondary-fixed: #062214;
+  --color-secondary-fixed-dim: #A6C9B9;
+  --color-on-secondary-fixed-variant: #2F4C3E;
 
-  --spacing-section-gap: 80px;
-  --spacing-margin-desktop: 40px;
-  --spacing-unit: 8px;
-  --spacing-margin-mobile: 16px;
-  --spacing-container-max: 1200px;
-  --spacing-gutter: 24px;
+  --color-tertiary: #3A6273;
+  --color-on-tertiary: #FFFFFF;
+  --color-tertiary-container: #BFE8FA;
+  --color-on-tertiary-container: #001F2B;
+  --color-tertiary-fixed: #BEE7F9;
+  --color-on-tertiary-fixed: #001F2A;
+  --color-tertiary-fixed-dim: #98CBE1;
+  --color-on-tertiary-fixed-variant: #1F4A5B;
 
-  --font-inter: var(--font-inter), "Inter", sans-serif;
-  --font-headline-lg: var(--font-inter);
-  --font-label-sm: var(--font-inter);
-  --font-body-md: var(--font-inter);
-  --font-body-lg: var(--font-inter);
-  --font-headline-md: var(--font-inter);
-  --font-headline-lg-mobile: var(--font-inter);
-  --font-headline-xl: var(--font-inter);
-  --font-label-md: var(--font-inter);
+  --color-error: #BA1A1A;
+  --color-on-error: #FFFFFF;
+  --color-error-container: #FFDAD6;
+  --color-on-error-container: #410002;
+
+  --color-on-background: #181D1B;
+  --color-on-surface: #181D1B;
+  --color-on-surface-variant: #404945;
+  --color-outline: #707975;
+  --color-outline-variant: #BFC9C4;
+  --color-inverse-surface: #2D322F;
+  --color-inverse-on-surface: #EFF1EF;
+  --color-inverse-primary: #85D4AA;
+
+  --font-fraunces: var(--font-fraunces), "Fraunces", serif;
+  --font-dm-sans: var(--font-dm-sans), "DM Sans", sans-serif;
+  
+  --font-headline-xl: var(--font-fraunces);
+  --font-headline-lg: var(--font-fraunces);
+  --font-headline-lg-mobile: var(--font-fraunces);
+  --font-headline-md: var(--font-fraunces);
+  --font-headline-sm: var(--font-fraunces);
+  --font-display-sm: var(--font-fraunces);
+  
+  --font-body-lg: var(--font-dm-sans);
+  --font-body-md: var(--font-dm-sans);
+  --font-body-sm: var(--font-dm-sans);
+  --font-label-lg: var(--font-dm-sans);
+  --font-label-md: var(--font-dm-sans);
+  --font-label-sm: var(--font-dm-sans);
+
+  --animate-fade-in-up: fade-in-up 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+  
+  @keyframes fade-in-up {
+    0% { opacity: 0; transform: translateY(16px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
 }
 
 @layer utilities {
-  .custom-shadow { box-shadow: 0 4px 16px rgba(45, 62, 80, 0.05); }
-  .custom-hover-shadow:hover { box-shadow: 0 6px 20px rgba(45, 62, 80, 0.08); }
+  /* Override shadows to use borders instead for a more structured, non-SaaS look */
+  .shadow-ambient { 
+    box-shadow: none !important; 
+    border: 1px solid var(--color-outline-variant); 
+    border-radius: 0px !important;
+  }
+  .shadow-sm {
+    box-shadow: none !important;
+    border: 1px solid var(--color-outline-variant);
+    border-radius: 0px !important;
+  }
+  .rounded-xl, .rounded-2xl, .rounded-lg, .rounded-full {
+    /* Removing border-radius for structural components, keeping them square/sharp */
+    border-radius: 0px !important;
+  }
+  /* Buttons can keep slightly rounded or pill shape if needed, but the brief says "zero border-radius" is a trope too! 
+     Wait, the brief says "zero border radius and dense newspaper columns" is an AI tell! 
+     So I should NOT force border-radius: 0px. */
 
-  .text-headline-xl { font-size: 48px; line-height: 56px; letter-spacing: -0.02em; font-weight: 600; }
-  .text-headline-lg { font-size: 32px; line-height: 40px; letter-spacing: -0.01em; font-weight: 600; }
-  .text-headline-lg-mobile { font-size: 28px; line-height: 36px; font-weight: 600; }
-  .text-headline-md { font-size: 24px; line-height: 32px; font-weight: 500; }
-  .text-body-lg { font-size: 18px; line-height: 28px; font-weight: 400; }
-  .text-body-md { font-size: 16px; line-height: 24px; font-weight: 400; }
-  .text-label-md { font-size: 14px; line-height: 20px; letter-spacing: 0.01em; font-weight: 500; }
-  .text-label-sm { font-size: 12px; line-height: 16px; letter-spacing: 0.05em; font-weight: 600; }
+  .text-headline-xl { font-size: 56px; line-height: 1.1; letter-spacing: -0.02em; font-weight: 500; font-feature-settings: "ss01", "ss02"; }
+  .text-headline-lg { font-size: 40px; line-height: 1.2; letter-spacing: -0.01em; font-weight: 500; }
+  .text-headline-lg-mobile { font-size: 32px; line-height: 1.2; font-weight: 500; }
+  .text-headline-md { font-size: 28px; line-height: 1.3; font-weight: 500; }
+  .text-headline-sm { font-size: 24px; line-height: 1.3; font-weight: 500; }
+  .text-display-sm { font-size: 36px; line-height: 1.2; font-weight: 500; }
+  
+  .text-body-lg { font-size: 18px; line-height: 1.6; font-weight: 400; max-width: 70ch; }
+  .text-body-md { font-size: 16px; line-height: 1.6; font-weight: 400; max-width: 70ch; }
+  
+  .text-label-lg { font-size: 16px; line-height: 1.2; letter-spacing: 0.01em; font-weight: 500; text-transform: uppercase; }
+  .text-label-md { font-size: 14px; line-height: 1.2; letter-spacing: 0.02em; font-weight: 500; }
+  .text-label-sm { font-size: 12px; line-height: 1.4; letter-spacing: 0.03em; font-weight: 600; text-transform: uppercase; }
+
+  .animation-delay-200 { animation-delay: 200ms; }
+  .animation-delay-400 { animation-delay: 400ms; }
+  .animation-delay-600 { animation-delay: 600ms; }
 }
 
 body {

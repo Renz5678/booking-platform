@@ -65,7 +65,7 @@ def _send_email_sync(to_email: str, subject: str, html_body: str) -> bool:
     message.set_content("Please enable HTML to view this email.")
     message.add_alternative(html_body, subtype="html")
     message["To"] = to_email
-    message["From"] = "Alaga Counseling <no-reply@alaga.com>"
+    message["From"] = "Alaga Counseling <no-reply@alaga.ph>"
     message["Subject"] = subject
 
     # Gmail API requires the message to be base64url-encoded before sending.
@@ -144,7 +144,8 @@ async def send_booking_confirmation(
     )
 
     # ICS download is served by the backend API
-    ics_url = f"{settings.FRONTEND_URL.rstrip('/')}/api/bookings/{booking_id}/ics"
+    # ICS download is served by the backend API — use BACKEND_URL, not FRONTEND_URL
+    ics_url = f"{settings.BACKEND_URL.rstrip('/')}/bookings/{booking_id}/ics"
 
     html_body = f"""
     <html>
@@ -297,7 +298,7 @@ def generate_ics_content(title: str, start: datetime, end: datetime, location: s
 VERSION:2.0
 PRODID:-//Alaga Counseling//EN
 BEGIN:VEVENT
-UID:{dtstamp}-{start.strftime('%Y%m%d')}@alaga.com
+UID:{dtstamp}-{start.strftime('%Y%m%d')}@alaga.ph
 DTSTAMP:{dtstamp}
 DTSTART:{dtstart}
 DTEND:{dtend}
@@ -362,3 +363,64 @@ async def send_counselor_rejection_email(email: str, reason: str = "") -> None:
     </html>
     """
     await asyncio.to_thread(_send_email_sync, email, subject, html_body)
+
+
+async def send_payment_pending_email(
+    user_email: str,
+    booking_id: str,
+    amount: float,
+) -> None:
+    """
+    Sends a GCash payment instruction email to a client after creating a booking.
+    Instructs them to manually send the payment to the counselor's GCash account.
+    The slot is held for 15 minutes — counselor confirms once payment is received.
+
+    Args:
+        user_email: The client's email address.
+        booking_id: The unique ID of the pending booking (used as payment reference).
+        amount: The amount to pay in PHP.
+    """
+    from app.config import settings
+
+    gcash_number = settings.GCASH_NUMBER or "[GCash number not configured]"
+    gcash_name = settings.GCASH_NAME or "Alaga Counseling"
+
+    subject = "Action Required — Complete Your GCash Payment to Confirm Booking"
+
+    html_body = f"""
+    <html>
+      <body style="font-family: sans-serif; color: #333; max-width: 560px; margin: 0 auto;">
+        <h2 style="color: #4f46e5;">Almost there! 📋</h2>
+        <p>Your booking slot is <strong>reserved for 15 minutes</strong>. Please send your GCash payment now to confirm.</p>
+
+        <table style="border-collapse: collapse; width: 100%; margin: 20px 0; border-radius: 8px; overflow: hidden; border: 1px solid #e5e7eb;">
+          <tr style="background: #f9fafb;">
+            <td style="padding: 14px 16px; font-weight: bold; color: #374151; border-bottom: 1px solid #e5e7eb; width: 40%;">GCash Number</td>
+            <td style="padding: 14px 16px; font-size: 20px; letter-spacing: 2px; font-weight: bold; border-bottom: 1px solid #e5e7eb;">{gcash_number}</td>
+          </tr>
+          <tr>
+            <td style="padding: 14px 16px; font-weight: bold; color: #374151; border-bottom: 1px solid #e5e7eb;">Account Name</td>
+            <td style="padding: 14px 16px; border-bottom: 1px solid #e5e7eb;">{gcash_name}</td>
+          </tr>
+          <tr style="background: #f9fafb;">
+            <td style="padding: 14px 16px; font-weight: bold; color: #374151; border-bottom: 1px solid #e5e7eb;">Amount</td>
+            <td style="padding: 14px 16px; font-size: 22px; color: #16a34a; font-weight: bold; border-bottom: 1px solid #e5e7eb;">PHP {amount:,.2f}</td>
+          </tr>
+          <tr>
+            <td style="padding: 14px 16px; font-weight: bold; color: #374151;">Reference / Note</td>
+            <td style="padding: 14px 16px; font-family: monospace; letter-spacing: 1px; font-size: 13px; color: #4f46e5;">{booking_id}</td>
+          </tr>
+        </table>
+
+        <div style="padding: 14px 16px; background: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 4px; margin: 20px 0;">
+          ⚠️ <strong>Important:</strong> Enter your <strong>Booking ID</strong> as the GCash note/message so your payment can be matched to your booking. Your slot will be automatically released if payment is not confirmed within 15 minutes.
+        </div>
+
+        <p>Once your counselor verifies the payment, you will receive a confirmation email with your session details and Google Meet link.</p>
+
+        <p style="color: #9ca3af; font-size: 12px;">If you did not create this booking, please ignore this email.</p>
+      </body>
+    </html>
+    """
+    await asyncio.to_thread(_send_email_sync, user_email, subject, html_body)
+

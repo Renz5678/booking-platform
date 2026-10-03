@@ -157,9 +157,13 @@ export default function ClientDashboardPage() {
                       <a href={upcomingBooking.meeting_link} target="_blank" rel="noopener noreferrer" className="bg-secondary text-center text-on-secondary font-label-md text-[14px] font-medium px-8 py-3 rounded-lg shadow-sm hover:bg-on-secondary-container transition-colors w-full sm:w-auto">
                         Join Session
                       </a>
+                    ) : upcomingBooking.status === "pending_payment" ? (
+                      <a href={`/payment/success?booking_id=${upcomingBooking.id}`} className="bg-tertiary text-center text-on-tertiary font-label-md text-[14px] font-medium px-8 py-3 rounded-lg shadow-sm hover:opacity-90 transition-opacity w-full sm:w-auto border border-tertiary">
+                        View Payment Instructions
+                      </a>
                     ) : (
                       <button disabled className="bg-surface-variant text-on-surface-variant font-label-md text-[14px] font-medium px-8 py-3 rounded-lg shadow-sm w-full sm:w-auto opacity-70 cursor-not-allowed">
-                        {upcomingBooking.status === "pending_payment" ? "Pending Payment" : "Link Unavailable"}
+                        Link Unavailable
                       </button>
                     )}
                     <button onClick={() => setReschedulingBooking(upcomingBooking)} className="text-tertiary-container hover:bg-surface-container-low font-label-md text-[14px] font-medium px-6 py-3 rounded-lg transition-colors border border-transparent hover:border-outline-variant w-full sm:w-auto">
