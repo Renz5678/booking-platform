@@ -1,194 +1,567 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { getInitials } from "@/lib/routes";
+import type { CounselorProfile } from "@/types";
 
-export default function Home() {
-  const [quotes, setQuotes] = useState<string[]>([
-    "Seeking help is not a sign of weakness; it's a testament to your commitment to well-being and personal growth."
-  ]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+interface Quote {
+  text: string;
+  author: string;
+}
+
+const DEFAULT_QUOTES: Quote[] = [
+  {
+    text: "Healing is not linear, and you do not have to carry everything on your own. Taking the first step to talk is already an act of courage.",
+    author: "Alaga Clinical Team",
+  },
+  {
+    text: "A safe, confidential space allows you to slow down, untangle your thoughts, and rebuild clarity at your own pace.",
+    author: "Dr. Elena Santos, RPsy",
+  },
+  {
+    text: "Care that respects your culture, your story, and your privacy — accessible from wherever you feel most comfortable.",
+    author: "Alaga Counseling Care",
+  },
+];
+
+const FALLBACK_COUNSELORS: Array<{
+  id: string;
+  name: string;
+  title: string;
+  specializations: string[];
+  bio: string;
+  rate?: number;
+  photo_url?: string | null;
+  isLive?: boolean;
+}> = [
+  {
+    id: "featured-1",
+    name: "Dr. Elena Santos",
+    title: "Licensed Clinical Psychologist",
+    specializations: ["Anxiety", "Trauma", "Life Transitions"],
+    bio: "Specializing in evidence-based CBT and trauma-informed care for young adults and working professionals.",
+    isLive: false,
+  },
+  {
+    id: "featured-2",
+    name: "Marcus Reyes, RGC",
+    title: "Registered Guidance Counselor",
+    specializations: ["Stress & Burnout", "Career", "Relationships"],
+    bio: "Helping individuals navigate workplace burnout, family dynamics, and personal boundaries with practical tools.",
+    isLive: false,
+  },
+  {
+    id: "featured-3",
+    name: "Sofia Villanueva, RPsy",
+    title: "Licensed Psychologist",
+    specializations: ["Depression", "Grief", "Mindfulness"],
+    bio: "Compassionate, culturally grounded therapy focused on emotional resilience, self-compassion, and recovery.",
+    isLive: false,
+  },
+];
+
+export default function HomePage() {
+  const [quotes, setQuotes] = useState<Quote[]>(DEFAULT_QUOTES);
+  const [currentQuoteIndex, setCurrentQuoteIndex] = useState(0);
+  const [isCarouselPaused, setIsCarouselPaused] = useState(false);
+  const [counselors, setCounselors] = useState<typeof FALLBACK_COUNSELORS>(
+    FALLBACK_COUNSELORS
+  );
 
   useEffect(() => {
-    const fetchQuotes = async () => {
+    let active = true;
+
+    const loadContent = async () => {
       try {
-        const data = await api.get("/admin/content");
-        const quoteItem = data.find((item: any) => item.key === "homepage_quotes");
-        if (quoteItem && quoteItem.value) {
-          try {
-            const parsed = JSON.parse(quoteItem.value);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setQuotes(parsed);
-            }
-          } catch (e) {
-            console.error("Failed to parse quotes JSON", e);
+        const res = await api.get<{
+          items?: Array<{ key: string; value: string }>;
+        }>("/admin/content");
+        const quoteBlock = res?.items?.find((i) => i.key === "homepage_quotes");
+        if (quoteBlock && active) {
+          const parsed = JSON.parse(quoteBlock.value);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setQuotes(parsed);
           }
         }
-      } catch (err) {
-        console.error("Failed to fetch quotes", err);
+      } catch {
+        // Keep default quotes
+      }
+
+      try {
+        const list = await api.get<CounselorProfile[]>("/counselors/");
+        if (active && Array.isArray(list) && list.length > 0) {
+          setCounselors(
+            list.slice(0, 3).map((c) => ({
+              id: c.id,
+              name: c.user?.full_name || "Licensed Counselor",
+              title: "Licensed Mental Health Professional",
+              specializations:
+                c.specialization_tags && c.specialization_tags.length > 0
+                  ? c.specialization_tags.slice(0, 3)
+                  : ["General Counseling"],
+              bio:
+                c.bio ||
+                "Dedicated to providing warm, evidence-based, and confidential mental health support.",
+              photo_url: c.photo_url,
+              isLive: true,
+            }))
+          );
+        }
+      } catch {
+        // Keep curated fallback cards
       }
     };
-    fetchQuotes();
+
+    loadContent();
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
-    if (quotes.length <= 1) return;
-    const interval = setInterval(() => {
-      setCurrentIndex(i => (i + 1) % quotes.length);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [quotes]);
+    if (quotes.length <= 1 || isCarouselPaused) return;
+    const timer = setInterval(() => {
+      setCurrentQuoteIndex((prev) => (prev + 1) % quotes.length);
+    }, 6500);
+    return () => clearInterval(timer);
+  }, [quotes.length, isCarouselPaused]);
+
+  const activeQuote = quotes[currentQuoteIndex] || DEFAULT_QUOTES[0];
+
   return (
-    <>
+    <div className="flex flex-col">
       {/* Hero Section */}
-      <section className="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop py-16 md:py-24 grid grid-cols-1 md:grid-cols-2 gap-gutter items-center">
-        <div>
-          <h1 className="font-headline-xl text-headline-xl md:text-[56px] md:leading-[64px] text-primary mb-6">
-            Professional counseling for your peace of mind
-          </h1>
-          <p className="font-body-lg text-body-lg text-on-surface-variant mb-8 max-w-md">
-            Accessible, confidential, and compassionate online therapy tailored for the Philippines. Connect with licensed professionals from the comfort of your safe space.
-          </p>
-          <Link href="/counselors" className="inline-block bg-secondary text-on-secondary px-8 py-4 rounded-full font-label-md text-lg hover:opacity-90 transition-opacity shadow-md hover:shadow-lg">
-            Book a Session
-          </Link>
-        </div>
-        <div className="relative h-64 md:h-[500px] rounded-2xl overflow-hidden custom-shadow">
-          <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuBiCTk6Co4rdBNY7PtEJKqjdcG3ThIhRiiRAUtA1UipYcupQZdR0pM2uEoQFFVXWwp5KlzBK0jTY4Fwco6zrNZSPklmqM_eOuATVAwJgeKGismQuV_PQWXFNnwQ7aOs6AEw_fKGIpEbWlgAGNW_UFdSF5eli6tHwzIZsUcQglipLY3zoTbWp21fUmvgsUT0LUT8NldWBszZOIMbRkA3gBR-MNcVmfaUfLv1KpQGtYR9iO2eCaqbw2HzYsc6K-RkZQdLjDKAnQ8W8ZY" alt="A serene, well-lit modern home office or living room space serving as a safe setting for online therapy. The room features soft neutral tones, minimal decor, a comfortable armchair, and warm natural light streaming through a window. The overall aesthetic is calm, professional, and therapeutic, utilizing a corporate modern minimalist style with pale mint and pure white accents." className="w-full h-full object-cover" fill unoptimized />
+      <section className="relative overflow-hidden bg-background pt-14 pb-20 sm:pt-20 sm:pb-28">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -top-24 right-0 h-96 w-96 rounded-full bg-primary/5 blur-3xl"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -bottom-24 left-0 h-80 w-80 rounded-full bg-secondary-container/40 blur-3xl"
+        />
+
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-3xl text-center">
+            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border-subtle bg-surface-elevated px-4 py-1.5 text-xs font-medium text-primary shadow-sm">
+              <span
+                aria-hidden="true"
+                className="material-symbols-outlined text-[16px]"
+              >
+                verified_user
+              </span>
+              <span>PRC-Licensed Professionals &bull; Confidential Care</span>
+            </div>
+
+            <h1 className="font-serif text-headline-xl text-text-primary">
+              A calm, private space to talk with someone who{" "}
+              <span className="italic text-primary">truly listens.</span>
+            </h1>
+
+            <p className="mx-auto mt-6 max-w-2xl text-body-lg text-text-secondary">
+              Connect with vetted, licensed Filipino counselors and psychologists
+              online. Browse verified profiles, schedule at your own pace, and
+              receive thoughtful support from the comfort of home.
+            </p>
+
+            <div className="mt-9 flex flex-col items-center justify-center gap-3.5 sm:flex-row">
+              <Link
+                href="/counselors"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-7 py-3.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:w-auto"
+              >
+                <span>Browse Counselors</span>
+                <span
+                  aria-hidden="true"
+                  className="material-symbols-outlined text-[18px]"
+                >
+                  arrow_forward
+                </span>
+              </Link>
+              <a
+                href="#how-it-works"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border-subtle bg-surface-elevated px-7 py-3.5 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:w-auto"
+              >
+                <span>How It Works</span>
+              </a>
+            </div>
+
+            {/* Trust Strip */}
+            <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs font-medium text-text-muted">
+              <span className="inline-flex items-center gap-1.5">
+                <span
+                  aria-hidden="true"
+                  className="material-symbols-outlined text-[16px] text-primary"
+                >
+                  lock
+                </span>
+                RA 10173 Data Privacy Compliant
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span
+                  aria-hidden="true"
+                  className="material-symbols-outlined text-[16px] text-primary"
+                >
+                  calendar_month
+                </span>
+                Manila Time (UTC+8) Scheduling
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span
+                  aria-hidden="true"
+                  className="material-symbols-outlined text-[16px] text-primary"
+                >
+                  videocam
+                </span>
+                Private 1-on-1 Online Sessions
+              </span>
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* Quote / Testimonial Banner */}
-      <section className="bg-surface-container-low py-12 px-margin-mobile md:px-margin-desktop my-section-gap">
-        <div className="max-w-3xl mx-auto text-center">
-          <span className="material-symbols-outlined text-on-tertiary-container text-4xl mb-4 opacity-50" style={{ fontVariationSettings: "'FILL' 1" }}>format_quote</span>
-          <p key={currentIndex} className="font-headline-lg text-headline-lg text-primary mb-6 transition-opacity duration-500 ease-in-out opacity-100">
-            &quot;{quotes[currentIndex]}&quot;
-          </p>
-          <div className="flex justify-center gap-2 mb-6">
-            {quotes.length > 1 && quotes.map((_, i) => (
-              <div key={i} className={`h-2 w-2 rounded-full ${i === currentIndex ? 'bg-primary' : 'bg-surface-variant'}`} />
+      {/* Quote Carousel Section */}
+      <section
+        aria-label="Reflections on mental wellness"
+        className="border-y border-border-subtle bg-surface-elevated py-14"
+      >
+        <div
+          className="mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8"
+          onMouseEnter={() => setIsCarouselPaused(true)}
+          onMouseLeave={() => setIsCarouselPaused(false)}
+          onFocus={() => setIsCarouselPaused(true)}
+          onBlur={() => setIsCarouselPaused(false)}
+        >
+          <span
+            aria-hidden="true"
+            className="material-symbols-outlined mb-3 text-3xl text-primary/40"
+          >
+            format_quote
+          </span>
+          <blockquote aria-live="polite" className="min-h-[5.5rem]">
+            <p className="font-serif text-xl leading-relaxed text-text-primary sm:text-2xl">
+              &ldquo;{activeQuote.text}&rdquo;
+            </p>
+            <footer className="mt-4 text-sm font-medium text-text-secondary">
+              &mdash; {activeQuote.author}
+            </footer>
+          </blockquote>
+
+          {quotes.length > 1 && (
+            <div className="mt-6 flex items-center justify-center gap-2">
+              <button
+                type="button"
+                aria-label="Previous quote"
+                onClick={() =>
+                  setCurrentQuoteIndex(
+                    (prev) => (prev - 1 + quotes.length) % quotes.length
+                  )
+                }
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-surface-muted hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <span
+                  aria-hidden="true"
+                  className="material-symbols-outlined text-[18px]"
+                >
+                  chevron_left
+                </span>
+              </button>
+
+              <div className="flex items-center gap-1.5">
+                {quotes.map((q, idx) => (
+                  <button
+                    key={`${q.author}-${idx}`}
+                    type="button"
+                    aria-label={`Show quote ${idx + 1} of ${quotes.length}`}
+                    aria-pressed={idx === currentQuoteIndex}
+                    onClick={() => setCurrentQuoteIndex(idx)}
+                    className={`h-2 rounded-full transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                      idx === currentQuoteIndex
+                        ? "w-6 bg-primary"
+                        : "w-2 bg-border-strong hover:bg-text-muted"
+                    }`}
+                  />
+                ))}
+              </div>
+
+              <button
+                type="button"
+                aria-label="Next quote"
+                onClick={() =>
+                  setCurrentQuoteIndex((prev) => (prev + 1) % quotes.length)
+                }
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-surface-muted hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <span
+                  aria-hidden="true"
+                  className="material-symbols-outlined text-[18px]"
+                >
+                  chevron_right
+                </span>
+              </button>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* How It Works */}
+      <section
+        id="how-it-works"
+        className="scroll-mt-20 bg-background py-20 sm:py-24"
+      >
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-2xl text-center">
+            <span className="text-label-md uppercase tracking-wider text-primary">
+              Simple &amp; Guided
+            </span>
+            <h2 className="mt-2 font-serif text-headline-lg text-text-primary">
+              How booking with Alaga works
+            </h2>
+            <p className="mt-3 text-body-md text-text-secondary">
+              Designed to remove friction so you can focus on getting the
+              support you deserve.
+            </p>
+          </div>
+
+          <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
+            {[
+              {
+                step: "01",
+                icon: "person_search",
+                title: "Explore Verified Counselors",
+                desc: "Filter by specialization, read clinical backgrounds, and find a licensed professional whose approach fits your needs.",
+              },
+              {
+                step: "02",
+                icon: "event_available",
+                title: "Sign In & Pick a Time",
+                desc: "Create a free account to view live weekly availability in Philippine Time and share brief intake notes securely.",
+              },
+              {
+                step: "03",
+                icon: "verified",
+                title: "Confirm & Meet Online",
+                desc: "Upload your payment proof, receive confirmation from your counselor, and join your private session link on schedule.",
+              },
+            ].map((item) => (
+              <div
+                key={item.step}
+                className="rounded-2xl border border-border-subtle bg-surface-elevated p-7 shadow-ambient transition-shadow hover:shadow-ambient-hover"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-light text-primary">
+                    <span
+                      aria-hidden="true"
+                      className="material-symbols-outlined text-[22px]"
+                    >
+                      {item.icon}
+                    </span>
+                  </div>
+                  <span className="font-serif text-2xl font-medium text-border-strong tabular-nums">
+                    {item.step}
+                  </span>
+                </div>
+                <h3 className="mt-5 font-headline-sm text-text-primary">
+                  {item.title}
+                </h3>
+                <p className="mt-2 text-body-md text-text-secondary">
+                  {item.desc}
+                </p>
+              </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* How It Works */}
-      <section className="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop py-section-gap">
-        <div className="text-center mb-12">
-          <h2 className="font-headline-lg text-headline-lg text-primary mb-4">How It Works</h2>
-          <p className="font-body-md text-body-md text-on-surface-variant">Your journey to better mental health in three simple steps.</p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {/* Step 1 */}
-          <div className="bg-surface-container-lowest p-8 rounded-2xl text-center custom-shadow custom-hover-shadow transition-shadow">
-            <div className="w-16 h-16 bg-surface-container-low rounded-full flex items-center justify-center mx-auto mb-6 text-on-tertiary-container">
-              <span className="material-symbols-outlined text-3xl">search</span>
-            </div>
-            <h3 className="font-headline-md text-headline-md text-primary mb-3">Find a Match</h3>
-            <p className="font-body-md text-body-md text-on-surface-variant">Browse our network of licensed professionals and filter by specialization to find the right fit.</p>
-          </div>
-          {/* Step 2 */}
-          <div className="bg-surface-container-lowest p-8 rounded-2xl text-center custom-shadow custom-hover-shadow transition-shadow">
-            <div className="w-16 h-16 bg-surface-container-low rounded-full flex items-center justify-center mx-auto mb-6 text-on-tertiary-container">
-              <span className="material-symbols-outlined text-3xl">calendar_today</span>
-            </div>
-            <h3 className="font-headline-md text-headline-md text-primary mb-3">Book a Session</h3>
-            <p className="font-body-md text-body-md text-on-surface-variant">Choose a schedule that works for you. Our booking system is simple, secure, and confidential.</p>
-          </div>
-          {/* Step 3 */}
-          <div className="bg-surface-container-lowest p-8 rounded-2xl text-center custom-shadow custom-hover-shadow transition-shadow">
-            <div className="w-16 h-16 bg-surface-container-low rounded-full flex items-center justify-center mx-auto mb-6 text-on-tertiary-container">
-              <span className="material-symbols-outlined text-3xl">videocam</span>
-            </div>
-            <h3 className="font-headline-md text-headline-md text-primary mb-3">Meet Online</h3>
-            <p className="font-body-md text-body-md text-on-surface-variant">Connect with your counselor via our secure, private video platform from anywhere.</p>
-          </div>
-        </div>
-      </section>
-
-      {/* Featured Counselors */}
-      <section className="bg-surface-container-low py-section-gap px-margin-mobile md:px-margin-desktop">
-        <div className="max-w-container-max mx-auto">
-          <div className="flex justify-between items-end mb-10">
+      {/* Featured Professionals */}
+      <section className="border-t border-border-subtle bg-surface-elevated py-20 sm:py-24">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div>
-              <h2 className="font-headline-lg text-headline-lg text-primary mb-2">Featured Professionals</h2>
-              <p className="font-body-md text-body-md text-on-surface-variant">Meet some of our highly qualified counselors.</p>
+              <span className="text-label-md uppercase tracking-wider text-primary">
+                Our Care Team
+              </span>
+              <h2 className="mt-2 font-serif text-headline-lg text-text-primary">
+                Meet our licensed professionals
+              </h2>
+              <p className="mt-2 max-w-xl text-body-md text-text-secondary">
+                Every practitioner on Alaga is vetted for active PRC
+                credentials and clinical experience.
+              </p>
             </div>
-            <Link href="/counselors" className="hidden md:flex text-on-tertiary-container font-label-md hover:underline items-center gap-1">
-              View All <span className="material-symbols-outlined text-sm">arrow_forward</span>
+            <Link
+              href="/counselors"
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary transition-colors hover:text-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-lg px-2 py-1"
+            >
+              <span>View all counselors</span>
+              <span
+                aria-hidden="true"
+                className="material-symbols-outlined text-[18px]"
+              >
+                arrow_forward
+              </span>
             </Link>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Card 1 */}
-            <div className="bg-surface-container-lowest rounded-2xl overflow-hidden custom-shadow custom-hover-shadow transition-shadow">
-              <div className="h-48 relative">
-                <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuCp1jj8wAHjlAdoNQ0UF7q6LFbSdyfcs2mmT4U5KhNQC-unnBnWsjCF06uRdqvjgVgXkRrHwmxSjfoMQ3nHN-6Ztu2-2lp1AZYqzkoi4Rs_l6dvr-fuO1cD36b125zAgAqkjiSWOSRC5Kc-fFXeqn7-cIMJUfOuc3-X15snJ5Op3MoD-Y3sL7xuWc9oeNBKyEtuSGU2IvWRHS12b-8IBaBUX15QT4MTNXuxOrtnwFGjHh6CFSMpjojVelBpJY7IprziBJE_jt-Ht1g" alt="Professional headshot portrait of a compassionate female counselor named Dr. Maria Santos." className="w-full h-full object-cover" fill unoptimized />
-              </div>
-              <div className="p-6">
-                <h3 className="font-headline-md text-headline-md text-primary mb-1">Dr. Maria Santos</h3>
-                <p className="font-body-md text-body-md text-outline mb-4">Clinical Psychologist</p>
-                <div className="flex flex-wrap gap-2">
-                  <span className="bg-surface-container px-3 py-1 rounded-full font-label-sm text-on-surface-variant">Anxiety</span>
-                  <span className="bg-surface-container px-3 py-1 rounded-full font-label-sm text-on-surface-variant">Depression</span>
-                </div>
-              </div>
-            </div>
-            {/* Card 2 */}
-            <div className="bg-surface-container-lowest rounded-2xl overflow-hidden custom-shadow custom-hover-shadow transition-shadow">
-              <div className="h-48 relative">
-                <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuBNa8Wd59QOed9xaQfWKgAQjSDpil1fX793N8RxPk_6K1JBY0d13seljiOXsZAnpM-touZOHG-Kr09KWuzKhrMRZ8KiPPdB6W3x8qddOg2OJtcbWlFsf-5TQQGzh5anKE0ze-HVWj4UPuw0NSvIKhI80z2IVgQ-e3ra33oEz-y_YKWyfuAPUYeImEn4wZqVWEeeujzNoeSJo6-a9vDmHYcEOu4JHeSQ-PI3TJrtfh7K-zRVyn1DBkPBf3CNAJXt66vowbsbtGuC8yE" alt="Professional headshot portrait of an empathetic male counselor." className="w-full h-full object-cover" fill unoptimized />
-              </div>
-              <div className="p-6">
-                <h3 className="font-headline-md text-headline-md text-primary mb-1">Mark Reyes, RGC</h3>
-                <p className="font-body-md text-body-md text-outline mb-4">Registered Guidance Counselor</p>
-                <div className="flex flex-wrap gap-2">
-                  <span className="bg-surface-container px-3 py-1 rounded-full font-label-sm text-on-surface-variant">Relationships</span>
-                  <span className="bg-surface-container px-3 py-1 rounded-full font-label-sm text-on-surface-variant">Stress</span>
-                </div>
-              </div>
-            </div>
-            {/* Card 3 */}
-            <div className="bg-surface-container-lowest rounded-2xl overflow-hidden custom-shadow custom-hover-shadow transition-shadow">
-              <div className="h-48 relative">
-                <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuA5nR2yWKeWaQgyPNYctMcy43Foxef-S5N3hQfDcWQjZYYIqxcm1ADnmw0mVCuoACwDuXm2YROPFSTz1Xnwx8x5UR71fBfWV-4_ZcvNADV4NnKawrdgZGcR-VHmVo7rLi670JytPTkmOpEaC2xPZLt7ZePTR5KwIFjYU8fkgBFiN7x5IsxMM5v3czLkZr9lCK6oFCFcMLcw5OtKqvCaNdmxLbtTlNWRqqnlhW6aNiMc6xh9roOkIZZftlaggmWgpkGBBBK9VqGxq3I" alt="Professional headshot portrait of a friendly female therapist." className="w-full h-full object-cover" fill unoptimized />
-              </div>
-              <div className="p-6">
-                <h3 className="font-headline-md text-headline-md text-primary mb-1">Sarah Lim, RPsy</h3>
-                <p className="font-body-md text-body-md text-outline mb-4">Registered Psychologist</p>
-                <div className="flex flex-wrap gap-2">
-                  <span className="bg-surface-container px-3 py-1 rounded-full font-label-sm text-on-surface-variant">Trauma</span>
-                  <span className="bg-surface-container px-3 py-1 rounded-full font-label-sm text-on-surface-variant">Grief</span>
-                </div>
-              </div>
-            </div>
+
+          <div className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-3">
+            {counselors.map((c) => {
+              const targetHref = c.isLive
+                ? `/counselors/${c.id}`
+                : "/counselors";
+              return (
+                <Link
+                  key={c.id}
+                  href={targetHref}
+                  className="group flex flex-col justify-between rounded-2xl border border-border-subtle bg-background p-6 shadow-ambient transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-ambient-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <div>
+                    <div className="flex items-center gap-4">
+                      {c.photo_url ? (
+                        <img
+                          src={c.photo_url}
+                          alt={c.name}
+                          className="h-14 w-14 rounded-full object-cover border border-border-subtle"
+                        />
+                      ) : (
+                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary-light font-serif text-lg font-semibold text-primary">
+                          {getInitials(c.name)}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <h3 className="truncate text-base font-semibold text-text-primary group-hover:text-primary transition-colors">
+                          {c.name}
+                        </h3>
+                        <p className="truncate text-xs text-text-muted">
+                          {c.title}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-1.5">
+                      {c.specializations.map((spec) => (
+                        <span
+                          key={spec}
+                          className="rounded-full bg-surface-muted px-2.5 py-0.5 text-xs font-medium text-text-secondary"
+                        >
+                          {spec}
+                        </span>
+                      ))}
+                    </div>
+
+                    <p className="mt-4 line-clamp-3 text-body-sm text-text-secondary">
+                      {c.bio}
+                    </p>
+                  </div>
+
+                  <div className="mt-6 flex items-center justify-between border-t border-border-subtle pt-4 text-sm">
+                    {typeof c.rate === "number" ? (
+                      <span className="font-semibold text-text-primary tabular-nums">
+                        &#8369;{c.rate.toLocaleString()}{" "}
+                        <span className="font-normal text-text-muted">
+                          / hr
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="text-xs font-medium text-text-muted">
+                        Verified Practitioner
+                      </span>
+                    )}
+                    <span className="inline-flex items-center gap-1 font-medium text-primary">
+                      <span>View profile</span>
+                      <span
+                        aria-hidden="true"
+                        className="material-symbols-outlined text-[16px] transition-transform group-hover:translate-x-0.5"
+                      >
+                        arrow_forward
+                      </span>
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
           </div>
-          <Link href="/counselors" className="block text-center md:hidden w-full mt-8 bg-surface-container text-primary py-3 rounded-full font-label-md">
-            View All Counselors
-          </Link>
         </div>
       </section>
 
       {/* About Section */}
-      <section id="about" className="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop py-section-gap grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-        <div className="order-2 md:order-1 relative h-64 md:h-[400px] rounded-2xl overflow-hidden custom-shadow">
-          <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuC5gvjiTgJkatt3S7PVBB8GBs_aPSpQfjFyjqJ-mF9I82dK5QZQFVyzAupj5ur4H8wB5zZzaYRvaaSF_xD14qyYnnQQ_gBEEGTw2pXi7J7WX9LJv_XmbE090ZZK5J5IFVCx0UMnmE182tZ6VO3ud7js-Qv2jLkfnF-Ifn0DTgOvH1O5MfBNG0og6hC1-4WVDQKgPavP1hrUHfusJAT9n0wAQ7L0UI0bg_H1VObF1xyxFwwnvBwU_iOfMZRHNuKaEaO2xYndCcy5onY" alt="An abstract, minimalist conceptual image representing mental health and wellness." className="w-full h-full object-cover" fill unoptimized />
-        </div>
-        <div className="order-1 md:order-2">
-          <h2 className="font-headline-lg text-headline-lg text-primary mb-6">Our Mission at Alaga</h2>
-          <p className="font-body-md text-body-md text-on-surface-variant mb-4">
-            We believe that mental health care should be a fundamental right, not a luxury. &quot;Alaga&quot;—which means care and nurture—is at the core of everything we do.
-          </p>
-          <p className="font-body-md text-body-md text-on-surface-variant mb-6">
-            Our platform provides a safe, stigma-free digital environment connecting Filipinos with licensed mental health professionals. We are committed to making quality therapy accessible, reliable, and grounded in professional authority.
-          </p>
-          <Link href="/faq" className="text-on-tertiary-container font-label-md font-semibold hover:underline flex items-center gap-1">
-            Learn more about us <span className="material-symbols-outlined text-sm">arrow_forward</span>
-          </Link>
+      <section id="about" className="scroll-mt-20 bg-background py-20 sm:py-24">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 items-center gap-10 rounded-3xl border border-border-subtle bg-secondary-container/35 p-8 sm:p-12 lg:grid-cols-12">
+            <div className="lg:col-span-7">
+              <span className="text-label-md uppercase tracking-wider text-primary">
+                About Alaga
+              </span>
+              <h2 className="mt-2 font-serif text-headline-lg text-text-primary">
+                Thoughtful mental healthcare, built with warmth and privacy.
+              </h2>
+              <p className="mt-4 text-body-md text-text-secondary">
+                &ldquo;Alaga&rdquo; means care. We built this platform so
+                individuals across the Philippines can find trustworthy,
+                licensed mental health professionals without overwhelming
+                directories, hidden steps, or clinical coldness.
+              </p>
+              <div className="mt-7 flex flex-wrap gap-3">
+                <Link
+                  href="/signup"
+                  className="inline-flex items-center justify-center rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  Create Free Account
+                </Link>
+                <Link
+                  href="/faq"
+                  className="inline-flex items-center justify-center rounded-xl border border-border-subtle bg-surface-elevated px-6 py-3 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  Read Common Questions
+                </Link>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:col-span-5">
+              {[
+                {
+                  icon: "shield_lock",
+                  title: "Strict Privacy",
+                  body: "Intake notes and session details remain strictly between you and your counselor.",
+                },
+                {
+                  icon: "schedule",
+                  title: "Flexible Rescheduling",
+                  body: "Life happens. Reschedule directly from your client dashboard when plans shift.",
+                },
+                {
+                  icon: "badge",
+                  title: "Verified Licenses",
+                  body: "Every counselor submits PRC documentation reviewed by our clinical team.",
+                },
+                {
+                  icon: "support_agent",
+                  title: "Human Support",
+                  body: "Need help finding a match or confirming payment? Reach us anytime.",
+                },
+              ].map((card) => (
+                <div
+                  key={card.title}
+                  className="rounded-2xl border border-border-subtle bg-surface-elevated p-5"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="material-symbols-outlined text-primary text-[22px]"
+                  >
+                    {card.icon}
+                  </span>
+                  <h3 className="mt-2.5 text-sm font-semibold text-text-primary">
+                    {card.title}
+                  </h3>
+                  <p className="mt-1 text-xs leading-relaxed text-text-secondary">
+                    {card.body}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </section>
-    </>
+    </div>
   );
 }

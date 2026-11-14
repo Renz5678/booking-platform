@@ -1,192 +1,232 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import { api } from "@/lib/api";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import DashboardLayout from "@/components/layout/DashboardLayout";
+import { useToast } from "@/context/ToastContext";
+import { api, ApiError } from "@/lib/api";
+import type { CounselorProfile } from "@/types";
 
-export default function AdminCounselorDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params);
+export default function AdminCounselorDetailPage() {
+  const params = useParams<{ id: string }>();
   const router = useRouter();
-  const [counselor, setCounselor] = useState<any>(null);
+  const counselorId = params.id;
+  const { toast, confirm, promptText } = useToast();
+
+  const [counselor, setCounselor] = useState<CounselorProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    fetchCounselor();
-  }, [resolvedParams.id]);
-
-  const fetchCounselor = async () => {
+  const loadCounselor = useCallback(async () => {
     try {
-      // The public endpoint gets profile data, wait we need admin access if not verified.
-      // Assuming GET /counselors/{id} allows admin to view it regardless of verification status.
-      // If it fails we catch it.
-      const data = await api.get(`/admin/counselors/${resolvedParams.id}`);
+      const data = await api.get<CounselorProfile>(
+        `/admin/counselors/${counselorId}`
+      );
       setCounselor(data);
-    } catch (err) {
-      console.error(err);
+    } catch {
+      toast.error("Unable to load counselor details.");
     } finally {
       setLoading(false);
     }
-  };
+  }, [counselorId, toast]);
+
+  useEffect(() => {
+    loadCounselor();
+  }, [loadCounselor]);
 
   const handleApprove = async () => {
-    setActionLoading("approve");
+    if (!counselor) return;
+    const ok = await confirm({
+      title: "Approve counselor?",
+      message: `Verify and activate ${
+        counselor.user?.full_name || "this counselor"
+      }?`,
+      confirmText: "Approve & Activate",
+    });
+    if (!ok) return;
+
+    setBusy(true);
     try {
-      await api.post(`/admin/counselors/${counselor.id}/verify`, {});
-      fetchCounselor();
+      await api.post(`/admin/counselors/${counselor.id}/verify`);
+      toast.success("Counselor approved.");
+      await loadCounselor();
     } catch (err) {
-      console.error(err);
-      alert("Failed to approve");
+      toast.error(err instanceof ApiError ? err.message : "Failed to approve.");
     } finally {
-      setActionLoading(null);
+      setBusy(false);
     }
   };
 
   const handleReject = async () => {
-    const reason = prompt("Enter rejection reason (optional):") || "";
-    setActionLoading("reject");
+    if (!counselor) return;
+    const reason = await promptText({
+      title: "Reject application",
+      message: "Enter a reason for rejecting this application:",
+      label: "Reason",
+      confirmText: "Reject",
+      variant: "danger",
+      required: true,
+    });
+    if (!reason) return;
+
+    setBusy(true);
     try {
-      await api.post(`/admin/counselors/${counselor.id}/reject?reason=${encodeURIComponent(reason)}`, {});
-      fetchCounselor();
+      await api.post(
+        `/admin/counselors/${counselor.id}/reject?reason=${encodeURIComponent(
+          reason
+        )}`
+      );
+      toast.info("Application rejected.");
+      router.push("/admin/counselors");
     } catch (err) {
-      console.error(err);
-      alert("Failed to reject");
+      toast.error(err instanceof ApiError ? err.message : "Failed to reject.");
     } finally {
-      setActionLoading(null);
+      setBusy(false);
     }
   };
 
   const handleDeactivate = async () => {
-    if (!confirm("Are you sure you want to deactivate this counselor?")) return;
-    setActionLoading("deactivate");
+    if (!counselor) return;
+    const ok = await confirm({
+      title: "Deactivate counselor?",
+      message: "This counselor will be removed from the public directory.",
+      confirmText: "Deactivate",
+      variant: "danger",
+    });
+    if (!ok) return;
+
+    setBusy(true);
     try {
-      await api.post(`/admin/counselors/${counselor.id}/deactivate`, {});
-      fetchCounselor();
+      await api.post(`/admin/counselors/${counselor.id}/deactivate`);
+      toast.success("Counselor deactivated.");
+      await loadCounselor();
     } catch (err) {
-      console.error(err);
-      alert("Failed to deactivate");
+      toast.error(
+        err instanceof ApiError ? err.message : "Failed to deactivate."
+      );
     } finally {
-      setActionLoading(null);
+      setBusy(false);
     }
   };
 
-  if (loading) {
-    return (
-      <DashboardLayout role="admin" allowedRoles={["admin"]}>
-        <div className="animate-pulse space-y-4 max-w-3xl">
-          <div className="h-8 bg-surface-variant w-1/3 rounded"></div>
-          <div className="h-48 bg-surface-variant rounded-xl"></div>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (!counselor) {
-    return (
-      <DashboardLayout role="admin" allowedRoles={["admin"]}>
-        <div className="text-center p-8">
-          <p className="text-error">Counselor not found.</p>
-          <button onClick={() => router.push('/admin/counselors')} className="mt-4 text-primary hover:underline">
-            Back to Counselors
-          </button>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
   return (
-    <DashboardLayout role="admin" allowedRoles={["admin"]}>
-      <Link href="/admin/counselors" className="flex items-center gap-2 text-primary hover:underline mb-6 font-label-lg">
-        <span className="material-symbols-outlined">arrow_back</span> Back to Counselors
-      </Link>
-      
-      <div className="flex flex-col md:flex-row justify-between items-start mb-8 gap-4">
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 bg-primary-fixed text-on-primary-fixed rounded-full flex items-center justify-center font-headline-md">
-            {counselor.user?.full_name ? counselor.user.full_name[0].toUpperCase() : "?"}
-          </div>
-          <div>
-            <h1 className="font-headline-xl text-primary">{counselor.user?.full_name}</h1>
-            <p className="font-body-lg text-on-surface-variant">{counselor.user?.email}</p>
-          </div>
-        </div>
-        
-        <div className="flex gap-2">
-          {!counselor.is_verified && (
-            <>
-              <button 
-                onClick={handleApprove}
-                disabled={!!actionLoading}
-                className="bg-primary text-on-primary px-4 py-2 rounded-lg font-label-md hover:opacity-90 disabled:opacity-50"
-              >
-                {actionLoading === "approve" ? "Processing..." : "Approve"}
-              </button>
-              <button 
-                onClick={handleReject}
-                disabled={!!actionLoading}
-                className="bg-error-container text-on-error-container px-4 py-2 rounded-lg font-label-md hover:opacity-90 disabled:opacity-50"
-              >
-                Reject
-              </button>
-            </>
-          )}
-          {counselor.is_verified && counselor.is_active && (
-            <button 
-              onClick={handleDeactivate}
-              disabled={!!actionLoading}
-              className="bg-error-container text-on-error-container px-4 py-2 rounded-lg font-label-md hover:opacity-90 disabled:opacity-50"
+    <ProtectedRoute allowedRoles={["admin"]}>
+      <DashboardLayout role="admin">
+        <div className="space-y-6">
+          <Link
+            href="/admin/counselors"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-text-secondary hover:text-primary"
+          >
+            <span
+              aria-hidden="true"
+              className="material-symbols-outlined text-[18px]"
             >
-              Deactivate
-            </button>
-          )}
-          {counselor.is_verified && !counselor.is_active && (
-            <div className="bg-surface-container px-4 py-2 rounded-lg font-label-md text-on-surface-variant">
-              Deactivated
-            </div>
-          )}
-        </div>
-      </div>
+              arrow_back
+            </span>
+            <span>Back to Counselors</span>
+          </Link>
 
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-surface-container-highest mb-6">
-        <h2 className="font-headline-md text-primary mb-4 border-b pb-2">Profile Details</h2>
-        <div className="space-y-4">
-          <div>
-            <h3 className="font-label-md text-on-surface-variant mb-1">Bio</h3>
-            <p className="font-body-md whitespace-pre-wrap">{counselor.bio || "No bio provided."}</p>
-          </div>
-          <div>
-            <h3 className="font-label-md text-on-surface-variant mb-1">Specializations</h3>
-            <div className="flex gap-2 flex-wrap">
-              {counselor.specialization_tags?.length > 0 ? counselor.specialization_tags.map((tag: string) => (
-                <span key={tag} className="bg-surface-container px-3 py-1 rounded-full font-label-sm text-on-surface">{tag}</span>
-              )) : (
-                <span className="font-body-md text-on-surface-variant italic">None specified.</span>
+          {loading ? (
+            <div className="h-64 animate-pulse rounded-2xl border border-border-subtle bg-surface-elevated" />
+          ) : !counselor ? (
+            <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-8 text-center">
+              <p className="text-sm text-text-secondary">
+                Counselor record not found.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-6 sm:p-8 shadow-ambient space-y-6">
+              <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+                <div>
+                  <h1 className="font-serif text-2xl font-medium text-text-primary">
+                    {counselor.user?.full_name || "Counselor"}
+                  </h1>
+                  <p className="mt-1 text-sm text-text-secondary">
+                    {counselor.user?.email}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {!counselor.is_verified && (
+                    <>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={handleApprove}
+                        className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-50"
+                      >
+                        Approve &amp; Verify
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={handleReject}
+                        className="rounded-xl border border-status-danger/30 bg-status-danger-bg px-4 py-2 text-xs font-semibold text-status-danger hover:bg-status-danger hover:text-white disabled:opacity-50"
+                      >
+                        Reject
+                      </button>
+                    </>
+                  )}
+                  {counselor.is_verified && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={handleDeactivate}
+                      className="rounded-xl border border-status-danger/30 bg-status-danger-bg px-4 py-2 text-xs font-semibold text-status-danger hover:bg-status-danger hover:text-white disabled:opacity-50"
+                    >
+                      Deactivate
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <dl className="grid grid-cols-1 gap-4 border-t border-border-subtle pt-5 sm:grid-cols-3">
+                <div>
+                  <dt className="text-xs text-text-muted">Verification</dt>
+                  <dd className="mt-0.5 text-sm font-semibold text-text-primary">
+                    {counselor.is_verified ? "Verified" : "Pending"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-text-muted">Account Status</dt>
+                  <dd className="mt-0.5 text-sm font-semibold text-text-primary">
+                    {counselor.is_active ? "Active" : "Inactive"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-text-muted">Credential File</dt>
+                  <dd className="mt-0.5 text-sm">
+                    {counselor.credentials_url ? (
+                      <a
+                        href={counselor.credentials_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-semibold text-primary hover:underline"
+                      >
+                        View Document
+                      </a>
+                    ) : (
+                      <span className="text-text-muted">Not uploaded</span>
+                    )}
+                  </dd>
+                </div>
+              </dl>
+
+              {counselor.bio && (
+                <div className="border-t border-border-subtle pt-5">
+                  <h2 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                    Bio
+                  </h2>
+                  <p className="mt-2 whitespace-pre-line text-sm text-text-secondary">
+                    {counselor.bio}
+                  </p>
+                </div>
               )}
             </div>
-          </div>
+          )}
         </div>
-      </div>
-
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-surface-container-highest">
-        <h2 className="font-headline-md text-primary mb-4 border-b pb-2">Credentials</h2>
-        {counselor.credentials_url ? (
-          <div>
-            <a 
-              href={counselor.credentials_url} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 bg-secondary-container text-on-secondary-container px-4 py-2 rounded-lg font-label-md hover:opacity-90"
-            >
-              <span className="material-symbols-outlined">description</span>
-              View Credentials Document
-            </a>
-          </div>
-        ) : (
-          <p className="font-body-md text-on-surface-variant italic">No credentials uploaded.</p>
-        )}
-      </div>
-    </DashboardLayout>
+      </DashboardLayout>
+    </ProtectedRoute>
   );
 }

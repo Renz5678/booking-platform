@@ -1,139 +1,201 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import { useToast } from "@/context/ToastContext";
 import { api } from "@/lib/api";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import type { CounselorProfile } from "@/types";
 
-interface AnalyticsData {
-  total_bookings: number;
-  total_revenue: number;
-  status_breakdown: Record<string, number>;
-  completion_rate_percent: number;
-  per_counselor_stats: {
+interface AnalyticsResponse {
+  total_bookings?: number;
+  total_revenue?: number;
+  bookings_by_status?: Record<string, number>;
+  bookings_by_counselor?: Array<{
     counselor_id: string;
-    total_sessions: number;
-    total_revenue: number;
-  }[];
+    counselor_name?: string;
+    count: number;
+    revenue?: number;
+  }>;
 }
 
 export default function AdminAnalyticsPage() {
-  const [data, setData] = useState<AnalyticsData | null>(null);
+  const { toast } = useToast();
+  const [analytics, setAnalytics] = useState<AnalyticsResponse | null>(null);
+  const [counselorNames, setCounselorNames] = useState<Record<string, string>>(
+    {}
+  );
   const [pendingCount, setPendingCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchData = async () => {
+    let active = true;
+    const loadAnalytics = async () => {
       try {
-        const [analyticsRes, pendingRes] = await Promise.all([
-          api.get("/admin/analytics"),
-          api.get("/admin/counselors/pending")
+        const [stats, pending, activeCounselors] = await Promise.all([
+          api.get<AnalyticsResponse>("/admin/analytics"),
+          api.get<CounselorProfile[]>("/admin/counselors/pending"),
+          api.get<CounselorProfile[]>("/admin/counselors?status=active"),
         ]);
-        setData(analyticsRes);
-        setPendingCount(pendingRes?.length || 0);
-      } catch (err) {
-        console.error(err);
+
+        if (!active) return;
+        setAnalytics(stats);
+        setPendingCount(Array.isArray(pending) ? pending.length : 0);
+
+        const map: Record<string, string> = {};
+        if (Array.isArray(activeCounselors)) {
+          activeCounselors.forEach((c) => {
+            if (c.user?.full_name) map[c.id] = c.user.full_name;
+          });
+        }
+        if (Array.isArray(pending)) {
+          pending.forEach((c) => {
+            if (c.user?.full_name) map[c.id] = c.user.full_name;
+          });
+        }
+        setCounselorNames(map);
+      } catch {
+        if (active) toast.error("Unable to load analytics.");
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
-    fetchData();
-  }, []);
+    loadAnalytics();
+    return () => {
+      active = false;
+    };
+  }, [toast]);
 
-  if (loading) {
-    return (
-      <DashboardLayout role="admin" allowedRoles={["admin"]}>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 animate-pulse">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-32 bg-surface-variant rounded-xl"></div>
-          ))}
-        </div>
-        <div className="h-96 bg-surface-variant rounded-xl animate-pulse"></div>
-      </DashboardLayout>
-    );
-  }
+  const statusChartData = useMemo(() => {
+    const byStatus = analytics?.bookings_by_status || {};
+    return Object.entries(byStatus).map(([status, count]) => ({
+      status: status.replace("_", " "),
+      count,
+    }));
+  }, [analytics]);
 
-  const formatCurrency = (amount: number) => {
-    return `₱${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-
-  const chartData = data ? Object.entries(data.status_breakdown).map(([status, count]) => ({
-    status: status.replace("_", " ").toUpperCase(),
-    count
-  })) : [];
+  const counselorChartData = useMemo(() => {
+    return (analytics?.bookings_by_counselor || []).map((item) => ({
+      name:
+        item.counselor_name ||
+        counselorNames[item.counselor_id] ||
+        `Counselor ${item.counselor_id.slice(0, 6)}`,
+      bookings: item.count,
+    }));
+  }, [analytics, counselorNames]);
 
   return (
-    <DashboardLayout role="admin" allowedRoles={["admin"]}>
-      <h1 className="font-headline-xl text-primary mb-2">Platform Analytics</h1>
-      <p className="font-body-lg text-on-surface-variant mb-8">Performance and financial overview of the platform.</p>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-surface-container-highest">
-          <h3 className="font-label-md text-on-surface-variant mb-2">Total Bookings</h3>
-          <p className="font-headline-xl text-primary">{data?.total_bookings || 0}</p>
-        </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-surface-container-highest">
-          <h3 className="font-label-md text-on-surface-variant mb-2">Total Revenue</h3>
-          <p className="font-headline-xl text-primary">{formatCurrency(data?.total_revenue || 0)}</p>
-        </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-surface-container-highest">
-          <h3 className="font-label-md text-on-surface-variant mb-2">Completion Rate</h3>
-          <p className="font-headline-xl text-primary">{data?.completion_rate_percent || 0}%</p>
-        </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-error-container">
-          <h3 className="font-label-md text-on-surface-variant mb-2">Pending Counselors</h3>
-          <p className="font-headline-xl text-error">{pendingCount}</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-surface-container-highest">
-          <h2 className="font-headline-md text-primary mb-6">Booking Status Breakdown</h2>
-          <div className="h-80 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="status" tick={{ fill: 'var(--color-on-surface-variant)' }} tickLine={false} />
-                <YAxis tick={{ fill: 'var(--color-on-surface-variant)' }} tickLine={false} axisLine={false} />
-                <Tooltip 
-                  cursor={{ fill: 'var(--color-surface-container)' }}
-                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
-                />
-                <Bar dataKey="count" fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+    <ProtectedRoute allowedRoles={["admin"]}>
+      <DashboardLayout role="admin">
+        <div className="space-y-8">
+          <div>
+            <h1 className="font-serif text-headline-lg text-text-primary">
+              Platform Analytics
+            </h1>
+            <p className="mt-1 text-sm text-text-secondary">
+              Booking volume, status distribution, and practitioner workload.
+            </p>
           </div>
-        </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-surface-container-highest overflow-hidden">
-          <h2 className="font-headline-md text-primary mb-6">Counselor Performance</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left font-body-md">
-              <thead className="bg-surface-container-lowest border-b border-surface-container-highest">
-                <tr>
-                  <th className="p-3 font-label-md text-on-surface-variant">Counselor ID</th>
-                  <th className="p-3 font-label-md text-on-surface-variant text-right">Sessions</th>
-                  <th className="p-3 font-label-md text-on-surface-variant text-right">Revenue</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data?.per_counselor_stats?.map((stat, idx) => (
-                  <tr key={idx} className="border-b border-surface-container-highest hover:bg-surface-container-lowest">
-                    <td className="p-3 truncate max-w-[150px]" title={stat.counselor_id}>{stat.counselor_id.substring(0,8)}...</td>
-                    <td className="p-3 text-right">{stat.total_sessions}</td>
-                    <td className="p-3 text-right">{formatCurrency(stat.total_revenue)}</td>
-                  </tr>
-                ))}
-                {(!data?.per_counselor_stats || data.per_counselor_stats.length === 0) && (
-                  <tr>
-                    <td colSpan={3} className="p-4 text-center text-on-surface-variant">No data available</td>
-                  </tr>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-5 shadow-ambient">
+              <p className="text-xs font-medium text-text-muted">
+                Total Bookings
+              </p>
+              <p className="mt-2 font-serif text-3xl font-medium text-text-primary tabular-nums">
+                {loading ? "—" : analytics?.total_bookings ?? 0}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-5 shadow-ambient">
+              <p className="text-xs font-medium text-text-muted">
+                Total Revenue
+              </p>
+              <p className="mt-2 font-serif text-3xl font-medium text-primary tabular-nums">
+                {loading
+                  ? "—"
+                  : `₱${Number(analytics?.total_revenue ?? 0).toLocaleString()}`}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-5 shadow-ambient">
+              <p className="text-xs font-medium text-text-muted">
+                Pending Verifications
+              </p>
+              <p className="mt-2 font-serif text-3xl font-medium text-status-warning tabular-nums">
+                {loading ? "—" : pendingCount}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-6 shadow-ambient">
+              <h2 className="font-serif text-lg font-medium text-text-primary">
+                Bookings by Status
+              </h2>
+              <div className="mt-4 h-64">
+                {loading ? (
+                  <div className="h-full animate-pulse rounded-xl bg-surface-muted" />
+                ) : statusChartData.length === 0 ? (
+                  <div className="flex h-full items-center justify-center text-sm text-text-muted">
+                    No status data available yet.
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={statusChartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E1D8" />
+                      <XAxis dataKey="status" tick={{ fontSize: 12 }} />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                      <Tooltip />
+                      <Bar
+                        dataKey="count"
+                        fill="#1E5E4A"
+                        radius={[6, 6, 0, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
                 )}
-              </tbody>
-            </table>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-6 shadow-ambient">
+              <h2 className="font-serif text-lg font-medium text-text-primary">
+                Bookings by Counselor
+              </h2>
+              <div className="mt-4 h-64">
+                {loading ? (
+                  <div className="h-full animate-pulse rounded-xl bg-surface-muted" />
+                ) : counselorChartData.length === 0 ? (
+                  <div className="flex h-full items-center justify-center text-sm text-text-muted">
+                    No counselor booking data yet.
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={counselorChartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E1D8" />
+                      <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                      <Tooltip />
+                      <Bar
+                        dataKey="bookings"
+                        fill="#142534"
+                        radius={[6, 6, 0, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-    </DashboardLayout>
+      </DashboardLayout>
+    </ProtectedRoute>
   );
 }

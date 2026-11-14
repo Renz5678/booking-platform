@@ -1,259 +1,460 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import RescheduleModal from "@/components/dashboard/RescheduleModal";
-import { useAuth } from "@/context/AuthContext";
-import { api, ApiError } from "@/lib/api";
-
-import { Booking } from "@/types";
 import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import RescheduleModal from "@/components/dashboard/RescheduleModal";
+import DashboardLayout from "@/components/layout/DashboardLayout";
+import { useAuth } from "@/context/AuthContext";
+import { useToast } from "@/context/ToastContext";
+import { api, ApiError } from "@/lib/api";
+import { getTimeBasedGreeting } from "@/lib/routes";
+import type { Booking } from "@/types";
 
-export default function ClientDashboardPage() {
-  const { user } = useAuth();
-  const [upcomingBooking, setUpcomingBooking] = useState<Booking | null>(null);
-  const [pastBookings, setPastBookings] = useState<Booking[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [reschedulingBooking, setReschedulingBooking] = useState<Booking | null>(null);
+function formatManilaDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", {
+    timeZone: "Asia/Manila",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
 
-  const firstName = user?.full_name?.split(" ")[0] || "";
-  const calendarConnected = user?.google_calendar_connected || false;
+function formatManilaTimeRange(startIso: string, endIso: string): string {
+  const fmt = (iso: string) =>
+    new Date(iso).toLocaleTimeString("en-US", {
+      timeZone: "Asia/Manila",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  return `${fmt(startIso)} – ${fmt(endIso)} PHT`;
+}
 
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        const bookings: Booking[] = await api.get("/bookings/me");
-        
-        const now = new Date();
-        const upcoming = bookings.filter(b => 
-          (b.status === "confirmed" || b.status === "pending_payment") && 
-          new Date(b.scheduled_start) > now
-        ).sort((a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime());
-        
-        const past = bookings.filter(b => 
-          b.status === "completed" || b.status === "cancelled" || b.status === "no_show" || new Date(b.scheduled_start) <= now
-        ).sort((a, b) => new Date(b.scheduled_start).getTime() - new Date(a.scheduled_start).getTime());
-
-        setUpcomingBooking(upcoming.length > 0 ? upcoming[0] : null);
-        setPastBookings(past);
-      } catch (error) {
-        console.error("Failed to fetch dashboard data:", error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchData();
-  }, []);
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
-    return date.toLocaleDateString('en-US', options);
+function StatusBadge({ status }: { status: Booking["status"] }) {
+  const styles: Record<string, string> = {
+    confirmed: "bg-status-success-bg text-status-success",
+    pending_payment: "bg-status-warning-bg text-status-warning",
+    completed: "bg-primary-light text-primary",
+    cancelled: "bg-status-danger-bg text-status-danger",
+    no_show: "bg-surface-muted text-text-muted",
   };
-
-  const formatDateTime = (dateString: string) => {
-    const date = new Date(dateString);
-    
-    // Check if tomorrow
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const isTomorrow = date.getDate() === tomorrow.getDate() && date.getMonth() === tomorrow.getMonth() && date.getFullYear() === tomorrow.getFullYear();
-    
-    // Check if today
-    const today = new Date();
-    const isToday = date.getDate() === today.getDate() && date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
-    
-    let prefix = "";
-    if (isToday) prefix = "Today, ";
-    else if (isTomorrow) prefix = "Tomorrow, ";
-
-    const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
-    const timeOptions: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' };
-    
-    return `${prefix}${date.toLocaleDateString('en-US', options)} • ${date.toLocaleTimeString('en-US', timeOptions)}`;
-  };
-
-  const calculateStartsIn = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = date.getTime() - now.getTime();
-    
-    if (diffMs <= 0) return "Started";
-    
-    const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-    
-    if (diffHrs > 24) {
-      const diffDays = Math.floor(diffHrs / 24);
-      return `${diffDays}d ${diffHrs % 24}h`;
-    }
-    
-    return `${diffHrs}h ${diffMins}m`;
+  const labels: Record<string, string> = {
+    confirmed: "Confirmed",
+    pending_payment: "Pending Payment",
+    completed: "Completed",
+    cancelled: "Cancelled",
+    no_show: "No Show",
   };
 
   return (
-    <DashboardLayout role="client" allowedRoles={["client"]}>
-      {/* Header */}
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
-        <div>
-          <h1 className="font-headline-xl text-[48px] leading-[56px] font-semibold tracking-tight text-primary mb-2">
-            Good morning{firstName ? `, ${firstName}` : "."}
-          </h1>
-          <p className="font-body-lg text-[18px] text-on-surface-variant">Here is an overview of your therapeutic journey.</p>
-        </div>
-        {/* Google Calendar Connect Button */}
-        {calendarConnected ? (
-          <button disabled className="flex items-center gap-2 px-5 py-2.5 rounded-full border border-[#4FC3AA] bg-[#C3F2DA] text-[#138A72] font-label-md text-[14px] font-medium opacity-80 cursor-not-allowed shrink-0">
-            <span className="material-symbols-outlined text-[18px]">check_circle</span>
-            Connected to Google Calendar
-          </button>
-        ) : (
-          <a href={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/calendar/google/client/login`} className="flex items-center gap-2 px-5 py-2.5 rounded-full border border-tertiary-container text-tertiary-container hover:bg-surface-container-highest transition-colors font-label-md text-[14px] font-medium shrink-0">
-            <span className="material-symbols-outlined text-[18px]">calendar_today</span>
-            Connect Google Calendar
-          </a>
-        )}
-      </header>
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+        styles[status] || "bg-surface-muted text-text-secondary"
+      }`}
+    >
+      {labels[status] || status}
+    </span>
+  );
+}
 
-      {loading ? (
-        <div className="py-12 flex justify-center items-center">
-          <svg className="animate-spin h-8 w-8 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-        </div>
-      ) : (
-        <>
-          {/* Upcoming Session Card */}
-          <section className="mt-8">
-            <h2 className="font-headline-md text-[24px] font-medium text-primary mb-6">Upcoming Session</h2>
-            
-            {upcomingBooking ? (
-              <div className="bg-surface rounded-xl shadow-ambient p-8 flex flex-col md:flex-row gap-8 items-center justify-between">
-                <div className="flex items-center gap-6">
-                  <div className="w-24 h-24 rounded-full bg-surface-container flex items-center justify-center text-primary-container shadow-sm shrink-0">
-                    <span className="material-symbols-outlined text-[40px]">person</span>
-                  </div>
-                  <div>
-                    <h3 className="font-headline-lg text-[32px] font-semibold text-primary">{upcomingBooking.counselor_name}</h3>
-                    <p className="font-body-md text-[16px] text-on-surface-variant flex items-center gap-2 mt-1">
-                      <span className="material-symbols-outlined text-tertiary-container" style={{ fontVariationSettings: "'FILL' 1" }}>event</span>
-                      {formatDateTime(upcomingBooking.scheduled_start)}
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="flex flex-col items-center md:items-end gap-4 w-full md:w-auto">
-                  <div className="bg-surface-container-low px-4 py-2 rounded-lg border border-outline-variant text-center">
-                    <span className="font-label-sm text-[12px] font-semibold tracking-wider text-on-surface-variant block uppercase mb-1">Starts in</span>
-                    <span className="font-headline-md text-[24px] font-bold text-primary">{calculateStartsIn(upcomingBooking.scheduled_start)}</span>
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-                    {upcomingBooking.meeting_link ? (
-                      <a href={upcomingBooking.meeting_link} target="_blank" rel="noopener noreferrer" className="bg-secondary text-center text-on-secondary font-label-md text-[14px] font-medium px-8 py-3 rounded-lg shadow-sm hover:bg-on-secondary-container transition-colors w-full sm:w-auto">
-                        Join Session
-                      </a>
-                    ) : (
-                      <button disabled className="bg-surface-variant text-on-surface-variant font-label-md text-[14px] font-medium px-8 py-3 rounded-lg shadow-sm w-full sm:w-auto opacity-70 cursor-not-allowed">
-                        {upcomingBooking.status === "pending_payment" ? "Pending Payment" : "Link Unavailable"}
-                      </button>
-                    )}
-                    <button onClick={() => setReschedulingBooking(upcomingBooking)} className="text-tertiary-container hover:bg-surface-container-low font-label-md text-[14px] font-medium px-6 py-3 rounded-lg transition-colors border border-transparent hover:border-outline-variant w-full sm:w-auto">
-                      Reschedule
-                    </button>
-                    <button onClick={async () => {
-                      if(confirm("Are you sure you want to cancel this booking?")) {
-                        try {
-                          await api.post(`/bookings/${upcomingBooking.id}/cancel`, {});
-                          alert("Booking cancelled.");
-                          window.location.reload();
-                        } catch (err: unknown) {
-                          alert(`Failed to cancel booking: ${err instanceof ApiError ? err.message : (err as Error).message}`);
-                        }
-                      }
-                    }} className="text-error hover:bg-error-container hover:text-on-error-container font-label-md text-[14px] font-medium px-6 py-3 rounded-lg transition-colors border border-transparent hover:border-error w-full sm:w-auto">
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-surface-container-lowest rounded-xl border border-surface-variant p-10 text-center">
-                <span className="material-symbols-outlined text-[48px] text-on-surface-variant opacity-50 mb-4">calendar_add_on</span>
-                <h3 className="font-headline-sm text-[20px] text-primary mb-2">No upcoming sessions</h3>
-                <p className="text-on-surface-variant mb-6">Ready to continue your journey? Book a session with your counselor.</p>
-                <Link href="/counselors" className="inline-block bg-primary text-on-primary font-label-md px-6 py-3 rounded-lg shadow-sm hover:opacity-90 transition-opacity">
-                  Find a Counselor
-                </Link>
-              </div>
-            )}
-          </section>
+export default function ClientDashboardPage() {
+  const { user } = useAuth();
+  const { toast, confirm } = useToast();
 
-          {/* Past Sessions */}
-          <section className="mt-12">
-            <div className="flex justify-between items-end mb-6">
-              <h2 className="font-headline-md text-[24px] font-medium text-primary">Past Sessions</h2>
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showPastSessions, setShowPastSessions] = useState(false);
+  const [rescheduleTarget, setRescheduleTarget] = useState<Booking | null>(
+    null
+  );
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+
+  const fetchData = useCallback(async () => {
+    try {
+      const data = await api.get<Booking[]>("/bookings/me");
+      if (Array.isArray(data)) {
+        setBookings(data);
+      }
+    } catch {
+      toast.error("Unable to load your bookings right now.");
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const { upcoming, past } = useMemo(() => {
+    const up: Booking[] = [];
+    const old: Booking[] = [];
+    bookings.forEach((b) => {
+      if (b.status === "pending_payment" || b.status === "confirmed") {
+        up.push(b);
+      } else {
+        old.push(b);
+      }
+    });
+    up.sort(
+      (a, b) =>
+        new Date(a.scheduled_start).getTime() -
+        new Date(b.scheduled_start).getTime()
+    );
+    old.sort(
+      (a, b) =>
+        new Date(b.scheduled_start).getTime() -
+        new Date(a.scheduled_start).getTime()
+    );
+    return { upcoming: up, past: old };
+  }, [bookings]);
+
+  const handleCancel = async (booking: Booking) => {
+    const ok = await confirm({
+      title: "Cancel this counseling session?",
+      message: `Are you sure you want to cancel your session with ${
+        booking.counselor_name ||
+        booking.counselor?.user?.full_name ||
+        "your counselor"
+      } on ${formatManilaDate(booking.scheduled_start)}?`,
+      confirmText: "Yes, Cancel Session",
+      cancelText: "Keep Session",
+      variant: "danger",
+    });
+    if (!ok) return;
+
+    setCancellingId(booking.id);
+    try {
+      await api.post(`/bookings/${booking.id}/cancel`);
+      toast.success("Your session has been cancelled.");
+      await fetchData();
+    } catch (err) {
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : "Unable to cancel this booking.";
+      toast.error(msg);
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
+  const firstName = user?.full_name?.split(" ")[0] || "there";
+  const apiBase =
+    process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+
+  return (
+    <ProtectedRoute allowedRoles={["client"]}>
+      <DashboardLayout role="client">
+        <div className="space-y-8">
+          {/* Greeting Header */}
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-primary">
+                Client Workspace
+              </p>
+              <h1 className="mt-1 font-serif text-headline-lg text-text-primary">
+                {getTimeBasedGreeting()}, {firstName}
+              </h1>
+              <p className="mt-1 text-sm text-text-secondary">
+                Manage your upcoming counseling sessions, payment proofs, and
+                calendar sync.
+              </p>
             </div>
-            
-            {pastBookings.length > 0 ? (
-              <div className="bg-surface rounded-xl shadow-ambient overflow-hidden">
-                {pastBookings.slice(0, 3).map((booking, idx) => (
-                  <Link href={`/dashboard/bookings/${booking.id}`} key={booking.id} className={`block p-6 hover:bg-surface-container-low transition-colors ${idx !== pastBookings.slice(0,3).length - 1 ? 'border-b border-surface-variant' : ''}`}>
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                      <div className="flex items-center gap-4">
-                        <div className="bg-surface-container w-12 h-12 rounded-full flex items-center justify-center text-primary-container shrink-0">
-                          <span className="material-symbols-outlined">person</span>
-                        </div>
-                        <div>
-                          <p className="font-label-md text-[14px] font-bold text-primary">{booking.counselor_name}</p>
-                          <p className="font-label-sm text-[12px] text-on-surface-variant">{formatDate(booking.scheduled_start)}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-6 w-full sm:w-auto justify-between sm:justify-end">
-                        {booking.status === "completed" && (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-[12px] font-semibold">
-                            <span className="material-symbols-outlined text-[16px]">check_circle</span> Completed
-                          </span>
-                        )}
-                        {booking.status === "cancelled" && (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-variant text-on-surface-variant font-label-sm text-[12px] font-semibold">
-                            <span className="material-symbols-outlined text-[16px]">cancel</span> Cancelled
-                          </span>
-                        )}
-                        {(booking.status === "pending_payment" || booking.status === "confirmed") && (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-tertiary-container text-on-tertiary-container font-label-sm text-[12px] font-semibold">
-                            <span className="material-symbols-outlined text-[16px]">schedule</span> Past
-                          </span>
-                        )}
-                        <span className={`font-label-md text-[14px] font-medium text-tertiary-container hover:underline flex items-center gap-1 ${booking.status === 'cancelled' ? 'invisible' : ''}`}>
-                          Details <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
-                        </span>
-                      </div>
-                    </div>
-                  </Link>
+            <Link
+              href="/counselors"
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              <span
+                aria-hidden="true"
+                className="material-symbols-outlined text-[18px]"
+              >
+                add
+              </span>
+              <span>Book New Session</span>
+            </Link>
+          </div>
+
+          {/* Upcoming Sessions */}
+          <section aria-labelledby="upcoming-heading" className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2
+                id="upcoming-heading"
+                className="font-serif text-xl font-medium text-text-primary"
+              >
+                Upcoming Sessions ({upcoming.length})
+              </h2>
+            </div>
+
+            {loading ? (
+              <div className="space-y-3">
+                {[1, 2].map((n) => (
+                  <div
+                    key={n}
+                    className="h-36 animate-pulse rounded-2xl border border-border-subtle bg-surface-elevated"
+                  />
                 ))}
               </div>
+            ) : upcoming.length === 0 ? (
+              <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-8 text-center shadow-ambient">
+                <span
+                  aria-hidden="true"
+                  className="material-symbols-outlined text-4xl text-primary/50"
+                >
+                  event_available
+                </span>
+                <h3 className="mt-3 font-serif text-xl font-medium text-text-primary">
+                  No upcoming sessions scheduled
+                </h3>
+                <p className="mx-auto mt-1.5 max-w-md text-sm text-text-secondary">
+                  When you&apos;re ready, browse our verified counselors to
+                  schedule a confidential 1-on-1 session.
+                </p>
+                <Link
+                  href="/counselors"
+                  className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <span>Browse Counselors</span>
+                </Link>
+              </div>
             ) : (
-              <div className="bg-surface-container-lowest rounded-xl border border-surface-variant p-8 text-center text-on-surface-variant">
-                You don't have any past sessions yet.
+              <div className="space-y-4">
+                {upcoming.map((b) => {
+                  const counselorName =
+                    b.counselor_name ||
+                    b.counselor?.user?.full_name ||
+                    "Licensed Counselor";
+                  const needsProof =
+                    b.status === "pending_payment" && !b.payment?.proof_url;
+
+                  return (
+                    <div
+                      key={b.id}
+                      className="rounded-2xl border border-border-subtle bg-surface-elevated p-5 sm:p-6 shadow-ambient transition-shadow hover:shadow-ambient-hover"
+                    >
+                      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+                        <div className="space-y-1.5">
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            <h3 className="text-base font-semibold text-text-primary">
+                              Session with {counselorName}
+                            </h3>
+                            <StatusBadge status={b.status} />
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-text-secondary tabular-nums">
+                            <span className="inline-flex items-center gap-1.5">
+                              <span
+                                aria-hidden="true"
+                                className="material-symbols-outlined text-[16px] text-primary"
+                              >
+                                calendar_today
+                              </span>
+                              {formatManilaDate(b.scheduled_start)}
+                            </span>
+                            <span className="inline-flex items-center gap-1.5">
+                              <span
+                                aria-hidden="true"
+                                className="material-symbols-outlined text-[16px] text-primary"
+                              >
+                                schedule
+                              </span>
+                              {formatManilaTimeRange(
+                                b.scheduled_start,
+                                b.scheduled_end
+                              )}
+                            </span>
+                            {b.payment?.amount != null && (
+                              <span className="font-medium text-text-primary">
+                                &#8369;
+                                {Number(b.payment.amount).toLocaleString()}
+                              </span>
+                            )}
+                          </div>
+
+                          {needsProof && (
+                            <p className="text-xs font-medium text-status-warning">
+                              Action needed: Upload your payment proof so your
+                              counselor can confirm this slot.
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2.5">
+                          {b.status === "confirmed" && b.meeting_link && (
+                            <a
+                              href={b.meeting_link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                            >
+                              <span
+                                aria-hidden="true"
+                                className="material-symbols-outlined text-[16px]"
+                              >
+                                videocam
+                              </span>
+                              <span>Join Google Meet</span>
+                            </a>
+                          )}
+
+                          <Link
+                            href={`/dashboard/bookings/${b.id}`}
+                            className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                              needsProof
+                                ? "bg-primary text-white hover:bg-primary-hover"
+                                : "border border-border-subtle bg-background text-text-primary hover:bg-surface-muted"
+                            }`}
+                          >
+                            <span>
+                              {needsProof
+                                ? "Submit Payment Proof"
+                                : "View Details"}
+                            </span>
+                          </Link>
+
+                          <button
+                            type="button"
+                            onClick={() => setRescheduleTarget(b)}
+                            className="rounded-xl border border-border-subtle bg-background px-3.5 py-2 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                          >
+                            Reschedule
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={cancellingId === b.id}
+                            onClick={() => handleCancel(b)}
+                            className="rounded-xl border border-status-danger/30 bg-status-danger-bg px-3.5 py-2 text-xs font-semibold text-status-danger transition-colors hover:bg-status-danger hover:text-white disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-danger"
+                          >
+                            {cancellingId === b.id ? "Cancelling…" : "Cancel"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </section>
-        </>
-      )}
 
-      {reschedulingBooking && (
-        <RescheduleModal
-          booking={reschedulingBooking}
-          onClose={() => setReschedulingBooking(null)}
-          onSuccess={() => {
-            setReschedulingBooking(null);
-            window.location.reload(); // Simple refetch
-          }}
-        />
-      )}
-    </DashboardLayout>
+          {/* Past Sessions (Expandable) */}
+          {past.length > 0 && (
+            <section className="rounded-2xl border border-border-subtle bg-surface-elevated p-5 shadow-ambient">
+              <button
+                type="button"
+                aria-expanded={showPastSessions}
+                onClick={() => setShowPastSessions((prev) => !prev)}
+                className="flex w-full items-center justify-between text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-lg"
+              >
+                <div>
+                  <h2 className="font-serif text-lg font-medium text-text-primary">
+                    Past &amp; Cancelled Sessions ({past.length})
+                  </h2>
+                  <p className="text-xs text-text-muted">
+                    View your session history and receipts.
+                  </p>
+                </div>
+                <span
+                  aria-hidden="true"
+                  className={`material-symbols-outlined text-text-muted transition-transform ${
+                    showPastSessions ? "rotate-180" : ""
+                  }`}
+                >
+                  expand_more
+                </span>
+              </button>
 
+              {showPastSessions && (
+                <div className="mt-4 divide-y divide-border-subtle border-t border-border-subtle pt-2">
+                  {past.map((b) => (
+                    <div
+                      key={b.id}
+                      className="flex flex-col justify-between gap-2 py-3 sm:flex-row sm:items-center"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-text-primary">
+                          {b.counselor_name ||
+                            b.counselor?.user?.full_name ||
+                            "Counselor"}
+                        </p>
+                        <p className="text-xs text-text-secondary tabular-nums">
+                          {formatManilaDate(b.scheduled_start)} &bull;{" "}
+                          {formatManilaTimeRange(
+                            b.scheduled_start,
+                            b.scheduled_end
+                          )}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <StatusBadge status={b.status} />
+                        <Link
+                          href={`/dashboard/bookings/${b.id}`}
+                          className="text-xs font-semibold text-primary hover:underline"
+                        >
+                          Details
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* Google Calendar Sync Card */}
+          <section className="rounded-2xl border border-border-subtle bg-surface-elevated p-6 shadow-ambient">
+            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+              <div className="flex items-start gap-3.5">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary">
+                  <span
+                    aria-hidden="true"
+                    className="material-symbols-outlined text-[20px]"
+                  >
+                    event
+                  </span>
+                </div>
+                <div>
+                  <h2 className="text-sm font-semibold text-text-primary">
+                    Google Calendar Sync
+                  </h2>
+                  <p className="mt-0.5 text-xs text-text-secondary">
+                    {user?.google_calendar_connected
+                      ? "Your Google Calendar is connected. Confirmed sessions appear automatically."
+                      : "Connect Google Calendar to automatically add confirmed counseling sessions."}
+                  </p>
+                </div>
+              </div>
+              {user?.google_calendar_connected ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-status-success-bg px-3 py-1 text-xs font-semibold text-status-success">
+                  <span
+                    aria-hidden="true"
+                    className="material-symbols-outlined text-[15px]"
+                  >
+                    check_circle
+                  </span>
+                  Connected
+                </span>
+              ) : (
+                <a
+                  href={`${apiBase}/auth/google/login`}
+                  className="inline-flex shrink-0 items-center justify-center rounded-xl border border-border-subtle bg-background px-4 py-2 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  Connect Google Calendar
+                </a>
+              )}
+            </div>
+          </section>
+        </div>
+
+        {rescheduleTarget && (
+          <RescheduleModal
+            booking={rescheduleTarget}
+            onClose={() => setRescheduleTarget(null)}
+            onSuccess={fetchData}
+          />
+        )}
+      </DashboardLayout>
+    </ProtectedRoute>
   );
 }

@@ -1,223 +1,263 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/context/AuthContext";
+import { useToast } from "@/context/ToastContext";
 import { api } from "@/lib/api";
+import { getTimeBasedGreeting } from "@/lib/routes";
+import type { Booking } from "@/types";
 
-interface Booking {
-  id: string;
-  client_name: string;
-  scheduled_start: string;
-  scheduled_end: string;
-  status: string;
-  meeting_link?: string;
+function formatManilaDateTime(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", {
+    timeZone: "Asia/Manila",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 export default function CounselorDashboardPage() {
   const { user } = useAuth();
-  const [sessionsThisWeek, setSessionsThisWeek] = useState(0);
-  const [newBookings, setNewBookings] = useState(0);
-  const [todaysBookings, setTodaysBookings] = useState<Booking[]>([]);
+  const { toast } = useToast();
+  const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const names = user?.full_name?.split(" ");
-  const lastName = names && names.length > 1 ? names[names.length - 1] : user?.full_name || "";
-  const isActive = Boolean((user as { is_active?: boolean } | null)?.is_active);
-
   useEffect(() => {
-    async function fetchData() {
+    let active = true;
+    const loadBookings = async () => {
       try {
-        const bookings: Booking[] = await api.get("/bookings/counselor/me");
-          
-          const now = new Date();
-          const startOfWeek = new Date(now);
-          startOfWeek.setDate(now.getDate() - now.getDay()); // Sunday
-          const endOfWeek = new Date(now);
-          endOfWeek.setDate(now.getDate() + (6 - now.getDay())); // Saturday
-          endOfWeek.setHours(23, 59, 59, 999);
-          
-          const startOfDay = new Date(now);
-          startOfDay.setHours(0, 0, 0, 0);
-          const endOfDay = new Date(now);
-          endOfDay.setHours(23, 59, 59, 999);
-
-          const weekSessions = bookings.filter(b => {
-            const d = new Date(b.scheduled_start);
-            return d >= startOfWeek && d <= endOfWeek && (b.status === "confirmed" || b.status === "completed" || b.status === "pending_payment");
-          });
-          
-          const newB = bookings.filter(b => b.status === "pending_payment" || b.status === "confirmed");
-          
-          const todaySessions = bookings.filter(b => {
-            const d = new Date(b.scheduled_start);
-            return d >= startOfDay && d <= endOfDay && (b.status === "confirmed" || b.status === "pending_payment" || b.status === "completed");
-          }).sort((a, b) => new Date(a.scheduled_start).getTime() - new Date(b.scheduled_start).getTime());
-
-          setSessionsThisWeek(weekSessions.length);
-          setNewBookings(newB.length);
-          setTodaysBookings(todaySessions);
-      } catch (error) {
-        console.error("Failed to fetch dashboard data:", error);
+        const data = await api.get<Booking[]>("/bookings/counselor/me");
+        if (active && Array.isArray(data)) {
+          setBookings(data);
+        }
+      } catch {
+        if (active) toast.error("Unable to load your counselor schedule.");
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
-    }
+    };
+    loadBookings();
+    return () => {
+      active = false;
+    };
+  }, [toast]);
 
-    fetchData();
-  }, []);
+  const { pendingVerification, upcomingConfirmed, completedCount } =
+    useMemo(() => {
+      const pending = bookings.filter((b) => b.status === "pending_payment");
+      const confirmed = bookings
+        .filter((b) => b.status === "confirmed")
+        .sort(
+          (a, b) =>
+            new Date(a.scheduled_start).getTime() -
+            new Date(b.scheduled_start).getTime()
+        );
+      const completed = bookings.filter((b) => b.status === "completed").length;
+      return {
+        pendingVerification: pending,
+        upcomingConfirmed: confirmed,
+        completedCount: completed,
+      };
+    }, [bookings]);
 
-  const formatTimeRange = (start: string, end: string) => {
-    const s = new Date(start);
-    const e = new Date(end);
-    const options: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' };
-    return `${s.toLocaleTimeString('en-US', options)} - ${e.toLocaleTimeString('en-US', options)}`;
-  };
-
-  const getInitials = (name: string) => {
-    if (!name) return "?";
-    return name.split(" ").map(n => n[0]).join("").toUpperCase().substring(0, 2);
-  };
+  const displayName = user?.full_name || "Counselor";
 
   return (
-    <DashboardLayout role="counselor" allowedRoles={["counselor"]}>
-      {loading ? (
-        <div className="py-12 flex justify-center items-center">
-          <svg className="animate-spin h-8 w-8 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-        </div>
-      ) : (
-        <>
-          {/* Welcome Header & Banner */}
-          <header className="space-y-6">
+    <ProtectedRoute allowedRoles={["counselor"]}>
+      <DashboardLayout role="counselor">
+        <div className="space-y-8">
+          {/* Header */}
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
             <div>
-              <h1 className="font-headline-lg-mobile md:font-headline-lg text-[28px] md:text-[32px] font-semibold tracking-tight text-primary">
-                Good morning{lastName ? `, Dr. ${lastName}` : "."}
+              <p className="text-xs font-semibold uppercase tracking-wider text-primary">
+                Practitioner Workspace
+              </p>
+              <h1 className="mt-1 font-serif text-headline-lg text-text-primary">
+                {getTimeBasedGreeting()}, {displayName}
               </h1>
-              <p className="font-body-md text-[16px] text-on-surface-variant mt-2">Here's an overview of your practice today.</p>
-            </div>
-            
-            {/* Status Banner */}
-            <div className={`rounded-lg p-4 flex items-center gap-3 border shadow-sm ${isActive ? 'bg-[#C3F2DA] border-[#4FC3AA]' : 'bg-surface-variant border-outline-variant'}`}>
-              <div className={`${isActive ? 'bg-secondary text-on-secondary' : 'bg-on-surface-variant text-surface'} rounded-full p-1.5 flex items-center justify-center shrink-0`}>
-                <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>
-                  {isActive ? 'check_circle' : 'info'}
-                </span>
-              </div>
-              <p className={`font-label-md text-[14px] font-medium ${isActive ? 'text-tertiary' : 'text-on-surface-variant'}`}>
-                {isActive ? 'Your profile is currently active and visible to new clients.' : 'Your profile is pending admin verification or inactive.'}
+              <p className="mt-1 text-sm text-text-secondary">
+                Review incoming payment proofs, upcoming sessions, and your
+                weekly availability.
               </p>
             </div>
-          </header>
+            <div className="flex flex-wrap gap-2.5">
+              <Link
+                href="/counselor/availability"
+                className="rounded-xl border border-border-subtle bg-surface-elevated px-4 py-2 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                Manage Availability
+              </Link>
+              <Link
+                href="/counselor/profile"
+                className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                Edit Profile
+              </Link>
+            </div>
+          </div>
 
-          {/* Snapshot Row (Bento Grid Style) */}
-          <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-            {/* Card 1 */}
-            <Link href="/counselor/bookings" className="bg-surface-container-lowest rounded-xl shadow-ambient p-6 flex flex-col justify-between group hover:-translate-y-1 transition-transform duration-300 border border-white">
-              <div className="flex items-start justify-between mb-4">
-                <div className="bg-surface-container-low p-3 rounded-lg text-primary">
-                  <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>groups</span>
-                </div>
-                <span className="material-symbols-outlined text-outline-variant group-hover:text-primary transition-colors">arrow_outward</span>
-              </div>
-              <div>
-                <h3 className="font-headline-lg text-[32px] font-semibold text-primary mb-1">{sessionsThisWeek}</h3>
-                <p className="font-label-md text-[14px] font-medium text-on-surface-variant">Sessions This Week</p>
-              </div>
-            </Link>
+          {/* Pending Account Notice if inactive */}
+          {user && user.is_active === false && (
+            <div className="rounded-2xl border border-status-warning/30 bg-status-warning-bg p-4 text-sm text-status-warning">
+              Your counselor profile is currently pending admin verification.
+              Make sure your PRC credentials and bio are complete in{" "}
+              <Link href="/counselor/profile" className="font-semibold underline">
+                Profile Setup
+              </Link>
+              .
+            </div>
+          )}
 
-            {/* Card 2 */}
-            <Link href="/counselor/bookings" className="bg-surface-container-lowest rounded-xl shadow-ambient p-6 flex flex-col justify-between group hover:-translate-y-1 transition-transform duration-300 border border-white">
-              <div className="flex items-start justify-between mb-4">
-                <div className="bg-surface-container-low p-3 rounded-lg text-primary">
-                  <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>edit_document</span>
-                </div>
-                <span className="material-symbols-outlined text-outline-variant group-hover:text-primary transition-colors">arrow_outward</span>
-              </div>
-              <div>
-                <h3 className="font-headline-lg text-[32px] font-semibold text-primary mb-1">0</h3>
-                <p className="font-label-md text-[14px] font-medium text-on-surface-variant">Pending Notes</p>
-              </div>
-            </Link>
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-5 shadow-ambient">
+              <p className="text-xs font-medium text-text-muted">
+                Needs Payment Verification
+              </p>
+              <p className="mt-2 font-serif text-3xl font-medium text-status-warning tabular-nums">
+                {loading ? "—" : pendingVerification.length}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-5 shadow-ambient">
+              <p className="text-xs font-medium text-text-muted">
+                Confirmed Upcoming
+              </p>
+              <p className="mt-2 font-serif text-3xl font-medium text-primary tabular-nums">
+                {loading ? "—" : upcomingConfirmed.length}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-5 shadow-ambient">
+              <p className="text-xs font-medium text-text-muted">
+                Completed Sessions
+              </p>
+              <p className="mt-2 font-serif text-3xl font-medium text-text-primary tabular-nums">
+                {loading ? "—" : completedCount}
+              </p>
+            </div>
+          </div>
 
-            {/* Card 3 */}
-            <Link href="/counselor/bookings" className="bg-surface-container-lowest rounded-xl shadow-ambient p-6 flex flex-col justify-between group hover:-translate-y-1 transition-transform duration-300 border border-white">
-              <div className="flex items-start justify-between mb-4">
-                <div className="bg-secondary-container p-3 rounded-lg text-on-secondary-container">
-                  <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>notification_add</span>
-                </div>
-                <span className="material-symbols-outlined text-outline-variant group-hover:text-primary transition-colors">arrow_outward</span>
+          {/* Needs Verification List */}
+          {pendingVerification.length > 0 && (
+            <section className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="font-serif text-xl font-medium text-text-primary">
+                  Pending Payment Verification ({pendingVerification.length})
+                </h2>
+                <Link
+                  href="/counselor/bookings"
+                  className="text-xs font-semibold text-primary hover:underline"
+                >
+                  View all bookings
+                </Link>
               </div>
-              <div>
-                <h3 className="font-headline-lg text-[32px] font-semibold text-primary mb-1">{newBookings}</h3>
-                <p className="font-label-md text-[14px] font-medium text-on-surface-variant">Active Bookings</p>
+              <div className="space-y-3">
+                {pendingVerification.map((b) => {
+                  const clientName =
+                    b.client_name || b.client?.full_name || "Client";
+                  return (
+                    <div
+                      key={b.id}
+                      className="flex flex-col justify-between gap-3 rounded-2xl border border-status-warning/30 bg-surface-elevated p-5 shadow-ambient sm:flex-row sm:items-center"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-text-primary">
+                          {clientName}
+                        </p>
+                        <p className="mt-0.5 text-xs text-text-secondary tabular-nums">
+                          {formatManilaDateTime(b.scheduled_start)} PHT
+                          {b.payment?.amount != null &&
+                            ` • ₱${Number(b.payment.amount).toLocaleString()}`}
+                        </p>
+                        <p className="mt-1 text-xs font-medium text-text-muted">
+                          {b.payment?.proof_url
+                            ? "Payment proof uploaded — ready for review"
+                            : "Waiting for client to upload payment proof"}
+                        </p>
+                      </div>
+                      <Link
+                        href={`/counselor/bookings/${b.id}`}
+                        className="inline-flex shrink-0 items-center justify-center rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-hover"
+                      >
+                        Review Booking
+                      </Link>
+                    </div>
+                  );
+                })}
               </div>
-            </Link>
-          </section>
+            </section>
+          )}
 
-          {/* Today's Schedule */}
-          <section className="bg-surface-container-lowest rounded-xl shadow-ambient p-6 md:p-8 border border-white mt-8">
-            <div className="flex items-center justify-between mb-6 pb-4 border-b border-surface-container">
-              <h2 className="font-headline-md text-[24px] font-medium text-primary flex items-center gap-2">
-                <span className="material-symbols-outlined text-secondary">today</span>
-                Today's Schedule
+          {/* Upcoming Confirmed Sessions */}
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="font-serif text-xl font-medium text-text-primary">
+                Upcoming Confirmed Sessions
               </h2>
-              <Link href="/counselor/availability" className="font-label-sm text-[12px] font-semibold tracking-wider text-secondary hover:underline">View Full Calendar</Link>
+              <Link
+                href="/counselor/bookings"
+                className="text-xs font-semibold text-primary hover:underline"
+              >
+                All bookings
+              </Link>
             </div>
 
-            <div className="space-y-4">
-              {todaysBookings.length > 0 ? (
-                todaysBookings.map((booking, idx) => {
-                  const isNextUp = idx === 0 && new Date(booking.scheduled_start) > new Date();
-                  
+            {loading ? (
+              <div className="h-32 animate-pulse rounded-2xl border border-border-subtle bg-surface-elevated" />
+            ) : upcomingConfirmed.length === 0 ? (
+              <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-8 text-center shadow-ambient">
+                <p className="text-sm text-text-secondary">
+                  No confirmed upcoming sessions right now.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {upcomingConfirmed.slice(0, 5).map((b) => {
+                  const clientName =
+                    b.client_name || b.client?.full_name || "Client";
                   return (
-                    <div key={booking.id} className={`${isNextUp ? 'bg-surface-bright border-surface-container-high relative overflow-hidden group' : 'bg-surface border-transparent hover:border-surface-container-highest transition-colors'} border rounded-xl p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4`}>
-                      {isNextUp && <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-secondary"></div>}
-                      
-                      <div className={`flex items-center gap-4 ${isNextUp ? 'pl-2' : 'pl-3.5'}`}>
-                        <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${isNextUp ? 'bg-surface-container' : 'bg-surface-container-high text-on-surface-variant font-headline-md text-[24px] font-medium'}`}>
-                          {isNextUp ? (
-                            <span className="material-symbols-outlined text-on-surface-variant">person</span>
-                          ) : (
-                            getInitials(booking.client_name)
-                          )}
-                        </div>
-                        <div>
-                          <h4 className="font-label-md text-[14px] font-bold text-primary">{booking.client_name}</h4>
-                          <div className="flex items-center gap-3 mt-1 font-label-sm text-[12px] font-semibold tracking-wider text-on-surface-variant">
-                            <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">schedule</span> {formatTimeRange(booking.scheduled_start, booking.scheduled_end)}</span>
-                            <span className="w-1 h-1 rounded-full bg-outline-variant"></span>
-                            <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">videocam</span> Video Call</span>
-                          </div>
-                        </div>
+                    <div
+                      key={b.id}
+                      className="flex flex-col justify-between gap-3 rounded-2xl border border-border-subtle bg-surface-elevated p-5 shadow-ambient sm:flex-row sm:items-center"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-text-primary">
+                          {clientName}
+                        </p>
+                        <p className="mt-0.5 text-xs text-text-secondary tabular-nums">
+                          {formatManilaDateTime(b.scheduled_start)} PHT
+                        </p>
                       </div>
-                      
-                      <div className="flex items-center gap-3">
-                        {isNextUp && <span className="bg-secondary-container text-on-secondary-container px-2 py-1 rounded font-label-sm text-[12px] font-semibold tracking-wider mr-2 hidden md:inline-block">Next Up</span>}
-                        {booking.meeting_link && booking.status !== "completed" ? (
-                          <a href={booking.meeting_link} target="_blank" rel="noopener noreferrer" className={`${isNextUp ? 'bg-secondary text-on-secondary hover:opacity-90 shadow-sm' : 'text-primary border border-outline-variant hover:bg-surface-container-low transition-colors'} text-center font-label-md text-[14px] font-medium px-6 py-2.5 rounded-lg w-full md:w-auto block`}>
-                            Join Session
+                      <div className="flex items-center gap-2.5">
+                        {b.meeting_link && (
+                          <a
+                            href={b.meeting_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-hover"
+                          >
+                            Join Meet
                           </a>
-                        ) : (
-                          <Link href={`/counselor/bookings/${booking.id}`} className="text-center text-primary border border-outline-variant font-label-md text-[14px] font-medium px-4 py-2 rounded-lg hover:bg-surface-container-low transition-colors w-full md:w-auto block">Review Intake</Link>
                         )}
+                        <Link
+                          href={`/counselor/bookings/${b.id}`}
+                          className="rounded-xl border border-border-subtle bg-background px-4 py-2 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-muted"
+                        >
+                          Details
+                        </Link>
                       </div>
                     </div>
                   );
-                })
-              ) : (
-                <div className="text-center py-8 text-on-surface-variant">
-                  <span className="material-symbols-outlined text-[48px] opacity-50 mb-2">event_busy</span>
-                  <p>You have no sessions scheduled for today.</p>
-                </div>
-              )}
-            </div>
+                })}
+              </div>
+            )}
           </section>
-        </>
-      )}
-    </DashboardLayout>
+        </div>
+      </DashboardLayout>
+    </ProtectedRoute>
   );
 }

@@ -1,227 +1,326 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { FormEvent, Suspense, useState } from "react";
+import { useToast } from "@/context/ToastContext";
 import { api, ApiError } from "@/lib/api";
 
-export default function SignupPage() {
+function SignupForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { toast } = useToast();
+
+  const rawRedirect = searchParams.get("redirect");
+  const safeRedirect =
+    rawRedirect && rawRedirect.startsWith("/") && !rawRedirect.startsWith("//")
+      ? rawRedirect
+      : null;
+
+  const [step, setStep] = useState<"register" | "verify">("register");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [otp, setOtp] = useState("");
-  const [otpError, setOtpError] = useState("");
-  const [verifying, setVerifying] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleVerifyOtp = async (e: React.FormEvent) => {
+  const handleRegister = async (e: FormEvent) => {
     e.preventDefault();
-    setOtpError("");
-    setVerifying(true);
+    setError(null);
 
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters long.");
+      return;
+    }
+
+    setIsLoading(true);
     try {
-      await api.post("/auth/verify-otp", { email, otp });
-      router.push("/login?verified=true");
-    } catch (err: unknown) {
+      await api.post("/auth/signup", {
+        full_name: fullName.trim(),
+        email: email.trim(),
+        password,
+        captcha_token: "mock_captcha_token",
+      });
+      toast.info("We sent a 6-digit verification code to your email.");
+      setStep("verify");
+    } catch (err) {
       if (err instanceof ApiError) {
-        setOtpError(err.message);
+        setError(err.message || "Unable to create your account.");
       } else {
-        setOtpError((err as Error).message);
+        setError("An unexpected error occurred. Please try again.");
       }
     } finally {
-      setVerifying(false);
+      setIsLoading(false);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleVerifyOtp = async (e: FormEvent) => {
     e.preventDefault();
-    setError("");
-    setLoading(true);
+    setError(null);
+    setIsLoading(true);
 
     try {
-      await api.post("/auth/signup", {
-        full_name: fullName, 
-        email, 
-        password,
-        captcha_token: "mock_captcha_token" // Backend expects a captcha token in MVP
+      await api.post("/auth/verify-otp", {
+        email: email.trim(),
+        otp_code: otp.trim(),
       });
-
-      setSuccess(true);
-    } catch (err: unknown) {
+      toast.success("Email verified! You can now sign in.");
+      const loginUrl = safeRedirect
+        ? `/login?verified=true&redirect=${encodeURIComponent(safeRedirect)}`
+        : "/login?verified=true";
+      router.push(loginUrl);
+    } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.message);
+        setError(err.message || "Invalid or expired verification code.");
       } else {
-        setError((err as Error).message);
+        setError("Unable to verify code right now.");
       }
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="bg-surface font-sans text-on-surface min-h-screen flex items-center justify-center relative overflow-hidden">
-      {/* Decorative background elements */}
-      <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-[-20%] left-[-10%] w-[70vw] h-[70vw] rounded-full bg-tertiary-fixed/20 blur-[100px]"></div>
-        <div className="absolute bottom-[-20%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-secondary-fixed/10 blur-[80px]"></div>
+    <div className="rounded-3xl border border-border-subtle bg-surface-elevated p-7 sm:p-9 shadow-ambient">
+      <div className="text-center">
+        <Link
+          href="/"
+          className="inline-block font-serif text-3xl font-medium tracking-tight text-primary transition-colors hover:text-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+        >
+          Alaga
+        </Link>
+        <h1 className="mt-3 font-serif text-2xl font-medium text-text-primary">
+          {step === "register" ? "Create your account" : "Verify your email"}
+        </h1>
+        <p className="mt-1.5 text-sm text-text-secondary">
+          {step === "register"
+            ? "Join Alaga to view live counselor availability and book private sessions."
+            : `Enter the 6-digit code sent to ${email}.`}
+        </p>
       </div>
-      
-      <main className="w-full max-w-[420px] px-4 z-10">
-        <div className="bg-surface-container-lowest rounded-xl shadow-ambient p-8 md:p-10 w-full relative">
-          <div className="text-center mb-8">
-            <h1 className="font-headline-lg text-[32px] leading-[40px] font-bold tracking-tight text-primary">Alaga</h1>
-            <p className="text-[16px] leading-[24px] text-on-surface-variant mt-2">Create your account to get started</p>
-          </div>
 
-          {/* Toggle Container */}
-          <div className="relative flex w-full bg-surface-container-low rounded-lg p-1 mb-8" role="tablist">
-            <div 
-              className="absolute top-1 left-1 bottom-1 w-[calc(50%-4px)] bg-surface-container-lowest shadow-sm rounded-md transition-transform duration-300 ease-in-out"
-              style={{ transform: "translateX(100%)" }}
-            ></div>
-            <Link 
-              href="/login"
-              className="flex-1 relative z-10 py-2 text-center text-[14px] font-medium text-on-surface-variant transition-colors" 
-              role="tab"
-            >
-              Log In
-            </Link>
-            <Link 
-              href="/signup"
-              className="flex-1 relative z-10 py-2 text-center text-[14px] font-medium text-primary transition-colors" 
-              role="tab"
-            >
-              Sign Up
-            </Link>
-          </div>
-
-          {success ? (
-            <div className="text-center py-6">
-              <span className="material-symbols-outlined text-[48px] text-on-tertiary-container mb-4">mark_email_read</span>
-              <h2 className="text-[20px] font-semibold text-primary mb-2">Check your email</h2>
-              <p className="text-on-surface-variant mb-6">We've sent a 6-digit code to <strong>{email}</strong>. Please enter it below.</p>
-              
-              <form onSubmit={handleVerifyOtp} className="space-y-5 text-left">
-                {otpError && (
-                  <div className="bg-error-container text-on-error-container p-3 rounded-lg text-sm text-center">
-                    {otpError}
-                  </div>
-                )}
-                <div>
-                  <label className="block text-[12px] font-semibold tracking-wider text-on-surface-variant mb-1 ml-1 text-center" htmlFor="otp">6-Digit Code</label>
-                  <input 
-                    id="otp" 
-                    type="text"
-                    maxLength={6}
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                    className="w-full max-w-[200px] mx-auto block bg-surface-container-lowest border border-tertiary-fixed rounded-lg px-4 py-3 text-[24px] tracking-[0.5em] text-center text-on-surface focus:outline-none focus:border-on-tertiary-container focus:ring-1 focus:ring-on-tertiary-container transition-all" 
-                    placeholder="------" 
-                    required 
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={verifying || otp.length !== 6}
-                  className="w-full bg-primary text-on-primary font-label-md py-3 rounded-lg hover:opacity-90 active:scale-[0.98] transition-all duration-200 flex justify-center items-center shadow-sm disabled:opacity-70 disabled:active:scale-100 mt-4"
-                >
-                  {verifying ? (
-                    <div className="flex items-center gap-2">
-                      <svg className="animate-spin h-5 w-5 text-on-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Verifying...
-                    </div>
-                  ) : "Verify Account"}
-                </button>
-              </form>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-5">
-              {error && (
-                <div className="bg-error-container text-on-error-container p-3 rounded-lg text-sm">
-                  {error}
-                </div>
-              )}
-              
-              <div>
-                <label className="block text-[12px] font-semibold tracking-wider text-on-surface-variant mb-1 ml-1" htmlFor="fullName">Full Name</label>
-                <div className="relative">
-                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline">person</span>
-                  <input 
-                    id="fullName" 
-                    type="text"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className="w-full bg-surface-container-lowest border border-tertiary-fixed rounded-lg pl-10 pr-4 py-3 text-[16px] text-on-surface focus:outline-none focus:border-on-tertiary-container focus:ring-1 focus:ring-on-tertiary-container transition-all" 
-                    placeholder="Juan Dela Cruz" 
-                    required 
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[12px] font-semibold tracking-wider text-on-surface-variant mb-1 ml-1" htmlFor="email">Email Address</label>
-                <div className="relative">
-                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline">mail</span>
-                  <input 
-                    id="email" 
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-surface-container-lowest border border-tertiary-fixed rounded-lg pl-10 pr-4 py-3 text-[16px] text-on-surface focus:outline-none focus:border-on-tertiary-container focus:ring-1 focus:ring-on-tertiary-container transition-all" 
-                    placeholder="you@example.com" 
-                    required 
-                  />
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-[12px] font-semibold tracking-wider text-on-surface-variant mb-1 ml-1" htmlFor="password">Password</label>
-                <div className="relative">
-                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline">lock</span>
-                  <input 
-                    id="password" 
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-surface-container-lowest border border-tertiary-fixed rounded-lg pl-10 pr-4 py-3 text-[16px] text-on-surface focus:outline-none focus:border-on-tertiary-container focus:ring-1 focus:ring-on-tertiary-container transition-all" 
-                    placeholder="••••••••" 
-                    required 
-                  />
-                </div>
-              </div>
-
-              <div className="bg-surface-container rounded-lg p-3 flex items-start gap-3">
-                <span className="material-symbols-outlined text-on-surface-variant text-[20px]">info</span>
-                <p className="text-[16px] text-on-surface text-sm">Email verification required to activate your account and book sessions.</p>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-secondary text-on-secondary font-label-md py-3 rounded-lg hover:opacity-90 active:scale-[0.98] transition-all duration-200 flex justify-center items-center shadow-sm disabled:opacity-70 disabled:active:scale-100"
-              >
-                {loading ? (
-                  <div className="flex items-center gap-2">
-                    <svg className="animate-spin h-5 w-5 text-on-secondary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Creating account...
-                  </div>
-                ) : (
-                  "Sign Up"
-                )}
-              </button>
-            </form>
-          )}
+      {error && (
+        <div
+          role="alert"
+          className="mt-5 flex items-start gap-2.5 rounded-xl border border-status-danger/30 bg-status-danger-bg px-4 py-3 text-xs font-medium text-status-danger"
+        >
+          <span
+            aria-hidden="true"
+            className="material-symbols-outlined text-[18px] shrink-0"
+          >
+            error
+          </span>
+          <span>{error}</span>
         </div>
-      </main>
+      )}
+
+      {step === "register" ? (
+        <form onSubmit={handleRegister} className="mt-6 space-y-4">
+          <div>
+            <label
+              htmlFor="signup-name"
+              className="block text-sm font-medium text-text-primary"
+            >
+              Full Name
+            </label>
+            <input
+              id="signup-name"
+              type="text"
+              required
+              autoComplete="name"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="Juan Dela Cruz"
+              className="mt-1.5 w-full rounded-xl border border-border-subtle bg-background px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="signup-email"
+              className="block text-sm font-medium text-text-primary"
+            >
+              Email Address
+            </label>
+            <input
+              id="signup-email"
+              type="email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              className="mt-1.5 w-full rounded-xl border border-border-subtle bg-background px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="signup-password"
+              className="block text-sm font-medium text-text-primary"
+            >
+              Password
+            </label>
+            <div className="relative mt-1.5">
+              <input
+                id="signup-password"
+                type={showPassword ? "text" : "password"}
+                required
+                minLength={8}
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Minimum 8 characters"
+                className="w-full rounded-xl border border-border-subtle bg-background py-2.5 pl-4 pr-11 text-sm text-text-primary placeholder:text-text-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-text-muted transition-colors hover:bg-surface-muted hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <span
+                  aria-hidden="true"
+                  className="material-symbols-outlined text-[18px]"
+                >
+                  {showPassword ? "visibility_off" : "visibility"}
+                </span>
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-text-muted">
+              At least 8 characters recommended.
+            </p>
+          </div>
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          >
+            {isLoading ? (
+              <>
+                <span
+                  aria-hidden="true"
+                  className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+                />
+                <span>Creating account…</span>
+              </>
+            ) : (
+              <span>Continue</span>
+            )}
+          </button>
+
+          <p className="text-center text-xs leading-relaxed text-text-muted">
+            By creating an account, you agree to our{" "}
+            <Link
+              href="/privacy-policy"
+              className="font-medium text-primary hover:underline"
+            >
+              Privacy Policy
+            </Link>{" "}
+            under RA 10173.
+          </p>
+        </form>
+      ) : (
+        <form onSubmit={handleVerifyOtp} className="mt-6 space-y-5">
+          <div>
+            <label
+              htmlFor="signup-otp"
+              className="block text-sm font-medium text-text-primary"
+            >
+              6-Digit Verification Code
+            </label>
+            <input
+              id="signup-otp"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              required
+              maxLength={6}
+              value={otp}
+              onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+              placeholder="123456"
+              className="mt-1.5 w-full rounded-xl border border-border-subtle bg-background px-4 py-3 text-center font-mono text-xl tracking-[0.4em] text-text-primary placeholder:text-text-muted tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={isLoading || otp.length < 6}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          >
+            {isLoading ? (
+              <>
+                <span
+                  aria-hidden="true"
+                  className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+                />
+                <span>Verifying…</span>
+              </>
+            ) : (
+              <span>Verify &amp; Continue</span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setStep("register");
+              setError(null);
+            }}
+            className="w-full text-center text-xs font-medium text-text-secondary hover:text-primary"
+          >
+            Use a different email address
+          </button>
+        </form>
+      )}
+
+      <div className="mt-6 border-t border-border-subtle pt-5 text-center text-sm text-text-secondary">
+        Already have an account?{" "}
+        <Link
+          href={
+            safeRedirect
+              ? `/login?redirect=${encodeURIComponent(safeRedirect)}`
+              : "/login"
+          }
+          className="font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+        >
+          Sign in
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <div className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center bg-background px-4 py-12">
+      <div className="w-full max-w-md">
+        <div className="mb-4">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-text-secondary transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded px-1 py-0.5"
+          >
+            <span
+              aria-hidden="true"
+              className="material-symbols-outlined text-[16px]"
+            >
+              arrow_back
+            </span>
+            <span>Back to Home</span>
+          </Link>
+        </div>
+
+        <Suspense
+          fallback={
+            <div className="h-96 animate-pulse rounded-3xl border border-border-subtle bg-surface-elevated" />
+          }
+        >
+          <SignupForm />
+        </Suspense>
+      </div>
     </div>
   );
 }

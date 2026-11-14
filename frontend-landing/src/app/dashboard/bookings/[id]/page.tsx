@@ -1,337 +1,416 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import { api, ApiError } from "@/lib/api";
 import Link from "next/link";
-import { Booking } from "@/types";
+import { useParams } from "next/navigation";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useState } from "react";
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import RescheduleModal from "@/components/dashboard/RescheduleModal";
+import DashboardLayout from "@/components/layout/DashboardLayout";
+import { useToast } from "@/context/ToastContext";
+import { api, ApiError } from "@/lib/api";
+import type { Booking } from "@/types";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 
-export default function ClientBookingDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params);
-  const [booking, setBooking] = useState<any>(null);
+function formatManilaDateTime(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", {
+    timeZone: "Asia/Manila",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function downloadIcs(booking: Booking) {
+  const formatIcsDate = (iso: string) =>
+    new Date(iso).toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+  const counselor =
+    booking.counselor_name ||
+    booking.counselor?.user?.full_name ||
+    "Alaga Counselor";
+  const content = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Alaga Counseling//Booking//EN",
+    "BEGIN:VEVENT",
+    `UID:${booking.id}@alaga`,
+    `DTSTAMP:${formatIcsDate(new Date().toISOString())}`,
+    `DTSTART:${formatIcsDate(booking.scheduled_start)}`,
+    `DTEND:${formatIcsDate(booking.scheduled_end)}`,
+    `SUMMARY:Alaga Counseling Session with ${counselor}`,
+    `DESCRIPTION:${booking.meeting_link ? `Join link: ${booking.meeting_link}` : "Private counseling session"}`,
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  const blob = new Blob([content], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `alaga-session-${booking.id.slice(0, 8)}.ics`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export default function ClientBookingDetailPage() {
+  const params = useParams<{ id: string }>();
+  const bookingId = params.id;
+  const { toast, confirm } = useToast();
+
+  const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(true);
-  const [reschedulingBooking, setReschedulingBooking] = useState<Booking | null>(null);
-  const [referenceNumber, setReferenceNumber] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<"gcash" | "maya" | "card">("gcash");
   const [proofFile, setProofFile] = useState<File | null>(null);
-  const [submittingProof, setSubmittingProof] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [showReschedule, setShowReschedule] = useState(false);
 
-  useEffect(() => {
-    fetchBooking();
-  }, [resolvedParams.id]);
-
-  const fetchBooking = async () => {
+  const loadBooking = useCallback(async () => {
     try {
-      const data = await api.get(`/bookings/${resolvedParams.id}`);
+      const data = await api.get<Booking>(`/bookings/${bookingId}`);
       setBooking(data);
-    } catch (err) {
-      console.error(err);
+    } catch {
+      toast.error("Unable to load booking details.");
     } finally {
       setLoading(false);
+    }
+  }, [bookingId, toast]);
+
+  useEffect(() => {
+    loadBooking();
+  }, [loadBooking]);
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    if (!file) {
+      setProofFile(null);
+      return;
+    }
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      toast.error("File is too large. Please upload an image or PDF under 5 MB.");
+      e.target.value = "";
+      setProofFile(null);
+      return;
+    }
+    setProofFile(file);
+  };
+
+  const handleUploadProof = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!booking || !proofFile) {
+      toast.error("Please select a payment receipt file first.");
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", proofFile);
+      await api.post(`/payments/${booking.id}/proof`, formData);
+      toast.success(
+        "Payment proof uploaded! Your counselor will verify it shortly."
+      );
+      setProofFile(null);
+      await loadBooking();
+    } catch (err) {
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : "Failed to upload payment proof.";
+      toast.error(msg);
+    } finally {
+      setUploading(false);
     }
   };
 
   const handleCancel = async () => {
-    if (!confirm("Are you sure you want to cancel this booking?")) return;
-    try {
-      await api.post(`/bookings/${booking.id}/cancel`, {});
-      alert("Booking cancelled.");
-      fetchBooking();
-    } catch (err: unknown) {
-      alert(`Failed to cancel booking: ${err instanceof ApiError ? err.message : (err as Error).message}`);
-    }
-  };
+    if (!booking) return;
+    const ok = await confirm({
+      title: "Cancel this session?",
+      message:
+        "Are you sure you want to cancel this booking? This action cannot be undone.",
+      confirmText: "Cancel Session",
+      cancelText: "Keep Booking",
+      variant: "danger",
+    });
+    if (!ok) return;
 
-  const handleSubmitProof = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!referenceNumber.trim() && !proofFile) {
-      alert("Please enter a reference number or attach a receipt.");
-      return;
-    }
-    setSubmittingProof(true);
+    setCancelling(true);
     try {
-      const formData = new FormData();
-      if (referenceNumber.trim()) {
-        formData.append("reference_number", referenceNumber.trim());
-      }
-      formData.append("payment_method", paymentMethod);
-      if (proofFile) {
-        formData.append("file", proofFile);
-      }
-      const res = await fetch(`${API_URL}/payments/${booking.id}/proof`, {
-        method: "POST",
-        body: formData,
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => null);
-        throw new Error(errData?.detail || "Failed to submit payment proof");
-      }
-      setReferenceNumber("");
-      setProofFile(null);
-      alert("Payment details submitted! Your counselor will verify it shortly.");
-      fetchBooking();
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Failed to submit payment proof");
+      await api.post(`/bookings/${booking.id}/cancel`);
+      toast.success("Booking cancelled.");
+      await loadBooking();
+    } catch (err) {
+      const msg =
+        err instanceof ApiError ? err.message : "Unable to cancel booking.";
+      toast.error(msg);
     } finally {
-      setSubmittingProof(false);
+      setCancelling(false);
     }
   };
-
-  if (loading) {
-    return (
-      <DashboardLayout role="client" allowedRoles={["client"]}>
-        <div className="animate-pulse space-y-4 max-w-3xl mx-auto">
-          <div className="h-8 bg-surface-variant w-1/3 rounded"></div>
-          <div className="h-48 bg-surface-variant rounded-xl"></div>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (!booking) {
-    return (
-      <DashboardLayout role="client" allowedRoles={["client"]}>
-        <div className="text-center p-8">
-          <p className="text-error">Booking not found.</p>
-          <Link href="/dashboard" className="mt-4 inline-block text-primary hover:underline">
-            Back to Dashboard
-          </Link>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  const now = new Date();
-  const sessionStart = new Date(booking.scheduled_start);
-  const sessionEnd = new Date(booking.scheduled_end);
-  const hasStarted = sessionStart <= now;
-  const isConfirmed = booking.status === "confirmed";
-  const isPending = booking.status === "pending_payment";
-  const paymentDeadline = booking.created_at
-    ? new Date(new Date(booking.created_at).getTime() + 60 * 60 * 1000)
-    : null;
-
-  // Build Google Calendar Add Link
-  const gcalFormat = (d: Date) => d.toISOString().replace(/-|:|\.\d\d\d/g, "");
-  const text = encodeURIComponent(`Counseling Session with ${booking.counselor?.user?.full_name || booking.counselor_name}`);
-  const dates = `${gcalFormat(sessionStart)}/${gcalFormat(sessionEnd)}`;
-  const details = encodeURIComponent(booking.meeting_link ? `Join here: ${booking.meeting_link}` : "Details pending.");
-  const gcalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${text}&dates=${dates}&details=${details}`;
 
   return (
-    <DashboardLayout role="client" allowedRoles={["client"]}>
-      <div className="max-w-4xl mx-auto">
-        <Link href="/dashboard" className="flex items-center gap-2 text-primary hover:underline mb-6 font-label-lg">
-          <span className="material-symbols-outlined">arrow_back</span> Back to Dashboard
-        </Link>
-        
-        <div className="flex flex-col md:flex-row justify-between items-start mb-6 gap-4">
-          <div>
-            <h1 className="font-headline-xl text-primary">Booking Session</h1>
-            <p className="font-body-lg text-on-surface-variant">with {booking.counselor?.user?.full_name || booking.counselor_name}</p>
-          </div>
-          <div className="bg-surface-container px-4 py-2 rounded-lg text-on-surface font-label-md uppercase tracking-wider font-bold">
-            {booking.status.replace("_", " ")}
-          </div>
-        </div>
+    <ProtectedRoute allowedRoles={["client"]}>
+      <DashboardLayout role="client">
+        <div className="space-y-6">
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-text-secondary transition-colors hover:text-primary"
+          >
+            <span
+              aria-hidden="true"
+              className="material-symbols-outlined text-[18px]"
+            >
+              arrow_back
+            </span>
+            <span>Back to Dashboard</span>
+          </Link>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-surface-container-highest">
-            <h2 className="font-headline-md text-primary mb-4 flex items-center gap-2">
-              <span className="material-symbols-outlined text-secondary">calendar_today</span>
-              Schedule
-            </h2>
-            <div className="space-y-3 font-body-md mb-6">
-              <p><strong className="text-on-surface-variant w-24 inline-block">Start:</strong> {sessionStart.toLocaleString()}</p>
-              <p><strong className="text-on-surface-variant w-24 inline-block">End:</strong> {sessionEnd.toLocaleString()}</p>
-            </div>
-            
-            <div className="space-y-3">
-              {booking.meeting_link && (
-                <a 
-                  href={booking.meeting_link} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center gap-2 w-full bg-primary text-on-primary px-4 py-3 rounded-lg font-label-lg hover:bg-primary/90 transition-colors"
-                >
-                  <span className="material-symbols-outlined">videocam</span>
-                  Join Google Meet
-                </a>
-              )}
-              
-              <div className="flex gap-2">
-                <a 
-                  href={`${API_URL}/bookings/${booking.id}/ics`}
-                  className="flex-1 bg-surface-container-high text-on-surface text-center px-4 py-2 rounded-lg font-label-md hover:bg-surface-container-highest transition-colors"
-                >
-                  Download .ics
-                </a>
-                <a 
-                  href={gcalUrl}
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="flex-1 bg-surface-container-high text-on-surface text-center px-4 py-2 rounded-lg font-label-md hover:bg-surface-container-highest transition-colors flex items-center justify-center gap-1"
-                >
-                  <span className="material-symbols-outlined text-[18px]">calendar_add_on</span> Add to GCal
-                </a>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-surface-container-highest flex flex-col justify-between">
-            <div>
-              <h2 className="font-headline-md text-primary mb-4 flex items-center gap-2">
-                <span className="material-symbols-outlined text-secondary">description</span>
-                Intake Summary
-              </h2>
-              <div className="space-y-4 font-body-md">
-                <div>
-                  <strong className="text-on-surface-variant block mb-1">Concern Category:</strong> 
-                  <span className="bg-secondary-container text-on-secondary-container px-3 py-1 rounded-full font-label-sm inline-block">
-                    {booking.intake_form?.concern_category || "Not specified"}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Manual Payment Instructions & Optional Proof */}
-        {isPending && (
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-outline-variant mb-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
-              <h2 className="font-headline-md text-primary flex items-center gap-2">
-                <span className="material-symbols-outlined text-secondary">payments</span>
-                Payment Instructions (1-Hour Window)
-              </h2>
-              <span className="font-label-lg font-bold text-primary">
-                ₱{Number(booking.payment?.amount ?? 300).toFixed(2)} PHP
-              </span>
-            </div>
-
-            <p className="font-body-md text-on-surface-variant mb-3">
-              Please send your session fee via GCash, Maya, or bank transfer within{" "}
-              <strong>1 hour</strong>
-              {paymentDeadline ? ` (by ${paymentDeadline.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})` : ""}
-              . Your counselor will verify your payment to confirm the booking and generate your Google Meet link.
-            </p>
-
-            {(booking.payment?.provider_payment_id || booking.payment?.proof_url) && (
-              <div className="bg-secondary-container/40 border border-secondary/30 rounded-lg p-4 mb-4 space-y-2">
-                <p className="font-label-md text-primary font-bold">
-                  Submitted Payment Details — Awaiting Counselor Verification
-                </p>
-                {booking.payment?.provider_payment_id && (
-                  <p className="font-body-sm text-on-surface">
-                    Reference No.: <strong>{booking.payment.provider_payment_id}</strong>
-                    {booking.payment.payment_method ? ` (${booking.payment.payment_method.toUpperCase()})` : ""}
-                  </p>
-                )}
-                {booking.payment?.proof_url && (
-                  <a
-                    href={booking.payment.proof_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-block text-primary font-label-sm underline"
-                  >
-                    View Uploaded Receipt
-                  </a>
-                )}
-              </div>
-            )}
-
-            <form onSubmit={handleSubmitProof} className="space-y-4 border-t border-surface-variant pt-4">
-              <p className="font-label-md text-on-surface">
-                Optional: Submit your reference number or receipt to help your counselor verify faster
+          {loading ? (
+            <div className="h-72 animate-pulse rounded-2xl border border-border-subtle bg-surface-elevated" />
+          ) : !booking ? (
+            <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-8 text-center">
+              <p className="text-sm text-text-secondary">
+                Booking not found or you do not have permission to view it.
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-label-sm text-on-surface-variant mb-1">
-                    Payment Method
-                  </label>
-                  <select
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value as "gcash" | "maya" | "card")}
-                    className="w-full border border-outline-variant rounded-lg p-2.5 font-body-md bg-white"
-                  >
-                    <option value="gcash">GCash</option>
-                    <option value="maya">Maya</option>
-                    <option value="card">Bank Transfer / Card</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-label-sm text-on-surface-variant mb-1">
-                    Reference Number (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={referenceNumber}
-                    onChange={(e) => setReferenceNumber(e.target.value)}
-                    placeholder="e.g. 1234 5678 9012"
-                    className="w-full border border-outline-variant rounded-lg p-2.5 font-body-md"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block font-label-sm text-on-surface-variant mb-1">
-                  Receipt Screenshot / PDF (Optional, max 5MB)
-                </label>
-                <input
-                  type="file"
-                  accept="application/pdf,image/png,image/jpeg"
-                  onChange={(e) => setProofFile(e.target.files?.[0] || null)}
-                  className="w-full font-body-sm text-on-surface-variant"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={submittingProof}
-                className="bg-primary text-on-primary px-5 py-2.5 rounded-lg font-label-md hover:opacity-90 disabled:opacity-50"
-              >
-                {submittingProof ? "Submitting..." : "Submit Payment Proof"}
-              </button>
-            </form>
-          </div>
-        )}
-
-        {/* Action Buttons */}
-        {(isPending || (isConfirmed && !hasStarted)) && (
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-surface-container-highest">
-            <h2 className="font-headline-md text-primary mb-4">Session Actions</h2>
-            <div className="flex gap-4">
-              {isConfirmed && (
-                <button 
-                  onClick={() => setReschedulingBooking(booking)}
-                  className="bg-secondary text-on-secondary px-6 py-2 rounded-lg font-label-md hover:opacity-90"
-                >
-                  Reschedule
-                </button>
-              )}
-              <button 
-                onClick={handleCancel}
-                className="bg-error-container text-on-error-container px-6 py-2 rounded-lg font-label-md hover:opacity-90"
-              >
-                Cancel Session
-              </button>
             </div>
-          </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+              {/* Main Booking Info */}
+              <div className="space-y-6 lg:col-span-7">
+                <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-6 shadow-ambient">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-primary">
+                        Booking #{booking.id.slice(0, 8)}
+                      </p>
+                      <h1 className="mt-1 font-serif text-2xl font-medium text-text-primary">
+                        Session with{" "}
+                        {booking.counselor_name ||
+                          booking.counselor?.user?.full_name ||
+                          "Licensed Counselor"}
+                      </h1>
+                    </div>
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${
+                        booking.status === "confirmed"
+                          ? "bg-status-success-bg text-status-success"
+                          : booking.status === "pending_payment"
+                            ? "bg-status-warning-bg text-status-warning"
+                            : booking.status === "cancelled"
+                              ? "bg-status-danger-bg text-status-danger"
+                              : "bg-surface-muted text-text-secondary"
+                      }`}
+                    >
+                      {booking.status.replace("_", " ")}
+                    </span>
+                  </div>
+
+                  <dl className="mt-6 grid grid-cols-1 gap-4 border-t border-border-subtle pt-5 sm:grid-cols-2">
+                    <div>
+                      <dt className="text-xs text-text-muted">Start Time</dt>
+                      <dd className="mt-0.5 text-sm font-semibold text-text-primary tabular-nums">
+                        {formatManilaDateTime(booking.scheduled_start)} PHT
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-text-muted">End Time</dt>
+                      <dd className="mt-0.5 text-sm font-semibold text-text-primary tabular-nums">
+                        {formatManilaDateTime(booking.scheduled_end)} PHT
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-text-muted">Session Fee</dt>
+                      <dd className="mt-0.5 text-base font-semibold text-text-primary tabular-nums">
+                        {booking.payment?.amount != null
+                          ? `₱${Number(booking.payment.amount).toLocaleString()}`
+                          : "—"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-text-muted">
+                        Payment Status
+                      </dt>
+                      <dd className="mt-0.5 text-sm font-medium capitalize text-text-primary">
+                        {booking.payment?.status || "Awaiting proof"}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  {booking.status === "confirmed" && (
+                    <div className="mt-6 flex flex-wrap gap-3 border-t border-border-subtle pt-5">
+                      {booking.meeting_link && (
+                        <a
+                          href={booking.meeting_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-primary-hover"
+                        >
+                          <span
+                            aria-hidden="true"
+                            className="material-symbols-outlined text-[18px]"
+                          >
+                            videocam
+                          </span>
+                          <span>Join Google Meet</span>
+                        </a>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => downloadIcs(booking)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-border-subtle bg-background px-4 py-2.5 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-muted"
+                      >
+                        <span
+                          aria-hidden="true"
+                          className="material-symbols-outlined text-[16px]"
+                        >
+                          download
+                        </span>
+                        <span>Download .ics</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {(booking.status === "pending_payment" ||
+                    booking.status === "confirmed") && (
+                    <div className="mt-5 flex flex-wrap gap-3 border-t border-border-subtle pt-5">
+                      <button
+                        type="button"
+                        onClick={() => setShowReschedule(true)}
+                        className="rounded-xl border border-border-subtle bg-background px-4 py-2 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-muted"
+                      >
+                        Reschedule Session
+                      </button>
+                      <button
+                        type="button"
+                        disabled={cancelling}
+                        onClick={handleCancel}
+                        className="rounded-xl border border-status-danger/30 bg-status-danger-bg px-4 py-2 text-xs font-semibold text-status-danger transition-colors hover:bg-status-danger hover:text-white disabled:opacity-50"
+                      >
+                        {cancelling ? "Cancelling…" : "Cancel Booking"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Intake Summary */}
+                {booking.intake_form && (
+                  <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-6 shadow-ambient">
+                    <h2 className="font-serif text-lg font-medium text-text-primary">
+                      Your Intake Notes
+                    </h2>
+                    <dl className="mt-4 space-y-3 text-sm">
+                      <div>
+                        <dt className="text-xs font-medium text-text-muted">
+                          Focus / Concern
+                        </dt>
+                        <dd className="mt-0.5 text-text-primary">
+                          {booking.intake_form.concern_category}
+                        </dd>
+                      </div>
+                      {booking.intake_form.notes && (
+                        <div>
+                          <dt className="text-xs font-medium text-text-muted">
+                            Additional Notes
+                          </dt>
+                          <dd className="mt-0.5 whitespace-pre-line text-text-primary">
+                            {booking.intake_form.notes}
+                          </dd>
+                        </div>
+                      )}
+                    </dl>
+                  </div>
+                )}
+              </div>
+
+              {/* Payment Proof Column */}
+              <div className="lg:col-span-5">
+                <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-6 shadow-ambient">
+                  <h2 className="font-serif text-xl font-medium text-text-primary">
+                    Payment Proof
+                  </h2>
+                  <p className="mt-1 text-xs text-text-secondary">
+                    Upload a screenshot or PDF of your GCash / bank transfer
+                    receipt (max 5 MB).
+                  </p>
+
+                  {booking.payment?.proof_url && (
+                    <div className="mt-4 rounded-xl border border-status-success/30 bg-status-success-bg p-4 text-xs text-status-success">
+                      <p className="font-semibold">
+                        Payment proof has been submitted.
+                      </p>
+                      <a
+                        href={booking.payment.proof_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-1 inline-block font-medium underline"
+                      >
+                        View uploaded receipt
+                      </a>
+                    </div>
+                  )}
+
+                  {booking.status === "pending_payment" && (
+                    <form onSubmit={handleUploadProof} className="mt-5 space-y-4">
+                      <div>
+                        <label
+                          htmlFor="payment-proof-input"
+                          className="block text-xs font-semibold uppercase tracking-wider text-text-muted"
+                        >
+                          Select Receipt File
+                        </label>
+                        <input
+                          id="payment-proof-input"
+                          type="file"
+                          accept="image/*,.pdf"
+                          onChange={handleFileChange}
+                          className="mt-2 block w-full rounded-xl border border-border-subtle bg-background p-2.5 text-xs text-text-secondary file:mr-3 file:rounded-lg file:border-0 file:bg-primary-light file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-primary hover:file:bg-primary/20"
+                        />
+                        {proofFile && (
+                          <p className="mt-2 text-xs text-text-secondary tabular-nums">
+                            Selected: <strong>{proofFile.name}</strong> (
+                            {(proofFile.size / 1024).toFixed(0)} KB)
+                          </p>
+                        )}
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={uploading || !proofFile}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      >
+                        {uploading ? (
+                          <>
+                            <span
+                              aria-hidden="true"
+                              className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+                            />
+                            <span>Uploading…</span>
+                          </>
+                        ) : (
+                          <span>Upload Payment Proof</span>
+                        )}
+                      </button>
+                    </form>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {showReschedule && booking && (
+          <RescheduleModal
+            booking={booking}
+            onClose={() => setShowReschedule(false)}
+            onSuccess={loadBooking}
+          />
         )}
-      </div>
-      
-      {reschedulingBooking && (
-        <RescheduleModal
-          booking={reschedulingBooking}
-          onClose={() => setReschedulingBooking(null)}
-          onSuccess={() => {
-            setReschedulingBooking(null);
-            fetchBooking();
-          }}
-        />
-      )}
-    </DashboardLayout>
+      </DashboardLayout>
+    </ProtectedRoute>
   );
 }

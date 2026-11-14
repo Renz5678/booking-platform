@@ -12,6 +12,7 @@ export interface User {
   full_name: string;
   role: RoleEnum;
   is_verified: boolean;
+  is_active?: boolean;
   google_calendar_connected: boolean;
   created_at: string;
 }

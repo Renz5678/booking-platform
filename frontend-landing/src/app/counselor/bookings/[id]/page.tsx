@@ -1,295 +1,369 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import { api } from "@/lib/api";
 import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import DashboardLayout from "@/components/layout/DashboardLayout";
+import { useToast } from "@/context/ToastContext";
+import { api, ApiError } from "@/lib/api";
+import type { Booking } from "@/types";
 
-export default function CounselorBookingDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params);
-  const [booking, setBooking] = useState<any>(null);
+function formatManilaDateTime(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", {
+    timeZone: "Asia/Manila",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+export default function CounselorBookingDetailPage() {
+  const params = useParams<{ id: string }>();
+  const bookingId = params.id;
+  const { toast, confirm } = useToast();
+
+  const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchBooking();
-  }, [resolvedParams.id]);
-
-  const fetchBooking = async () => {
+  const loadBooking = useCallback(async () => {
     try {
-      const data = await api.get(`/bookings/${resolvedParams.id}`);
+      const data = await api.get<Booking>(`/bookings/${bookingId}`);
       setBooking(data);
-    } catch (err) {
-      console.error(err);
+    } catch {
+      toast.error("Unable to load booking details.");
     } finally {
       setLoading(false);
     }
+  }, [bookingId, toast]);
+
+  useEffect(() => {
+    loadBooking();
+  }, [loadBooking]);
+
+  const handleVerifyPayment = async () => {
+    if (!booking) return;
+    const ok = await confirm({
+      title: "Verify payment & confirm session?",
+      message:
+        "Confirming payment will mark this booking as Confirmed and notify the client.",
+      confirmText: "Verify & Confirm",
+      cancelText: "Review Again",
+    });
+    if (!ok) return;
+
+    setBusyAction("verify");
+    try {
+      await api.post(`/payments/${booking.id}/verify`);
+      toast.success("Payment verified and session confirmed.");
+      await loadBooking();
+    } catch (err) {
+      const msg =
+        err instanceof ApiError ? err.message : "Failed to verify payment.";
+      toast.error(msg);
+    } finally {
+      setBusyAction(null);
+    }
   };
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
+  const handleRejectPayment = async () => {
+    if (!booking) return;
+    const ok = await confirm({
+      title: "Reject payment proof?",
+      message:
+        "The client will be asked to re-upload a valid payment receipt.",
+      confirmText: "Reject Proof",
+      cancelText: "Cancel",
+      variant: "danger",
+    });
+    if (!ok) return;
+
+    setBusyAction("reject");
+    try {
+      await api.post(`/payments/${booking.id}/reject`);
+      toast.info("Payment proof rejected.");
+      await loadBooking();
+    } catch (err) {
+      const msg =
+        err instanceof ApiError ? err.message : "Failed to reject payment.";
+      toast.error(msg);
+    } finally {
+      setBusyAction(null);
+    }
   };
 
-  const handleUpdateStatus = async (status: string) => {
-    setActionLoading(status);
+  const handleUpdateStatus = async (status: "completed" | "no_show") => {
+    if (!booking) return;
+    const label = status === "completed" ? "Completed" : "No Show";
+    const ok = await confirm({
+      title: `Mark session as ${label}?`,
+      message: `Are you sure you want to update this booking status to ${label}?`,
+      confirmText: `Mark ${label}`,
+      cancelText: "Cancel",
+    });
+    if (!ok) return;
+
+    setBusyAction(status);
     try {
       await api.put(`/bookings/${booking.id}/status`, { status });
-      showToast(`Marked as ${status}`);
-      fetchBooking();
+      toast.success(`Session marked as ${label}.`);
+      await loadBooking();
     } catch (err) {
-      console.error(err);
-      alert("Failed to update status");
+      const msg =
+        err instanceof ApiError ? err.message : "Unable to update status.";
+      toast.error(msg);
     } finally {
-      setActionLoading(null);
+      setBusyAction(null);
     }
   };
 
-  const handleCancel = async () => {
-    if (!confirm("Are you sure you want to cancel this booking?")) return;
-    setActionLoading("cancel");
+  const handleCounselorCancel = async () => {
+    if (!booking) return;
+    const ok = await confirm({
+      title: "Cancel this client session?",
+      message:
+        "Are you sure you want to cancel this session? The client will be notified.",
+      confirmText: "Cancel Session",
+      cancelText: "Keep Session",
+      variant: "danger",
+    });
+    if (!ok) return;
+
+    setBusyAction("cancel");
     try {
-      await api.post(`/bookings/${booking.id}/counselor-cancel`, {});
-      showToast("Booking cancelled");
-      fetchBooking();
+      await api.post(`/bookings/${booking.id}/counselor-cancel`);
+      toast.success("Session cancelled.");
+      await loadBooking();
     } catch (err) {
-      console.error(err);
-      alert("Failed to cancel booking");
+      const msg =
+        err instanceof ApiError ? err.message : "Unable to cancel session.";
+      toast.error(msg);
     } finally {
-      setActionLoading(null);
+      setBusyAction(null);
     }
   };
 
-  const handlePaymentDecision = async (decision: "verify" | "reject") => {
-    if (
-      decision === "reject" &&
-      !confirm("Reject this payment and cancel the booking?")
-    ) {
-      return;
-    }
-    setActionLoading(decision);
-    try {
-      await api.post(`/payments/${booking.id}/${decision}`, {});
-      showToast(
-        decision === "verify"
-          ? "Payment verified and session confirmed"
-          : "Payment rejected and booking cancelled"
-      );
-      fetchBooking();
-    } catch (err) {
-      console.error(err);
-      alert(`Failed to ${decision} payment`);
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  if (loading) {
-    return (
-      <DashboardLayout role="counselor" allowedRoles={["counselor"]}>
-        <div className="animate-pulse space-y-4 max-w-3xl mx-auto">
-          <div className="h-8 bg-surface-variant w-1/3 rounded"></div>
-          <div className="h-48 bg-surface-variant rounded-xl"></div>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (!booking) {
-    return (
-      <DashboardLayout role="counselor" allowedRoles={["counselor"]}>
-        <div className="text-center p-8">
-          <p className="text-error">Booking not found.</p>
-          <Link href="/counselor/bookings" className="mt-4 inline-block text-primary hover:underline">
-            Back to Bookings
-          </Link>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  const now = new Date();
-  const sessionEnd = new Date(booking.scheduled_end);
-  const hasEnded = sessionEnd < now;
+  const clientName =
+    booking?.client_name || booking?.client?.full_name || "Client";
 
   return (
-    <DashboardLayout role="counselor" allowedRoles={["counselor"]}>
-      <div className="max-w-4xl mx-auto relative">
-        {toastMessage && (
-          <div className="absolute top-0 right-0 bg-secondary text-on-secondary px-4 py-2 rounded-lg shadow-lg font-label-md transition-opacity">
-            {toastMessage}
-          </div>
-        )}
-        
-        <Link href="/counselor/bookings" className="flex items-center gap-2 text-primary hover:underline mb-6 font-label-lg">
-          <span className="material-symbols-outlined">arrow_back</span> Back to My Bookings
-        </Link>
-        
-        <div className="flex flex-col md:flex-row justify-between items-start mb-6 gap-4">
-          <div>
-            <h1 className="font-headline-xl text-primary">Booking Session</h1>
-            <p className="font-body-lg text-on-surface-variant">with {booking.client?.full_name}</p>
-          </div>
-          <div className="bg-surface-container px-4 py-2 rounded-lg text-on-surface font-label-md uppercase tracking-wider font-bold">
-            {booking.status.replace("_", " ")}
-          </div>
+    <ProtectedRoute allowedRoles={["counselor"]}>
+      <DashboardLayout role="counselor">
+        <div className="space-y-6">
+          <Link
+            href="/counselor/bookings"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-text-secondary transition-colors hover:text-primary"
+          >
+            <span
+              aria-hidden="true"
+              className="material-symbols-outlined text-[18px]"
+            >
+              arrow_back
+            </span>
+            <span>Back to Bookings</span>
+          </Link>
+
+          {loading ? (
+            <div className="h-72 animate-pulse rounded-2xl border border-border-subtle bg-surface-elevated" />
+          ) : !booking ? (
+            <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-8 text-center">
+              <p className="text-sm text-text-secondary">Booking not found.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+              <div className="space-y-6 lg:col-span-7">
+                <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-6 shadow-ambient">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-primary">
+                        Booking #{booking.id.slice(0, 8)}
+                      </p>
+                      <h1 className="mt-1 font-serif text-2xl font-medium text-text-primary">
+                        {clientName}
+                      </h1>
+                    </div>
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${
+                        booking.status === "confirmed"
+                          ? "bg-status-success-bg text-status-success"
+                          : booking.status === "pending_payment"
+                            ? "bg-status-warning-bg text-status-warning"
+                            : booking.status === "cancelled"
+                              ? "bg-status-danger-bg text-status-danger"
+                              : "bg-surface-muted text-text-secondary"
+                      }`}
+                    >
+                      {booking.status.replace("_", " ")}
+                    </span>
+                  </div>
+
+                  <dl className="mt-6 grid grid-cols-1 gap-4 border-t border-border-subtle pt-5 sm:grid-cols-2">
+                    <div>
+                      <dt className="text-xs text-text-muted">Start Time</dt>
+                      <dd className="mt-0.5 text-sm font-semibold text-text-primary tabular-nums">
+                        {formatManilaDateTime(booking.scheduled_start)} PHT
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-text-muted">End Time</dt>
+                      <dd className="mt-0.5 text-sm font-semibold text-text-primary tabular-nums">
+                        {formatManilaDateTime(booking.scheduled_end)} PHT
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-text-muted">Session Fee</dt>
+                      <dd className="mt-0.5 text-base font-semibold text-text-primary tabular-nums">
+                        {booking.payment?.amount != null
+                          ? `₱${Number(booking.payment.amount).toLocaleString()}`
+                          : "—"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-text-muted">Meet Link</dt>
+                      <dd className="mt-0.5 text-sm">
+                        {booking.meeting_link ? (
+                          <a
+                            href={booking.meeting_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-semibold text-primary hover:underline"
+                          >
+                            Open Google Meet
+                          </a>
+                        ) : (
+                          <span className="text-text-muted">Not generated</span>
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  {booking.status === "confirmed" && (
+                    <div className="mt-6 flex flex-wrap gap-2.5 border-t border-border-subtle pt-5">
+                      <button
+                        type="button"
+                        disabled={!!busyAction}
+                        onClick={() => handleUpdateStatus("completed")}
+                        className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-hover disabled:opacity-50"
+                      >
+                        Mark Completed
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!!busyAction}
+                        onClick={() => handleUpdateStatus("no_show")}
+                        className="rounded-xl border border-border-subtle bg-background px-4 py-2 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-muted disabled:opacity-50"
+                      >
+                        Mark No Show
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!!busyAction}
+                        onClick={handleCounselorCancel}
+                        className="rounded-xl border border-status-danger/30 bg-status-danger-bg px-4 py-2 text-xs font-semibold text-status-danger transition-colors hover:bg-status-danger hover:text-white disabled:opacity-50"
+                      >
+                        Cancel Session
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {booking.intake_form && (
+                  <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-6 shadow-ambient">
+                    <h2 className="font-serif text-lg font-medium text-text-primary">
+                      Client Intake Information
+                    </h2>
+                    <dl className="mt-4 space-y-3 text-sm">
+                      <div>
+                        <dt className="text-xs font-medium text-text-muted">
+                          Concern Category
+                        </dt>
+                        <dd className="mt-0.5 text-text-primary">
+                          {booking.intake_form.concern_category}
+                        </dd>
+                      </div>
+                      {booking.intake_form.notes && (
+                        <div>
+                          <dt className="text-xs font-medium text-text-muted">
+                            Notes
+                          </dt>
+                          <dd className="mt-0.5 whitespace-pre-line text-text-primary">
+                            {booking.intake_form.notes}
+                          </dd>
+                        </div>
+                      )}
+                    </dl>
+                  </div>
+                )}
+              </div>
+
+              {/* Payment Verification */}
+              <div className="lg:col-span-5">
+                <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-6 shadow-ambient">
+                  <h2 className="font-serif text-xl font-medium text-text-primary">
+                    Payment Verification
+                  </h2>
+                  <p className="mt-1 text-xs text-text-secondary">
+                    Verify the client&apos;s uploaded proof before confirming
+                    the session.
+                  </p>
+
+                  {booking.payment?.proof_url ? (
+                    <div className="mt-4 space-y-4">
+                      <a
+                        href={booking.payment.proof_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
+                      >
+                        <span
+                          aria-hidden="true"
+                          className="material-symbols-outlined text-[18px]"
+                        >
+                          receipt_long
+                        </span>
+                        <span>Open Uploaded Receipt</span>
+                      </a>
+
+                      {booking.status === "pending_payment" && (
+                        <div className="flex flex-wrap gap-2.5 pt-2">
+                          <button
+                            type="button"
+                            disabled={!!busyAction}
+                            onClick={handleVerifyPayment}
+                            className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-hover disabled:opacity-50"
+                          >
+                            {busyAction === "verify"
+                              ? "Verifying…"
+                              : "Verify & Confirm"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!!busyAction}
+                            onClick={handleRejectPayment}
+                            className="rounded-xl border border-status-danger/30 bg-status-danger-bg px-4 py-2 text-xs font-semibold text-status-danger transition-colors hover:bg-status-danger hover:text-white disabled:opacity-50"
+                          >
+                            {busyAction === "reject"
+                              ? "Rejecting…"
+                              : "Reject Proof"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="mt-4 rounded-xl border border-border-subtle bg-background p-4 text-xs text-text-secondary">
+                      No payment proof uploaded yet.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-surface-container-highest">
-            <h2 className="font-headline-md text-primary mb-4 flex items-center gap-2">
-              <span className="material-symbols-outlined text-secondary">calendar_today</span>
-              Schedule
-            </h2>
-            <div className="space-y-3 font-body-md">
-              <p><strong className="text-on-surface-variant w-24 inline-block">Start:</strong> {new Date(booking.scheduled_start).toLocaleString()}</p>
-              <p><strong className="text-on-surface-variant w-24 inline-block">End:</strong> {sessionEnd.toLocaleString()}</p>
-            </div>
-            
-            {booking.meeting_link && (
-              <div className="mt-6">
-                <a 
-                  href={booking.meeting_link} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center gap-2 w-full bg-primary text-on-primary px-4 py-3 rounded-lg font-label-lg hover:bg-primary/90 transition-colors"
-                >
-                  <span className="material-symbols-outlined">videocam</span>
-                  Join Google Meet
-                </a>
-              </div>
-            )}
-          </div>
-
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-surface-container-highest">
-            <h2 className="font-headline-md text-primary mb-4 flex items-center gap-2">
-              <span className="material-symbols-outlined text-secondary">description</span>
-              Intake Information
-            </h2>
-            <div className="space-y-4 font-body-md">
-              <div>
-                <strong className="text-on-surface-variant block mb-1">Concern Category:</strong> 
-                <span className="bg-secondary-container text-on-secondary-container px-3 py-1 rounded-full font-label-sm inline-block">
-                  {booking.intake_form?.concern_category || "Not specified"}
-                </span>
-              </div>
-              <div>
-                <strong className="text-on-surface-variant block mb-1">Notes from Client:</strong>
-                <p className="bg-surface-container-lowest p-3 rounded-lg border border-surface-variant min-h-[80px] whitespace-pre-wrap">
-                  {booking.intake_form?.notes || "No additional notes provided."}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Payment Verification */}
-        {booking.payment && (
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-surface-container-highest mb-6">
-            <h2 className="font-headline-md text-primary mb-4 flex items-center gap-2">
-              <span className="material-symbols-outlined text-secondary">payments</span>
-              Payment Verification
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 font-body-md mb-4">
-              <p>
-                <strong className="text-on-surface-variant">Amount:</strong> ₱
-                {Number(booking.payment.amount).toFixed(2)} {booking.payment.currency}
-              </p>
-              <p>
-                <strong className="text-on-surface-variant">Status:</strong>{" "}
-                <span className="uppercase font-bold">{booking.payment.status}</span>
-              </p>
-              <p>
-                <strong className="text-on-surface-variant">Method:</strong>{" "}
-                {booking.payment.payment_method
-                  ? booking.payment.payment_method.toUpperCase()
-                  : "Not specified"}
-              </p>
-              <p>
-                <strong className="text-on-surface-variant">Reference No.:</strong>{" "}
-                {booking.payment.provider_payment_id || "None submitted"}
-              </p>
-            </div>
-            {booking.payment.proof_url && (
-              <div className="mb-4">
-                <a
-                  href={booking.payment.proof_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-primary font-label-md underline"
-                >
-                  <span className="material-symbols-outlined text-[18px]">receipt_long</span>
-                  View Client Payment Receipt
-                </a>
-              </div>
-            )}
-            {booking.status === "pending_payment" && (
-              <div className="flex gap-4 flex-wrap pt-2 border-t border-surface-variant">
-                <button
-                  onClick={() => handlePaymentDecision("verify")}
-                  disabled={!!actionLoading}
-                  className="bg-primary text-on-primary px-5 py-2.5 rounded-lg font-label-md hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
-                >
-                  <span className="material-symbols-outlined">verified</span>
-                  {actionLoading === "verify" ? "Verifying..." : "Verify Payment & Confirm"}
-                </button>
-                <button
-                  onClick={() => handlePaymentDecision("reject")}
-                  disabled={!!actionLoading}
-                  className="bg-error-container text-on-error-container px-5 py-2.5 rounded-lg font-label-md hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
-                >
-                  <span className="material-symbols-outlined">cancel</span>
-                  {actionLoading === "reject" ? "Rejecting..." : "Reject Payment"}
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Action Buttons */}
-        {booking.status === "confirmed" && (
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-surface-container-highest">
-            <h2 className="font-headline-md text-primary mb-4">Session Actions</h2>
-            <div className="flex gap-4 flex-wrap">
-              {hasEnded ? (
-                <>
-                  <button 
-                    onClick={() => handleUpdateStatus("completed")}
-                    disabled={!!actionLoading}
-                    className="flex-1 bg-tertiary-fixed text-on-tertiary-fixed px-4 py-3 rounded-lg font-label-md flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-50"
-                  >
-                    <span className="material-symbols-outlined">check_circle</span>
-                    {actionLoading === "completed" ? "Marking..." : "Mark as Completed"}
-                  </button>
-                  <button 
-                    onClick={() => handleUpdateStatus("no_show")}
-                    disabled={!!actionLoading}
-                    className="flex-1 bg-surface-container-high text-on-surface px-4 py-3 rounded-lg font-label-md flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-50"
-                  >
-                    <span className="material-symbols-outlined">person_off</span>
-                    {actionLoading === "no_show" ? "Marking..." : "Mark as No-Show"}
-                  </button>
-                </>
-              ) : (
-                <button 
-                  onClick={handleCancel}
-                  disabled={!!actionLoading}
-                  className="bg-error-container text-on-error-container px-4 py-3 rounded-lg font-label-md flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-50"
-                >
-                  <span className="material-symbols-outlined">cancel</span>
-                  {actionLoading === "cancel" ? "Cancelling..." : "Cancel Session"}
-                </button>
-              )}
-            </div>
-            {!hasEnded && (
-              <p className="text-on-surface-variant font-body-sm mt-4">
-                Note: "Mark as Completed" and "Mark as No-Show" will be available after the session scheduled end time.
-              </p>
-            )}
-          </div>
-        )}
-      </div>
-    </DashboardLayout>
+      </DashboardLayout>
+    </ProtectedRoute>
   );
 }

@@ -1,310 +1,393 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import { api } from "@/lib/api";
 import Link from "next/link";
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import DashboardLayout from "@/components/layout/DashboardLayout";
+import { useToast } from "@/context/ToastContext";
+import { api, ApiError } from "@/lib/api";
+import type { CounselorProfile } from "@/types";
 
-interface UserInfo {
-  id: string;
-  email: string;
-  full_name: string;
-}
-
-interface Counselor {
-  id: string;
-  user: UserInfo;
-  bio: string;
-  specialization_tags: string[];
-  is_verified: boolean;
-  is_active: boolean;
-}
+type CounselorTab = "pending" | "active" | "deactivated";
 
 export default function AdminCounselorsPage() {
-  const [activeTab, setActiveTab] = useState<"pending" | "active" | "deactivated">("pending");
-  const [counselors, setCounselors] = useState<Counselor[]>([]);
+  const { toast, confirm, promptText } = useToast();
+  const [tab, setTab] = useState<CounselorTab>("pending");
+  const [counselors, setCounselors] = useState<CounselorProfile[]>([]);
   const [loading, setLoading] = useState(true);
-  
-  const [showInviteModal, setShowInviteModal] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState("");
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  // Invite modal
+  const [showInvite, setShowInvite] = useState(false);
   const [inviteName, setInviteName] = useState("");
-  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviting, setInviting] = useState(false);
 
-  const [rejectId, setRejectId] = useState<string | null>(null);
-  const [rejectReason, setRejectReason] = useState("");
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchCounselors();
-  }, [activeTab]);
-
-  const fetchCounselors = async () => {
+  const loadCounselors = useCallback(async () => {
     setLoading(true);
     try {
-      if (activeTab === "pending") {
-        const data = await api.get("/admin/counselors/pending");
-        setCounselors(data || []);
-      } else {
-        // Fetch all, then filter client-side. The public endpoint might only return verified,
-        // but we'll use it as instructed. Or if an admin endpoint exists, it'll use that.
-        // Usually an admin would need /admin/counselors, but we'll fallback to /counselors
-        // if that's what's available. Assuming /admin/counselors exists for all based on prompt.
-        try {
-          // Let's try to get them. If there's an issue, we just show empty.
-          // The prompt says "Other tabs fetch all counselors and filter client-side"
-          const data = await api.get("/admin/counselors");
-          const all: Counselor[] = data || [];
-          if (activeTab === "active") {
-            setCounselors(all.filter(c => c.is_verified && c.is_active));
-          } else if (activeTab === "deactivated") {
-            setCounselors(all.filter(c => !c.is_active));
-          }
-        } catch (e) {
-          console.error(e);
-          setCounselors([]);
-        }
-      }
-    } catch (err) {
-      console.error(err);
+      const endpoint =
+        tab === "pending"
+          ? "/admin/counselors/pending"
+          : `/admin/counselors?status=${tab}`;
+      const data = await api.get<CounselorProfile[]>(endpoint);
+      setCounselors(Array.isArray(data) ? data : []);
+    } catch {
+      toast.error("Unable to load counselors list.");
     } finally {
       setLoading(false);
     }
-  };
+  }, [tab, toast]);
 
-  const handleApprove = async (id: string) => {
-    setActionLoading(`approve-${id}`);
-    try {
-      await api.post(`/admin/counselors/${id}/verify`, {});
-      fetchCounselors();
-    } catch (err) {
-      console.error(err);
-      alert("Failed to approve");
-    } finally {
-      setActionLoading(null);
-    }
-  };
+  useEffect(() => {
+    loadCounselors();
+  }, [loadCounselors]);
 
-  const handleReject = async (e: React.FormEvent) => {
+  useEffect(() => {
+    if (!showInvite) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !inviting) setShowInvite(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showInvite, inviting]);
+
+  const handleInvite = async (e: FormEvent) => {
     e.preventDefault();
-    if (!rejectId) return;
-    setActionLoading(`reject-${rejectId}`);
-    try {
-      await api.post(`/admin/counselors/${rejectId}/reject?reason=${encodeURIComponent(rejectReason)}`, {});
-      setRejectId(null);
-      setRejectReason("");
-      fetchCounselors();
-    } catch (err) {
-      console.error(err);
-      alert("Failed to reject");
-    } finally {
-      setActionLoading(null);
+    if (!inviteName.trim() || !inviteEmail.trim()) {
+      toast.error("Please provide full name and email.");
+      return;
     }
-  };
 
-  const handleDeactivate = async (id: string) => {
-    if (!confirm("Are you sure you want to deactivate this counselor?")) return;
-    setActionLoading(`deactivate-${id}`);
+    setInviting(true);
     try {
-      await api.post(`/admin/counselors/${id}/deactivate`, {});
-      fetchCounselors();
-    } catch (err) {
-      console.error(err);
-      alert("Failed to deactivate");
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handleInvite = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setInviteLoading(true);
-    try {
-      await api.post("/admin/counselors/invite", { email: inviteEmail, full_name: inviteName });
-      setShowInviteModal(false);
-      setInviteEmail("");
+      await api.post("/admin/counselors/invite", {
+        full_name: inviteName.trim(),
+        email: inviteEmail.trim(),
+      });
+      toast.success(`Invitation sent to ${inviteEmail.trim()}.`);
       setInviteName("");
-      alert("Invitation sent!");
+      setInviteEmail("");
+      setShowInvite(false);
+      await loadCounselors();
     } catch (err) {
-      console.error(err);
-      alert("Failed to send invite");
+      const msg =
+        err instanceof ApiError ? err.message : "Failed to invite counselor.";
+      toast.error(msg);
     } finally {
-      setInviteLoading(false);
+      setInviting(false);
     }
   };
 
-  const truncate = (text: string, len: number) => {
-    if (!text) return "";
-    return text.length > len ? text.substring(0, len) + "..." : text;
+  const handleApprove = async (c: CounselorProfile) => {
+    const ok = await confirm({
+      title: "Approve counselor?",
+      message: `Verify and activate ${c.user?.full_name || "this counselor"}?`,
+      confirmText: "Approve",
+    });
+    if (!ok) return;
+
+    setBusyId(c.id);
+    try {
+      await api.post(`/admin/counselors/${c.id}/verify`);
+      toast.success("Counselor approved.");
+      await loadCounselors();
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : "Failed to approve."
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleReject = async (c: CounselorProfile) => {
+    const reason = await promptText({
+      title: "Reject application",
+      message: `Provide a brief reason for rejecting ${
+        c.user?.full_name || "this applicant"
+      }:`,
+      label: "Rejection Reason",
+      placeholder: "e.g., PRC license document is unreadable",
+      confirmText: "Reject Application",
+      variant: "danger",
+      required: true,
+    });
+    if (!reason) return;
+
+    setBusyId(c.id);
+    try {
+      await api.post(
+        `/admin/counselors/${c.id}/reject?reason=${encodeURIComponent(reason)}`
+      );
+      toast.info("Counselor application rejected.");
+      await loadCounselors();
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : "Failed to reject application."
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleDeactivate = async (c: CounselorProfile) => {
+    const ok = await confirm({
+      title: "Deactivate counselor?",
+      message: `${
+        c.user?.full_name || "This counselor"
+      } will be hidden from the public directory.`,
+      confirmText: "Deactivate",
+      variant: "danger",
+    });
+    if (!ok) return;
+
+    setBusyId(c.id);
+    try {
+      await api.post(`/admin/counselors/${c.id}/deactivate`);
+      toast.success("Counselor deactivated.");
+      await loadCounselors();
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : "Failed to deactivate."
+      );
+    } finally {
+      setBusyId(null);
+    }
   };
 
   return (
-    <DashboardLayout role="admin" allowedRoles={["admin"]}>
-      <div className="flex justify-between items-start mb-6">
-        <div>
-          <h1 className="font-headline-xl text-primary mb-2">Counselor Management</h1>
-          <p className="font-body-lg text-on-surface-variant">Review verification requests and manage counselors.</p>
-        </div>
-        <button 
-          onClick={() => setShowInviteModal(true)}
-          className="bg-primary text-on-primary px-4 py-2 rounded-lg font-label-md flex items-center gap-2 hover:opacity-90"
-        >
-          <span className="material-symbols-outlined text-[20px]">person_add</span>
-          Invite New Counselor
-        </button>
-      </div>
-      
-      {/* Tabs */}
-      <div className="flex gap-4 mb-6 border-b border-surface-container-highest">
-        {(["pending", "active", "deactivated"] as const).map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`pb-2 px-4 font-label-md capitalize ${activeTab === tab ? "text-primary border-b-2 border-primary" : "text-on-surface-variant hover:text-on-surface"}`}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
-
-      {/* List */}
-      <div className="space-y-4">
-        {loading ? (
-          [...Array(3)].map((_, i) => (
-            <div key={i} className="bg-white p-6 rounded-xl border border-surface-container-highest animate-pulse h-32" />
-          ))
-        ) : counselors.length > 0 ? (
-          counselors.map(c => (
-            <div key={c.id} className="bg-white p-6 rounded-xl border border-surface-container-highest shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div>
-                <Link href={`/admin/counselors/${c.id}`} className="font-headline-md text-primary hover:underline">
-                  {c.user?.full_name || "Unknown"}
-                </Link>
-                <p className="font-body-sm text-on-surface-variant mb-2">{c.user?.email}</p>
-                <p className="font-body-md mb-2">{truncate(c.bio, 100)}</p>
-                <div className="flex gap-2 flex-wrap">
-                  {c.specialization_tags?.map(tag => (
-                    <span key={tag} className="bg-surface-container px-2 py-1 rounded font-label-sm text-on-surface">{tag}</span>
-                  ))}
-                </div>
-              </div>
-              <div className="flex gap-2">
-                {activeTab === "pending" && (
-                  <>
-                    <button 
-                      onClick={() => handleApprove(c.id)}
-                      disabled={actionLoading === `approve-${c.id}`}
-                      className="bg-primary text-on-primary px-4 py-2 rounded-lg font-label-md hover:opacity-90 disabled:opacity-50"
-                    >
-                      Approve
-                    </button>
-                    <button 
-                      onClick={() => setRejectId(c.id)}
-                      className="bg-error-container text-on-error-container px-4 py-2 rounded-lg font-label-md hover:opacity-90"
-                    >
-                      Reject
-                    </button>
-                  </>
-                )}
-                {activeTab === "active" && (
-                  <button 
-                    onClick={() => handleDeactivate(c.id)}
-                    disabled={actionLoading === `deactivate-${c.id}`}
-                    className="bg-error-container text-on-error-container px-4 py-2 rounded-lg font-label-md hover:opacity-90 disabled:opacity-50"
-                  >
-                    Deactivate
-                  </button>
-                )}
-              </div>
+    <ProtectedRoute allowedRoles={["admin"]}>
+      <DashboardLayout role="admin">
+        <div className="space-y-6">
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+            <div>
+              <h1 className="font-serif text-headline-lg text-text-primary">
+                Counselors Management
+              </h1>
+              <p className="mt-1 text-sm text-text-secondary">
+                Invite practitioners, verify PRC credentials, and manage active
+                profiles.
+              </p>
             </div>
-          ))
-        ) : (
-          <div className="bg-white p-8 rounded-xl border border-surface-container-highest text-center text-on-surface-variant">
-            No counselors found in this category.
+            <button
+              type="button"
+              onClick={() => setShowInvite(true)}
+              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              <span
+                aria-hidden="true"
+                className="material-symbols-outlined text-[18px]"
+              >
+                person_add
+              </span>
+              <span>Invite Counselor</span>
+            </button>
+          </div>
+
+          {/* Tabs */}
+          <div
+            role="tablist"
+            aria-label="Filter counselors by status"
+            className="flex flex-wrap gap-2"
+          >
+            {(["pending", "active", "deactivated"] as CounselorTab[]).map(
+              (t) => {
+                const active = tab === t;
+                return (
+                  <button
+                    key={t}
+                    role="tab"
+                    type="button"
+                    aria-selected={active}
+                    onClick={() => setTab(t)}
+                    className={`rounded-full px-4 py-1.5 text-xs font-semibold capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                      active
+                        ? "bg-primary text-white shadow-sm"
+                        : "border border-border-subtle bg-surface-elevated text-text-secondary hover:bg-surface-muted"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                );
+              }
+            )}
+          </div>
+
+          {loading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((n) => (
+                <div
+                  key={n}
+                  className="h-24 animate-pulse rounded-2xl border border-border-subtle bg-surface-elevated"
+                />
+              ))}
+            </div>
+          ) : counselors.length === 0 ? (
+            <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-10 text-center shadow-ambient">
+              <p className="text-sm text-text-secondary">
+                No {tab} counselors found.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {counselors.map((c) => (
+                <div
+                  key={c.id}
+                  className="flex flex-col justify-between gap-4 rounded-2xl border border-border-subtle bg-surface-elevated p-5 shadow-ambient sm:flex-row sm:items-center"
+                >
+                  <div>
+                    <h2 className="text-base font-semibold text-text-primary">
+                      {c.user?.full_name || "Counselor"}
+                    </h2>
+                    <p className="text-xs text-text-secondary">
+                      {c.user?.email} &bull;{" "}
+                      {c.credentials_url
+                        ? "Credentials uploaded"
+                        : "No credentials"}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link
+                      href={`/admin/counselors/${c.id}`}
+                      className="rounded-xl border border-border-subtle bg-background px-3.5 py-2 text-xs font-semibold text-text-primary hover:bg-surface-muted"
+                    >
+                      Details
+                    </Link>
+
+                    {tab === "pending" && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={busyId === c.id}
+                          onClick={() => handleApprove(c)}
+                          className="rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-50"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busyId === c.id}
+                          onClick={() => handleReject(c)}
+                          className="rounded-xl border border-status-danger/30 bg-status-danger-bg px-3.5 py-2 text-xs font-semibold text-status-danger hover:bg-status-danger hover:text-white disabled:opacity-50"
+                        >
+                          Reject
+                        </button>
+                      </>
+                    )}
+
+                    {tab === "active" && (
+                      <button
+                        type="button"
+                        disabled={busyId === c.id}
+                        onClick={() => handleDeactivate(c)}
+                        className="rounded-xl border border-status-danger/30 bg-status-danger-bg px-3.5 py-2 text-xs font-semibold text-status-danger hover:bg-status-danger hover:text-white disabled:opacity-50"
+                      >
+                        Deactivate
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Invite Modal */}
+        {showInvite && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="invite-modal-title"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-text-primary/50 p-4 backdrop-blur-xs animate-fade-in overscroll-contain"
+            onClick={(e) => {
+              if (e.target === e.currentTarget && !inviting) {
+                setShowInvite(false);
+              }
+            }}
+          >
+            <div className="w-full max-w-md rounded-2xl border border-border-subtle bg-surface-elevated p-6 shadow-2xl animate-scale-in">
+              <div className="flex items-center justify-between">
+                <h2
+                  id="invite-modal-title"
+                  className="font-serif text-xl font-medium text-text-primary"
+                >
+                  Invite a Counselor
+                </h2>
+                <button
+                  type="button"
+                  aria-label="Close invite dialog"
+                  disabled={inviting}
+                  onClick={() => setShowInvite(false)}
+                  className="rounded-lg p-1.5 text-text-muted hover:bg-surface-muted"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="material-symbols-outlined text-[20px]"
+                  >
+                    close
+                  </span>
+                </button>
+              </div>
+
+              <form onSubmit={handleInvite} className="mt-4 space-y-4">
+                <div>
+                  <label
+                    htmlFor="invite-name"
+                    className="block text-sm font-medium text-text-primary"
+                  >
+                    Full Name
+                  </label>
+                  <input
+                    id="invite-name"
+                    type="text"
+                    required
+                    value={inviteName}
+                    onChange={(e) => setInviteName(e.target.value)}
+                    placeholder="Dr. Maria Clara"
+                    className="mt-1.5 w-full rounded-xl border border-border-subtle bg-background px-4 py-2.5 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="invite-email"
+                    className="block text-sm font-medium text-text-primary"
+                  >
+                    Email Address
+                  </label>
+                  <input
+                    id="invite-email"
+                    type="email"
+                    required
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="counselor@example.com"
+                    className="mt-1.5 w-full rounded-xl border border-border-subtle bg-background px-4 py-2.5 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  />
+                </div>
+                <div className="flex justify-end gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    disabled={inviting}
+                    onClick={() => setShowInvite(false)}
+                    className="rounded-xl border border-border-subtle bg-background px-4 py-2 text-xs font-semibold text-text-primary hover:bg-surface-muted"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={inviting}
+                    className="rounded-xl bg-primary px-5 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-50"
+                  >
+                    {inviting ? "Sending…" : "Send Invitation"}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
-      </div>
-
-      {/* Invite Modal */}
-      {showInviteModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-lg">
-            <h2 className="font-headline-md text-primary mb-4">Invite New Counselor</h2>
-            <form onSubmit={handleInvite} className="space-y-4">
-              <div>
-                <label className="block font-label-md text-on-surface mb-1">Name</label>
-                <input 
-                  type="text" 
-                  value={inviteName}
-                  onChange={e => setInviteName(e.target.value)}
-                  className="w-full border border-surface-variant rounded-lg p-2 font-body-md"
-                  required 
-                />
-              </div>
-              <div>
-                <label className="block font-label-md text-on-surface mb-1">Email</label>
-                <input 
-                  type="email" 
-                  value={inviteEmail}
-                  onChange={e => setInviteEmail(e.target.value)}
-                  className="w-full border border-surface-variant rounded-lg p-2 font-body-md"
-                  required 
-                />
-              </div>
-              <div className="flex justify-end gap-2 mt-6">
-                <button 
-                  type="button" 
-                  onClick={() => setShowInviteModal(false)}
-                  className="px-4 py-2 text-on-surface-variant font-label-md hover:bg-surface-container rounded-lg"
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit" 
-                  disabled={inviteLoading}
-                  className="bg-primary text-on-primary px-4 py-2 rounded-lg font-label-md disabled:opacity-50"
-                >
-                  {inviteLoading ? "Sending..." : "Send Invite"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Reject Modal */}
-      {rejectId && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-lg">
-            <h2 className="font-headline-md text-primary mb-4">Reject Counselor</h2>
-            <form onSubmit={handleReject} className="space-y-4">
-              <div>
-                <label className="block font-label-md text-on-surface mb-1">Reason (optional)</label>
-                <textarea 
-                  value={rejectReason}
-                  onChange={e => setRejectReason(e.target.value)}
-                  className="w-full border border-surface-variant rounded-lg p-2 font-body-md h-24"
-                />
-              </div>
-              <div className="flex justify-end gap-2 mt-6">
-                <button 
-                  type="button" 
-                  onClick={() => { setRejectId(null); setRejectReason(""); }}
-                  className="px-4 py-2 text-on-surface-variant font-label-md hover:bg-surface-container rounded-lg"
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit" 
-                  disabled={!!actionLoading}
-                  className="bg-error text-on-error px-4 py-2 rounded-lg font-label-md disabled:opacity-50"
-                >
-                  Reject
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </DashboardLayout>
+      </DashboardLayout>
+    </ProtectedRoute>
   );
 }

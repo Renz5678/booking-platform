@@ -1,130 +1,119 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import DashboardLayout from "@/components/layout/DashboardLayout";
+import type { Booking } from "@/types";
 
-function SuccessContent() {
+function PaymentSuccessContent() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const bookingId = searchParams.get("booking_id");
-  const [status, setStatus] = useState<"loading" | "success" | "error" | "pending">("loading");
+
+  const [booking, setBooking] = useState<Booking | null>(null);
+  const [attempts, setAttempts] = useState(0);
+  const [timedOut, setTimedOut] = useState(false);
 
   useEffect(() => {
-    async function verifyPayment() {
-      if (!bookingId) {
-        setStatus("error");
+    if (!bookingId) return;
+    let active = true;
+    let count = 0;
+
+    const poll = async () => {
+      try {
+        const data = await api.get<Booking>(`/bookings/${bookingId}`);
+        if (!active) return;
+        setBooking(data);
+        if (data.status === "confirmed") {
+          return;
+        }
+      } catch {
+        // Keep polling up to max attempts
+      }
+
+      count += 1;
+      if (active) setAttempts(count);
+      if (count >= 15) {
+        if (active) setTimedOut(true);
         return;
       }
 
-      let attempts = 0;
-      const maxAttempts = 15; // 30 seconds total (15 * 2s)
-      
-      const checkStatus = async () => {
-        if (attempts >= maxAttempts) {
-          setStatus("pending");
-          return;
-        }
-        
-        try {
-          const res = await api.get(`/bookings/${bookingId}`);
-          if (res.status === "confirmed") {
-            setStatus("success");
-          } else if (res.status === "cancelled") {
-            setStatus("error");
-          } else {
-            attempts++;
-            setTimeout(checkStatus, 2000);
-          }
-        } catch (err) {
-          console.error("Verification error:", err);
-          setStatus("error");
-        }
-      };
-      
-      checkStatus();
-    }
+      setTimeout(() => {
+        if (active) poll();
+      }, 2000);
+    };
 
-    verifyPayment();
+    poll();
+    return () => {
+      active = false;
+    };
   }, [bookingId]);
 
+  const isConfirmed = booking?.status === "confirmed";
+
   return (
-    <div className="max-w-xl mx-auto mt-16 bg-surface rounded-2xl shadow-ambient p-10 text-center">
-      {status === "loading" && (
-        <div className="flex flex-col items-center py-12">
-          <div className="w-20 h-20 bg-secondary-container rounded-full flex items-center justify-center mb-8 relative">
-            <span className="material-symbols-outlined text-[40px] text-secondary absolute animate-pulse">lock</span>
-            <div className="absolute inset-0 border-4 border-secondary rounded-full border-t-transparent animate-spin"></div>
-          </div>
-          <h2 className="font-headline-lg text-primary mb-3">Verifying Payment...</h2>
-          <p className="font-body-lg text-on-surface-variant max-w-sm">Please wait securely while we confirm your session details.</p>
-        </div>
-      )}
-      
-      {status === "success" && (
-        <div className="flex flex-col items-center py-8">
-          <div className="w-24 h-24 bg-[#E8F8F0] rounded-full flex items-center justify-center mb-8 shadow-sm">
-            <span className="material-symbols-outlined text-[56px] text-[#138A72]">check_circle</span>
-          </div>
-          <h2 className="font-display-sm font-bold text-primary mb-4">Payment Successful!</h2>
-          <p className="font-body-lg text-on-surface-variant mb-10 max-w-md">
-            Your session has been successfully booked. You will receive an email confirmation with your Google Meet link shortly.
-          </p>
-          <button 
-            onClick={() => router.push("/dashboard")}
-            className="w-full max-w-sm bg-secondary text-on-secondary font-label-lg font-bold py-4 rounded-xl hover:opacity-90 active:scale-[0.98] transition-all duration-200 shadow-sm"
-          >
-            Go to My Dashboard
-          </button>
-        </div>
-      )}
+    <div className="mx-auto max-w-lg rounded-3xl border border-border-subtle bg-surface-elevated p-8 text-center shadow-ambient">
+      <div
+        className={`mx-auto flex h-14 w-14 items-center justify-center rounded-full ${
+          isConfirmed
+            ? "bg-status-success-bg text-status-success"
+            : "bg-primary-light text-primary"
+        }`}
+      >
+        <span
+          aria-hidden="true"
+          className="material-symbols-outlined text-[28px]"
+        >
+          {isConfirmed ? "check_circle" : "hourglass_top"}
+        </span>
+      </div>
 
-      {status === "error" && (
-        <div className="flex flex-col items-center py-8">
-          <div className="w-24 h-24 bg-error-container rounded-full flex items-center justify-center mb-8 shadow-sm">
-            <span className="material-symbols-outlined text-[56px] text-error">error</span>
-          </div>
-          <h2 className="font-display-sm font-bold text-primary mb-4">Verification Failed</h2>
-          <p className="font-body-lg text-on-surface-variant mb-10 max-w-md">
-            We couldn&apos;t verify your payment. If you were charged, please contact our support team immediately.
-          </p>
-          <button 
-            onClick={() => router.push("/dashboard")}
-            className="w-full max-w-sm border-2 border-outline-variant text-primary font-label-lg font-bold py-4 rounded-xl hover:bg-surface-container-low active:scale-[0.98] transition-all duration-200"
-          >
-            Return to Dashboard
-          </button>
-        </div>
-      )}
+      <h1 className="mt-4 font-serif text-2xl font-medium text-text-primary">
+        {isConfirmed
+          ? "Payment Confirmed!"
+          : timedOut
+            ? "Payment Received — Verification Pending"
+            : "Confirming Your Payment…"}
+      </h1>
 
-      {status === "pending" && (
-        <div className="flex flex-col items-center py-8">
-          <div className="w-24 h-24 bg-surface-container rounded-full flex items-center justify-center mb-8 shadow-sm">
-            <span className="material-symbols-outlined text-[56px] text-primary">schedule</span>
-          </div>
-          <h2 className="font-display-sm font-bold text-primary mb-4">Payment Pending</h2>
-          <p className="font-body-lg text-on-surface-variant mb-10 max-w-md">
-            Your payment is awaiting counselor verification. Please check your dashboard or booking page to see the updated status.
-          </p>
-          <button 
-            onClick={() => router.push("/dashboard")}
-            className="w-full max-w-sm border-2 border-outline-variant text-primary font-label-lg font-bold py-4 rounded-xl hover:bg-surface-container-low active:scale-[0.98] transition-all duration-200"
+      <p className="mt-2 text-sm text-text-secondary">
+        {isConfirmed
+          ? "Your counseling session is officially confirmed and ready."
+          : timedOut
+            ? "Your payment is being processed. You can check the latest status on your booking details page."
+            : `Checking confirmation status (attempt ${attempts + 1} of 15)…`}
+      </p>
+
+      <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:justify-center">
+        {bookingId && (
+          <Link
+            href={`/dashboard/bookings/${bookingId}`}
+            className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
-            Go to My Dashboard
-          </button>
-        </div>
-      )}
+            View Booking Details
+          </Link>
+        )}
+        <Link
+          href="/dashboard"
+          className="rounded-xl border border-border-subtle bg-background px-5 py-2.5 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          Go to Dashboard
+        </Link>
+      </div>
     </div>
   );
 }
 
 export default function PaymentSuccessPage() {
   return (
-    <DashboardLayout role="client" allowedRoles={["client"]}>
-      <Suspense fallback={<div className="text-center py-12">Loading...</div>}>
-        <SuccessContent />
+    <div className="flex min-h-[70vh] items-center justify-center bg-background px-4 py-12">
+      <Suspense
+        fallback={
+          <div className="h-64 w-full max-w-lg animate-pulse rounded-3xl bg-surface-elevated" />
+        }
+      >
+        <PaymentSuccessContent />
       </Suspense>
-    </DashboardLayout>
+    </div>
   );
 }

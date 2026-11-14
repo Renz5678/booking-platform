@@ -8,9 +8,9 @@ interface RequestOptions extends RequestInit {
 
 export class ApiError extends Error {
   status: number;
-  data: any;
+  data: unknown;
 
-  constructor(status: number, message: string, data: any) {
+  constructor(status: number, message: string, data: unknown) {
     super(message);
     this.status = status;
     this.data = data;
@@ -18,11 +18,20 @@ export class ApiError extends Error {
   }
 }
 
-async function fetchApi(endpoint: string, options: RequestOptions = {}) {
+function serializeBody(body: unknown): BodyInit | undefined {
+  if (body === undefined || body === null) return undefined;
+  if (body instanceof FormData || typeof body === "string") return body;
+  return JSON.stringify(body);
+}
+
+async function fetchApi<T = any>(
+  endpoint: string,
+  options: RequestOptions = {}
+): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
-  
+
   const headers = new Headers(options.headers || {});
-  
+
   if (!headers.has("Content-Type") && !(options.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
@@ -31,31 +40,64 @@ async function fetchApi(endpoint: string, options: RequestOptions = {}) {
     ...options,
     headers,
     // Ensure cookies (JWT) are included in CORS requests
-    credentials: options.credentials || "include", 
+    credentials: options.credentials || "include",
   };
 
   const response = await fetch(url, config);
 
-  let data;
+  let data: unknown;
   try {
     data = await response.json();
-  } catch (err) {
-    // Some responses might not have JSON bodies
+  } catch {
     data = null;
   }
 
   if (!response.ok) {
-    const errorMessage = data?.detail || data?.msg || response.statusText || "An API error occurred";
+    const errObj = data as { detail?: string; msg?: string } | null;
+    const errorMessage =
+      errObj?.detail ||
+      errObj?.msg ||
+      response.statusText ||
+      "An API error occurred";
     throw new ApiError(response.status, errorMessage, data);
   }
 
-  return data;
+  return data as T;
 }
 
 export const api = {
-  get: (endpoint: string, options?: RequestOptions) => fetchApi(endpoint, { ...options, method: "GET" }),
-  post: (endpoint: string, body: any, options?: RequestOptions) => fetchApi(endpoint, { ...options, method: "POST", body: JSON.stringify(body) }),
-  put: (endpoint: string, body: any, options?: RequestOptions) => fetchApi(endpoint, { ...options, method: "PUT", body: JSON.stringify(body) }),
-  delete: (endpoint: string, options?: RequestOptions) => fetchApi(endpoint, { ...options, method: "DELETE" }),
-  patch: (endpoint: string, body: any, options?: RequestOptions) => fetchApi(endpoint, { ...options, method: "PATCH", body: JSON.stringify(body) }),
+  get: <T = any>(endpoint: string, options?: RequestOptions) =>
+    fetchApi<T>(endpoint, { ...options, method: "GET" }),
+  post: <T = any>(
+    endpoint: string,
+    body?: unknown,
+    options?: RequestOptions
+  ) =>
+    fetchApi<T>(endpoint, {
+      ...options,
+      method: "POST",
+      body: serializeBody(body),
+    }),
+  put: <T = any>(
+    endpoint: string,
+    body?: unknown,
+    options?: RequestOptions
+  ) =>
+    fetchApi<T>(endpoint, {
+      ...options,
+      method: "PUT",
+      body: serializeBody(body),
+    }),
+  delete: <T = any>(endpoint: string, options?: RequestOptions) =>
+    fetchApi<T>(endpoint, { ...options, method: "DELETE" }),
+  patch: <T = any>(
+    endpoint: string,
+    body?: unknown,
+    options?: RequestOptions
+  ) =>
+    fetchApi<T>(endpoint, {
+      ...options,
+      method: "PATCH",
+      body: serializeBody(body),
+    }),
 };

@@ -1,87 +1,269 @@
 @import "tailwindcss";
 
 @theme {
-  --color-background: #fbf9fa;
-  --color-on-primary-container: #97a9be;
+  /* Core Alaga Sanctuary Palette (WCAG AA verified) */
+  --color-background: #f8f7f4;
+  --color-surface: #f8f7f4;
+  --color-surface-bright: #ffffff;
   --color-surface-container-lowest: #ffffff;
-  --color-on-tertiary-fixed-variant: #005143;
-  --color-inverse-primary: #b6c8df;
-  --color-on-surface-variant: #43474c;
-  --color-tertiary-container: #004539;
-  --color-surface-bright: #fbf9fa;
-  --color-surface-container: #efedef;
-  --color-on-background: #1b1c1d;
-  --color-surface-container-highest: #e4e2e3;
-  --color-on-primary-fixed-variant: #37485b;
-  --color-tertiary: #002d25;
-  --color-secondary-container: #7ff995;
-  --color-secondary-fixed-dim: #65de7e;
-  --color-on-error-container: #93000a;
-  --color-surface-dim: #dbd9db;
-  --color-secondary-fixed: #82fb98;
-  --color-on-tertiary: #ffffff;
-  --color-primary-container: #2d3e50;
-  --color-primary-fixed: #d2e4fb;
-  --color-outline-variant: #c4c6cd;
-  --color-on-error: #ffffff;
-  --color-tertiary-fixed-dim: #68dac0;
-  --color-primary: #172839;
-  --color-on-primary-fixed: #0a1d2d;
-  --color-surface-tint: #4f6073;
-  --color-primary-fixed-dim: #b6c8df;
-  --color-on-surface: #1b1c1d;
-  --color-surface-variant: #e4e2e3;
-  --color-on-secondary-fixed: #002109;
-  --color-on-tertiary-fixed: #00201a;
-  --color-surface-container-high: #e9e7e9;
-  --color-on-tertiary-container: #44b9a1;
-  --color-on-primary: #ffffff;
-  --color-surface: #fbf9fa;
-  --color-inverse-on-surface: #f2f0f2;
-  --color-error: #ba1a1a;
-  --color-secondary: #006e2d;
-  --color-outline: #74777d;
-  --color-surface-container-low: #f5f3f4;
-  --color-error-container: #ffdad6;
-  --color-on-secondary-fixed-variant: #005320;
-  --color-tertiary-fixed: #85f6db;
-  --color-on-secondary-container: #00722f;
-  --color-on-secondary: #ffffff;
-  --color-inverse-surface: #303032;
+  --color-surface-container-low: #f1efea;
+  --color-surface-container: #e6e4dd;
+  --color-surface-container-high: #dcd9d0;
+  --color-surface-container-highest: #d0ccc2;
+  --color-surface-variant: #e6e4dd;
+  --color-surface-dim: #dad7ce;
 
-  --spacing-section-gap: 80px;
+  --color-on-background: #1a1d20;
+  --color-on-surface: #1a1d20;
+  --color-on-surface-variant: #4a525a;
+
+  /* Primary: Deep Slate Navy (15.1:1 on #f8f7f4) */
+  --color-primary: #142534;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #243b50;
+  --color-on-primary-container: #dbe4ee;
+  --color-primary-fixed: #dce6f2;
+  --color-primary-fixed-dim: #b6c8df;
+  --color-on-primary-fixed: #142534;
+  --color-on-primary-fixed-variant: #2c4156;
+  --color-inverse-primary: #b6c8df;
+
+  /* Secondary: Sage Eucalyptus (7.5:1 on #ffffff) */
+  --color-secondary: #1e5e4a;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #ddf0e8;
+  --color-on-secondary-container: #0d3b2b;
+  --color-secondary-fixed: #c5e6d8;
+  --color-secondary-fixed-dim: #9cd4bd;
+  --color-on-secondary-fixed: #0d3b2b;
+  --color-on-secondary-fixed-variant: #154d3b;
+
+  /* Tertiary: Deep Botanical Teal (7.9:1 on #f8f7f4) */
+  --color-tertiary: #0f3a31;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #17493e;
+  --color-on-tertiary-container: #175a4e;
+  --color-tertiary-fixed: #d3eee6;
+  --color-tertiary-fixed-dim: #9fd8c8;
+  --color-on-tertiary-fixed: #0f3a31;
+  --color-on-tertiary-fixed-variant: #154e43;
+
+  --color-outline: #687078;
+  --color-outline-variant: #d5d3cb;
+  --color-surface-tint: #4a5e72;
+  --color-inverse-surface: #252b31;
+  --color-inverse-on-surface: #f4f2ed;
+
+  --color-error: #b42318;
+  --color-on-error: #ffffff;
+  --color-error-container: #fee4e2;
+  --color-on-error-container: #7a271a;
+
+  /* Layout Tokens */
+  --spacing-section-gap: 72px;
   --spacing-margin-desktop: 40px;
   --spacing-unit: 8px;
   --spacing-margin-mobile: 16px;
   --spacing-container-max: 1200px;
   --spacing-gutter: 24px;
 
-  --font-inter: var(--font-inter), "Inter", sans-serif;
-  --font-headline-lg: var(--font-inter);
-  --font-label-sm: var(--font-inter);
-  --font-body-md: var(--font-inter);
-  --font-body-lg: var(--font-inter);
-  --font-headline-md: var(--font-inter);
-  --font-headline-lg-mobile: var(--font-inter);
-  --font-headline-xl: var(--font-inter);
-  --font-label-md: var(--font-inter);
+  /* Typography Families (injected by next/font in layout.tsx) */
+  --font-sans: var(--font-sans-face), "Plus Jakarta Sans", "Inter", system-ui, -apple-system, sans-serif;
+  --font-serif: var(--font-serif-face), "Newsreader", Georgia, serif;
+  --font-inter: var(--font-sans);
+  --font-headline-xl: var(--font-serif);
+  --font-headline-lg: var(--font-serif);
+  --font-headline-lg-mobile: var(--font-serif);
+  --font-headline-md: var(--font-sans);
+  --font-body-lg: var(--font-sans);
+  --font-body-md: var(--font-sans);
+  --font-label-md: var(--font-sans);
+  --font-label-sm: var(--font-sans);
 }
 
 @layer utilities {
-  .custom-shadow { box-shadow: 0 4px 16px rgba(45, 62, 80, 0.05); }
-  .custom-hover-shadow:hover { box-shadow: 0 6px 20px rgba(45, 62, 80, 0.08); }
+  .shadow-ambient {
+    box-shadow: 0 4px 20px rgba(20, 37, 52, 0.05), 0 1px 3px rgba(20, 37, 52, 0.04);
+  }
+  .shadow-ambient-hover:hover {
+    box-shadow: 0 12px 30px rgba(20, 37, 52, 0.09), 0 2px 6px rgba(20, 37, 52, 0.05);
+  }
+  .custom-shadow {
+    box-shadow: 0 4px 20px rgba(20, 37, 52, 0.05), 0 1px 3px rgba(20, 37, 52, 0.04);
+  }
+  .custom-hover-shadow:hover {
+    box-shadow: 0 10px 26px rgba(20, 37, 52, 0.09), 0 2px 6px rgba(20, 37, 52, 0.05);
+  }
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
 
-  .text-headline-xl { font-size: 48px; line-height: 56px; letter-spacing: -0.02em; font-weight: 600; }
-  .text-headline-lg { font-size: 32px; line-height: 40px; letter-spacing: -0.01em; font-weight: 600; }
-  .text-headline-lg-mobile { font-size: 28px; line-height: 36px; font-weight: 600; }
-  .text-headline-md { font-size: 24px; line-height: 32px; font-weight: 500; }
-  .text-body-lg { font-size: 18px; line-height: 28px; font-weight: 400; }
-  .text-body-md { font-size: 16px; line-height: 24px; font-weight: 400; }
-  .text-label-md { font-size: 14px; line-height: 20px; letter-spacing: 0.01em; font-weight: 500; }
-  .text-label-sm { font-size: 12px; line-height: 16px; letter-spacing: 0.05em; font-weight: 600; }
+  /* Complete Typography Scale */
+  .font-display-sm,
+  .text-display-sm {
+    font-family: var(--font-serif);
+    font-size: 36px;
+    line-height: 44px;
+    letter-spacing: -0.02em;
+    font-weight: 600;
+  }
+  .text-headline-xl,
+  .font-headline-xl {
+    font-family: var(--font-serif);
+    font-size: 40px;
+    line-height: 48px;
+    letter-spacing: -0.02em;
+    font-weight: 600;
+  }
+  .text-headline-lg,
+  .font-headline-lg {
+    font-family: var(--font-serif);
+    font-size: 30px;
+    line-height: 38px;
+    letter-spacing: -0.015em;
+    font-weight: 600;
+  }
+  .text-headline-lg-mobile,
+  .font-headline-lg-mobile {
+    font-family: var(--font-serif);
+    font-size: 26px;
+    line-height: 34px;
+    letter-spacing: -0.01em;
+    font-weight: 600;
+  }
+  .text-headline-md,
+  .font-headline-md {
+    font-family: var(--font-sans);
+    font-size: 20px;
+    line-height: 28px;
+    letter-spacing: -0.01em;
+    font-weight: 600;
+  }
+  .font-headline-sm,
+  .text-headline-sm {
+    font-family: var(--font-sans);
+    font-size: 18px;
+    line-height: 26px;
+    font-weight: 600;
+  }
+  .text-body-lg,
+  .font-body-lg {
+    font-family: var(--font-sans);
+    font-size: 17px;
+    line-height: 27px;
+    font-weight: 400;
+  }
+  .text-body-md,
+  .font-body-md {
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 24px;
+    font-weight: 400;
+  }
+  .font-body-sm,
+  .text-body-sm {
+    font-family: var(--font-sans);
+    font-size: 13.5px;
+    line-height: 20px;
+    font-weight: 400;
+  }
+  .font-label-lg,
+  .text-label-lg {
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 22px;
+    font-weight: 600;
+  }
+  .text-label-md,
+  .font-label-md {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 500;
+  }
+  .text-label-sm,
+  .font-label-sm {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 16px;
+    letter-spacing: 0.02em;
+    font-weight: 600;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-slide-up {
+  animation: slideUp 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-scale-in {
+  animation: scaleIn 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (pointer: fine) {
+  html {
+    overscroll-behavior: none;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   background-color: var(--color-background);
   color: var(--color-on-background);
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: rgba(30, 94, 74, 0.14);
+}
+
+button,
+a,
+[role="button"] {
+  touch-action: manipulation;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

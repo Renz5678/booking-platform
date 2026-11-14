@@ -1,322 +1,822 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import DashboardLayout from "@/components/layout/DashboardLayout";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { FormEvent, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import WeeklySlotGrid, {
-  WeeklySlotMap,
   buildManilaSlotIso,
   formatLocalDate,
+  getManilaHour,
+  type WeeklySlotMap,
 } from "@/components/dashboard/WeeklySlotGrid";
+import { useAuth } from "@/context/AuthContext";
+import { useToast } from "@/context/ToastContext";
 import { api, ApiError } from "@/lib/api";
+import { getInitials } from "@/lib/routes";
+import type { CounselorProfile } from "@/types";
 
-interface CounselorProfile {
-  id: string;
-  bio: string | null;
-  specialization_tags: string[];
-  user: {
-    id: string;
-    full_name: string;
-  };
+function getMonday(d: Date): Date {
+  const copy = new Date(d);
+  copy.setHours(0, 0, 0, 0);
+  const day = copy.getDay();
+  const diff = copy.getDate() - day + (day === 0 ? -6 : 1);
+  copy.setDate(diff);
+  return copy;
 }
 
-export default function FindCounselorPage() {
+function formatHourLabel(hour: number): string {
+  const suffix = hour >= 12 ? "PM" : "AM";
+  const h12 = hour % 12 === 0 ? 12 : hour % 12;
+  return `${h12}:00 ${suffix}`;
+}
+
+function CounselorsContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { user, isLoading: authLoading } = useAuth();
+  const { toast } = useToast();
+
+  const initialSearch = searchParams.get("q") || "";
+  const initialSpec = searchParams.get("spec") || "All";
+  const deepLinkedCounselorId = searchParams.get("counselor");
+  const deepLinkedDate = searchParams.get("date");
+
   const [counselors, setCounselors] = useState<CounselorProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
+  const [selectedSpec, setSelectedSpec] = useState(initialSpec);
 
-  // Booking Modal State
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedCounselor, setSelectedCounselor] = useState<CounselorProfile | null>(null);
-  
-  // Wizard State
-  const [bookingStep, setBookingStep] = useState<1 | 2 | 3>(1);
-  
-  // Booking Form State
-  const duration = 60; // Fixed to hourly basis
-  const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => {
-    const d = new Date();
-    d.setHours(0,0,0,0);
-    const day = d.getDay() || 7;
-    d.setDate(d.getDate() - day + 1);
-    return d;
-  });
-  const [availableWeeklySlots, setAvailableWeeklySlots] = useState<WeeklySlotMap>({});
-  const [selectedTimeRange, setSelectedTimeRange] = useState<{ dateStr: string, startTime: string, endTime: string, slotsCount: number } | null>(null);
+  // Booking modal state
+  const [bookingCounselor, setBookingCounselor] =
+    useState<CounselorProfile | null>(null);
+  const [bookingStep, setBookingStep] = useState<1 | 2>(1);
+  const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() =>
+    getMonday(new Date())
+  );
+  const [weeklySlots, setWeeklySlots] = useState<WeeklySlotMap>({});
   const [loadingSlots, setLoadingSlots] = useState(false);
-  // selectedTime removed in favor of selectedTimeRange
-  
-  const [intakeCategory, setIntakeCategory] = useState("General");
-  const [intakeNotes, setIntakeNotes] = useState("");
-  const [isBooking, setIsBooking] = useState(false);
+
+  const [selectedDate, setSelectedDate] = useState<string>("");
+  const [selectedStartHour, setSelectedStartHour] = useState<number | null>(
+    null
+  );
+  const [selectedEndHour, setSelectedEndHour] = useState<number | null>(null);
+
+  // Intake form state
+  const [reason, setReason] = useState("");
+  const [modality, setModality] = useState("Video Call (Google Meet)");
+  const [emergencyContactName, setEmergencyContactName] = useState("");
+  const [emergencyContactPhone, setEmergencyContactPhone] = useState("");
+  const [additionalNotes, setAdditionalNotes] = useState("");
+  const [privacyAgreed, setPrivacyAgreed] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    const fetchCounselors = async () => {
+    let active = true;
+    const loadCounselors = async () => {
       try {
-        const data = await api.get("/counselors");
-        setCounselors(data);
-      } catch (err) {
-        console.error("Failed to fetch counselors:", err);
+        const data = await api.get<CounselorProfile[]>("/counselors/");
+        if (active && Array.isArray(data)) {
+          setCounselors(data);
+        }
+      } catch {
+        if (active) toast.error("Unable to load counselors right now.");
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
-    fetchCounselors();
-  }, []);
+    loadCounselors();
+    return () => {
+      active = false;
+    };
+  }, [toast]);
 
+  const specializations = useMemo(() => {
+    const set = new Set<string>();
+    counselors.forEach((c) => {
+      c.specialization_tags?.forEach((s) => set.add(s));
+    });
+    return ["All", ...Array.from(set).sort()];
+  }, [counselors]);
+
+  const updateUrlFilters = useCallback(
+    (q: string, spec: string) => {
+      const params = new URLSearchParams();
+      if (q.trim()) params.set("q", q.trim());
+      if (spec && spec !== "All") params.set("spec", spec);
+      const qs = params.toString();
+      router.replace(qs ? `/counselors?${qs}` : "/counselors", {
+        scroll: false,
+      });
+    },
+    [router]
+  );
+
+  const filteredCounselors = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return counselors.filter((c) => {
+      const matchesSpec =
+        selectedSpec === "All" ||
+        c.specialization_tags?.includes(selectedSpec);
+      if (!matchesSpec) return false;
+      if (!q) return true;
+      const name = c.user?.full_name?.toLowerCase() || "";
+      const bio = c.bio?.toLowerCase() || "";
+      const specs = (c.specialization_tags || []).join(" ").toLowerCase();
+      return name.includes(q) || bio.includes(q) || specs.includes(q);
+    });
+  }, [counselors, searchQuery, selectedSpec]);
+
+  const fetchWeekSlots = useCallback(
+    async (counselorId: string, weekStart: Date) => {
+      setLoadingSlots(true);
+      try {
+        const days = Array.from({ length: 7 }, (_, i) => {
+          const d = new Date(weekStart);
+          d.setDate(d.getDate() + i);
+          return formatLocalDate(d);
+        });
+
+        const results = await Promise.all(
+          days.map(async (dateStr) => {
+            try {
+              const res = await api.get<{ slots: string[] }>(
+                `/availability/${counselorId}/slots?target_date=${dateStr}`
+              );
+              const hours = new Set<number>();
+              (res.slots || []).forEach((iso) => {
+                hours.add(getManilaHour(iso));
+              });
+              return [dateStr, hours] as const;
+            } catch {
+              return [dateStr, new Set<number>()] as const;
+            }
+          })
+        );
+
+        const map: WeeklySlotMap = {};
+        results.forEach(([dateStr, hours]) => {
+          map[dateStr] = hours;
+        });
+        setWeeklySlots(map);
+      } finally {
+        setLoadingSlots(false);
+      }
+    },
+    []
+  );
+
+  const openBookingModal = useCallback(
+    (counselor: CounselorProfile, targetDateStr?: string | null) => {
+      if (!user) {
+        toast.info(
+          "Please sign in to view live availability and book a session."
+        );
+        router.push(
+          `/login?redirect=${encodeURIComponent(
+            `/counselors?counselor=${counselor.id}`
+          )}`
+        );
+        return;
+      }
+
+      if (user.role !== "client") {
+        toast.info("Only client accounts can book counseling sessions.");
+        return;
+      }
+
+      const baseDate = targetDateStr
+        ? new Date(`${targetDateStr}T00:00:00`)
+        : new Date();
+      const monday = getMonday(
+        isNaN(baseDate.getTime()) ? new Date() : baseDate
+      );
+
+      setBookingCounselor(counselor);
+      setBookingStep(1);
+      setCurrentWeekStart(monday);
+      setSelectedDate("");
+      setSelectedStartHour(null);
+      setSelectedEndHour(null);
+      setReason("");
+      setAdditionalNotes("");
+      setPrivacyAgreed(false);
+      fetchWeekSlots(counselor.id, monday);
+    },
+    [user, toast, router, fetchWeekSlots]
+  );
+
+  // Handle deep-link ?counselor=<id> once auth & counselors resolve
   useEffect(() => {
-    if (isModalOpen && selectedCounselor) {
-      const fetchSlots = async () => {
-        setLoadingSlots(true);
-        try {
-          const start = new Date(currentWeekStart);
-          const end = new Date(currentWeekStart);
-          end.setDate(end.getDate() + 6);
-          const startDateStr = formatLocalDate(start);
-          const endDateStr = formatLocalDate(end);
-
-          const data = await api.get(`/availability/${selectedCounselor.id}/slots?start_date=${startDateStr}&end_date=${endDateStr}&duration=${duration}`);
-          setAvailableWeeklySlots(data || {});
-        } catch (err) {
-          console.error("Failed to fetch slots:", err);
-          setAvailableWeeklySlots({});
-        } finally {
-          setLoadingSlots(false);
-        }
-      };
-      fetchSlots();
+    if (
+      !deepLinkedCounselorId ||
+      loading ||
+      authLoading ||
+      bookingCounselor ||
+      counselors.length === 0
+    ) {
+      return;
     }
-  }, [isModalOpen, selectedCounselor, currentWeekStart, duration]);
+    const found = counselors.find((c) => c.id === deepLinkedCounselorId);
+    if (found && user?.role === "client") {
+      openBookingModal(found, deepLinkedDate);
+    }
+  }, [
+    deepLinkedCounselorId,
+    deepLinkedDate,
+    loading,
+    authLoading,
+    bookingCounselor,
+    counselors,
+    user,
+    openBookingModal,
+  ]);
 
-  const openBookingModal = (counselor: CounselorProfile) => {
-    setSelectedCounselor(counselor);
-    
-    // Reset to current week
-    const d = new Date();
-    d.setHours(0,0,0,0);
-    const day = d.getDay() || 7;
-    d.setDate(d.getDate() - day + 1);
-    setCurrentWeekStart(d);
-    
-    setBookingStep(1);
-    setSelectedTimeRange(null);
-    setIsModalOpen(true);
+  // Escape key closes modal
+  useEffect(() => {
+    if (!bookingCounselor) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !submitting) {
+        setBookingCounselor(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [bookingCounselor, submitting]);
+
+  const handleWeekChange = (newMonday: Date) => {
+    setCurrentWeekStart(newMonday);
+    setSelectedDate("");
+    setSelectedStartHour(null);
+    setSelectedEndHour(null);
+    if (bookingCounselor) {
+      fetchWeekSlots(bookingCounselor.id, newMonday);
+    }
   };
 
-  const handleBookSession = async (e: React.FormEvent) => {
+  const handleSelectRange = (dateStr: string, minHour: number, maxHour: number) => {
+    setSelectedDate(dateStr);
+    setSelectedStartHour(minHour);
+    setSelectedEndHour(maxHour + 1);
+  };
+
+  const durationHours =
+    selectedStartHour !== null && selectedEndHour !== null
+      ? selectedEndHour - selectedStartHour
+      : 0;
+  const estimatedTotal = durationHours > 0 ? 1500 * durationHours : 0;
+
+  const handleBookingSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!selectedCounselor || !selectedTimeRange) return;
+    if (
+      !bookingCounselor ||
+      !selectedDate ||
+      selectedStartHour === null ||
+      selectedEndHour === null
+    ) {
+      toast.error("Please select an available time slot first.");
+      return;
+    }
+    if (!reason.trim()) {
+      toast.error("Please share a brief reason for your counseling session.");
+      return;
+    }
+    if (!privacyAgreed) {
+      toast.error("Please acknowledge the confidentiality notice to continue.");
+      return;
+    }
 
-    setIsBooking(true);
-    
-    // Calculate end time
-    const start = new Date(selectedTimeRange.startTime);
-    const end = new Date(selectedTimeRange.endTime);
-
-    const payload = {
-      counselor_id: selectedCounselor.id,
-      scheduled_start: start.toISOString(),
-      scheduled_end: end.toISOString(),
-      intake_concern_category: intakeCategory,
-      intake_notes: intakeNotes,
-      captcha_token: "mock_captcha_token",
-      honeypot: ""
-    };
-
+    setSubmitting(true);
     try {
-      const data = await api.post("/bookings/", payload);
-      setIsModalOpen(false);
-      router.push(`/dashboard/bookings/${data.booking_id}`);
-    } catch (err: unknown) {
-      console.error("Booking error:", err);
-      if (err instanceof ApiError) {
-        alert(`Failed to book session: ${err.message}`);
-      } else {
-        alert("An error occurred while booking. Please try again.");
-      }
+      const startIso = buildManilaSlotIso(selectedDate, selectedStartHour);
+      const endIso = buildManilaSlotIso(selectedDate, selectedEndHour);
+
+      const notesCombined = [
+        modality ? `Preferred format: ${modality}` : "",
+        emergencyContactName.trim()
+          ? `Emergency contact: ${emergencyContactName.trim()} ${
+              emergencyContactPhone.trim()
+                ? `(${emergencyContactPhone.trim()})`
+                : ""
+            }`
+          : "",
+        additionalNotes.trim(),
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      const res = await api.post<{ id?: string; booking_id?: string }>(
+        "/bookings/",
+        {
+          counselor_id: bookingCounselor.id,
+          scheduled_start: startIso,
+          scheduled_end: endIso,
+          intake_concern_category: reason.trim(),
+          intake_notes: notesCombined || undefined,
+          captcha_token: "mock_captcha_token",
+          honeypot: "",
+        }
+      );
+
+      toast.success("Booking created! Complete your payment proof to confirm.");
+      setBookingCounselor(null);
+      router.push(`/dashboard/bookings/${res.booking_id || res.id}`);
+    } catch (err) {
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : "Unable to create booking. The slot may no longer be available.";
+      toast.error(msg);
     } finally {
-      setIsBooking(false);
+      setSubmitting(false);
     }
   };
 
   return (
-    <DashboardLayout role="client" allowedRoles={["client"]}>
-      <div className="max-w-5xl mx-auto">
-        <h1 className="font-headline-xl text-primary mb-2">Find a Counselor</h1>
-        <p className="font-body-lg text-on-surface-variant mb-8">Browse our network of professional therapists and book a session today.</p>
-
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 shadow-sm">
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="w-16 h-16 rounded-full bg-surface-variant/20 animate-pulse"></div>
-                  <div className="space-y-2 flex-1">
-                    <div className="h-5 w-1/2 bg-surface-variant/30 rounded animate-pulse"></div>
-                    <div className="h-3 w-1/3 bg-surface-variant/20 rounded animate-pulse"></div>
-                  </div>
-                </div>
-                <div className="space-y-2 mb-6">
-                  <div className="h-4 w-full bg-surface-variant/20 rounded animate-pulse"></div>
-                  <div className="h-4 w-5/6 bg-surface-variant/20 rounded animate-pulse"></div>
-                  <div className="h-4 w-4/6 bg-surface-variant/20 rounded animate-pulse"></div>
-                </div>
-                <div className="flex gap-2 mb-6">
-                  <div className="h-6 w-20 bg-surface-variant/30 rounded-full animate-pulse"></div>
-                  <div className="h-6 w-24 bg-surface-variant/30 rounded-full animate-pulse"></div>
-                </div>
-                <div className="h-12 w-full bg-surface-variant/30 rounded-lg animate-pulse"></div>
-              </div>
-            ))}
-          </div>
-        ) : counselors.length === 0 ? (
-          <div className="bg-surface-container-low p-8 rounded-xl text-center text-on-surface-variant">
-            No counselors are currently available. Please check back later!
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {counselors.map((counselor) => (
-              <div key={counselor.id} className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 shadow-sm hover:-translate-y-1 hover:shadow-lg transition-all duration-300 flex flex-col">
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="w-16 h-16 rounded-full bg-surface-container flex items-center justify-center text-primary-container text-2xl shrink-0">
-                    <span className="material-symbols-outlined">person</span>
-                  </div>
-                  <div>
-                    <h3 className="font-headline-md text-primary font-bold">{counselor.user.full_name}</h3>
-                    <p className="font-label-sm text-on-surface-variant">Licensed Counselor</p>
-                  </div>
-                </div>
-                <p className="font-body-md text-on-surface-variant line-clamp-3 mb-4 flex-1">
-                  {counselor.bio || "No biography provided yet."}
-                </p>
-                <div className="flex flex-wrap gap-2 mb-6 min-h-[28px]">
-                  {counselor.specialization_tags.map(tag => (
-                    <span key={tag} className="bg-secondary-container text-on-secondary-container px-3 py-1 rounded-full font-label-sm">
-                      {tag}
-                    </span>
-                  ))}
-                  {counselor.specialization_tags.length === 0 && (
-                    <span className="text-on-surface-variant italic font-label-sm">General Counseling</span>
-                  )}
-                </div>
-                <button 
-                  onClick={() => openBookingModal(counselor)}
-                  className="w-full bg-secondary text-on-secondary font-label-md py-3 rounded-lg hover:opacity-90 active:scale-[0.98] transition-all duration-200 shadow-sm"
+    <div className="bg-background py-12 sm:py-16">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="max-w-2xl">
+          <span className="text-label-md uppercase tracking-wider text-primary">
+            Verified Directory
+          </span>
+          <h1 className="mt-2 font-serif text-headline-xl text-text-primary">
+            Find the right counselor for you
+          </h1>
+          <p className="mt-3 text-body-md text-text-secondary">
+            Browse PRC-licensed mental health professionals.{" "}
+            {!user && (
+              <span>
+                <Link
+                  href="/login?redirect=/counselors"
+                  className="font-semibold text-primary hover:underline"
                 >
-                  Book Session
-                </button>
-              </div>
-            ))}
+                  Sign in
+                </Link>{" "}
+                when you&apos;re ready to view live time slots and book a
+                session.
+              </span>
+            )}
+          </p>
+        </div>
+
+        {/* Search & Filter Controls */}
+        <div className="mt-8 space-y-4">
+          <div className="relative max-w-md">
+            <label htmlFor="counselor-search" className="sr-only">
+              Search counselors by name, bio, or specialization
+            </label>
+            <span
+              aria-hidden="true"
+              className="material-symbols-outlined pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[20px] text-text-muted"
+            >
+              search
+            </span>
+            <input
+              id="counselor-search"
+              type="search"
+              value={searchQuery}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSearchQuery(val);
+                updateUrlFilters(val, selectedSpec);
+              }}
+              placeholder="Search by name or focus area…"
+              className="w-full rounded-xl border border-border-subtle bg-surface-elevated py-2.5 pl-11 pr-4 text-sm text-text-primary placeholder:text-text-muted shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
           </div>
-        )}
 
-        {/* Booking Modal */}
-        {isModalOpen && selectedCounselor && (
-          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-            <div className={`bg-surface-container-lowest rounded-xl w-full p-6 shadow-ambient max-h-[95vh] overflow-y-auto ${bookingStep === 1 ? 'max-w-4xl' : 'max-w-lg'}`}>
-              <div className="flex justify-between items-center mb-6 border-b border-surface-container pb-4">
-                <h2 className="font-headline-md text-[20px] font-medium text-primary">Book with {selectedCounselor.user.full_name}</h2>
-                <button onClick={() => setIsModalOpen(false)} className="text-on-surface-variant hover:text-error transition-colors">
-                  <span className="material-symbols-outlined">close</span>
+          <div
+            role="group"
+            aria-label="Filter by specialization"
+            className="flex flex-wrap gap-2"
+          >
+            {specializations.map((spec) => {
+              const active = selectedSpec === spec;
+              return (
+                <button
+                  key={spec}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => {
+                    setSelectedSpec(spec);
+                    updateUrlFilters(searchQuery, spec);
+                  }}
+                  className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                    active
+                      ? "bg-primary text-white shadow-sm"
+                      : "border border-border-subtle bg-surface-elevated text-text-secondary hover:bg-surface-muted hover:text-text-primary"
+                  }`}
+                >
+                  {spec}
                 </button>
-              </div>
-              
-              {bookingStep === 1 && (
-                <div className="space-y-6 animate-fade-in">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <div>
-                      <h3 className="font-label-lg font-semibold text-primary mb-1">Step 1: Select Time</h3>
-                      <p className="font-body-sm text-on-surface-variant">Pick an available time block for a 1-hour session.</p>
-                    </div>
-                  </div>
+              );
+            })}
+          </div>
+        </div>
 
+        {/* Counselor Grid */}
+        <div className="mt-8">
+          {loading ? (
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {[1, 2, 3, 4, 5, 6].map((n) => (
+                <div
+                  key={n}
+                  className="h-72 animate-pulse rounded-2xl border border-border-subtle bg-surface-elevated"
+                />
+              ))}
+            </div>
+          ) : filteredCounselors.length === 0 ? (
+            <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-12 text-center shadow-ambient">
+              <span
+                aria-hidden="true"
+                className="material-symbols-outlined text-4xl text-text-muted"
+              >
+                person_search
+              </span>
+              <h2 className="mt-3 font-serif text-xl font-medium text-text-primary">
+                No matching counselors found
+              </h2>
+              <p className="mt-1 text-sm text-text-secondary">
+                Try clearing your search or selecting a different focus area.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery("");
+                  setSelectedSpec("All");
+                  updateUrlFilters("", "All");
+                }}
+                className="mt-5 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                Reset Filters
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {filteredCounselors.map((counselor) => {
+                const fullName =
+                  counselor.user?.full_name || "Licensed Counselor";
+                return (
+                  <article
+                    key={counselor.id}
+                    className="flex flex-col justify-between rounded-2xl border border-border-subtle bg-surface-elevated p-6 shadow-ambient transition-shadow hover:shadow-ambient-hover"
+                  >
+                    <div>
+                      <div className="flex items-start gap-4">
+                        {counselor.photo_url ? (
+                          <img
+                            src={counselor.photo_url}
+                            alt={fullName}
+                            className="h-14 w-14 shrink-0 rounded-full object-cover border border-border-subtle"
+                          />
+                        ) : (
+                          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary-light font-serif text-lg font-semibold text-primary">
+                            {getInitials(fullName)}
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <h2 className="truncate text-lg font-semibold text-text-primary">
+                            {fullName}
+                          </h2>
+                          <p className="mt-0.5 text-xs font-medium text-primary">
+                            PRC-Verified Practitioner
+                          </p>
+                        </div>
+                      </div>
+
+                      {counselor.specialization_tags &&
+                        counselor.specialization_tags.length > 0 && (
+                          <div className="mt-4 flex flex-wrap gap-1.5">
+                            {counselor.specialization_tags
+                              .slice(0, 4)
+                              .map((spec) => (
+                                <span
+                                  key={spec}
+                                  className="rounded-full bg-surface-muted px-2.5 py-0.5 text-xs font-medium text-text-secondary"
+                                >
+                                  {spec}
+                                </span>
+                              ))}
+                          </div>
+                        )}
+
+                      <p className="mt-4 line-clamp-3 text-body-sm text-text-secondary">
+                        {counselor.bio ||
+                          "Providing compassionate, evidence-based, and confidential mental health care."}
+                      </p>
+                    </div>
+
+                    <div className="mt-6 border-t border-border-subtle pt-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-xs text-text-muted">
+                            Session Format
+                          </span>
+                          <p className="text-sm font-semibold text-text-primary">
+                            Private 1-on-1
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Link
+                            href={`/counselors/${counselor.id}`}
+                            className="rounded-xl border border-border-subtle bg-background px-3.5 py-2 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                          >
+                            View Profile
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => openBookingModal(counselor)}
+                            className="rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                          >
+                            {user ? "Book Session" : "Sign in to Book"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 2-Step Booking Modal */}
+      {bookingCounselor && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="booking-modal-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-text-primary/50 p-4 backdrop-blur-xs animate-fade-in overscroll-contain"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !submitting) {
+              setBookingCounselor(null);
+            }
+          }}
+        >
+          <div className="relative flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl border border-border-subtle bg-surface-elevated shadow-2xl animate-scale-in">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-border-subtle px-6 py-4">
+              <div>
+                <p className="text-xs font-medium text-primary">
+                  Step {bookingStep} of 2 &bull;{" "}
+                  {bookingStep === 1
+                    ? "Select Available Time"
+                    : "Intake & Confirmation"}
+                </p>
+                <h2
+                  id="booking-modal-title"
+                  className="font-serif text-xl font-medium text-text-primary"
+                >
+                  Book with {bookingCounselor.user?.full_name || "Counselor"}
+                </h2>
+              </div>
+              <button
+                type="button"
+                aria-label="Close booking dialog"
+                disabled={submitting}
+                onClick={() => setBookingCounselor(null)}
+                className="rounded-lg p-2 text-text-muted transition-colors hover:bg-surface-muted hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <span
+                  aria-hidden="true"
+                  className="material-symbols-outlined text-[20px]"
+                >
+                  close
+                </span>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="overflow-y-auto p-6">
+              {bookingStep === 1 ? (
+                <div className="space-y-5">
                   <WeeklySlotGrid
                     currentWeekStart={currentWeekStart}
-                    onWeekChange={setCurrentWeekStart}
-                    availableWeeklySlots={availableWeeklySlots}
+                    onWeekChange={handleWeekChange}
+                    availableWeeklySlots={weeklySlots}
                     loadingSlots={loadingSlots}
-                    onSelectRange={(dateStr, minHour, maxHour) => {
-                      setSelectedTimeRange({
-                        dateStr,
-                        startTime: buildManilaSlotIso(dateStr, minHour),
-                        endTime: buildManilaSlotIso(dateStr, maxHour + 1),
-                        slotsCount: maxHour - minHour + 1,
-                      });
-                      setBookingStep(3);
-                    }}
+                    onSelectRange={handleSelectRange}
+                    isHighlighted={(dateStr, hour) =>
+                      dateStr === selectedDate &&
+                      selectedStartHour !== null &&
+                      selectedEndHour !== null &&
+                      hour >= selectedStartHour &&
+                      hour < selectedEndHour
+                    }
+                    highlightLabel="Selected"
                   />
-                </div>
-              )}
 
-              {bookingStep === 3 && (
-                <form onSubmit={handleBookSession} className="space-y-4 animate-fade-in">
-                  <div className="flex items-center gap-2 mb-2 border-b border-surface-container pb-4">
-                    <button type="button" onClick={() => { setSelectedTimeRange(null); setBookingStep(1); }} className="text-on-surface-variant hover:text-primary transition-colors">
-                      <span className="material-symbols-outlined text-[20px]">arrow_back</span>
-                    </button>
-                    <h3 className="font-label-lg font-semibold text-primary">Step 2: Intake Details</h3>
-                  </div>
+                  {/* Selected Slot Summary Bar */}
+                  <div className="flex flex-col justify-between gap-4 rounded-2xl border border-border-subtle bg-background p-4 sm:flex-row sm:items-center">
+                    {selectedDate &&
+                    selectedStartHour !== null &&
+                    selectedEndHour !== null ? (
+                      <div>
+                        <p className="text-xs font-medium text-text-muted">
+                          Selected Session (Philippine Time)
+                        </p>
+                        <p className="mt-0.5 text-sm font-semibold text-text-primary tabular-nums">
+                          {selectedDate} &bull;{" "}
+                          {formatHourLabel(selectedStartHour)} &ndash;{" "}
+                          {formatHourLabel(selectedEndHour)} ({durationHours}{" "}
+                          {durationHours === 1 ? "hr" : "hrs"})
+                        </p>
+                        <p className="mt-0.5 text-xs font-medium text-primary tabular-nums">
+                          Estimated Total: &#8369;
+                          {estimatedTotal.toLocaleString()}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-text-secondary">
+                        Click or drag across green open slots above to choose
+                        your session time.
+                      </p>
+                    )}
 
-                  <div className="bg-surface-container p-4 rounded-lg mb-4">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="font-label-sm text-on-surface-variant">Selected Time:</span>
-                      <span className="font-label-md text-primary font-medium">{selectedTimeRange && `${new Date(selectedTimeRange.startTime).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })} - ${new Date(selectedTimeRange.endTime).toLocaleString([], { timeStyle: 'short' })}`}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="font-label-sm text-on-surface-variant">Duration:</span>
-                      <span className="font-label-md text-primary font-medium">{selectedTimeRange?.slotsCount} hr(s)</span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block font-label-sm text-[14px] text-on-surface-variant mb-1">Primary Concern</label>
-                    <select 
-                      value={intakeCategory}
-                      onChange={(e) => setIntakeCategory(e.target.value)}
-                      className="w-full bg-surface border border-outline-variant rounded-lg px-4 py-2.5 font-body-md focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
-                      required
+                    <button
+                      type="button"
+                      disabled={
+                        !selectedDate ||
+                        selectedStartHour === null ||
+                        selectedEndHour === null
+                      }
+                      onClick={() => setBookingStep(2)}
+                      className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
-                      <option value="General">General Consultation</option>
-                      <option value="Anxiety">Anxiety & Stress</option>
-                      <option value="Depression">Depression</option>
-                      <option value="Relationship">Relationship Issues</option>
-                      <option value="Career">Career & Life Transitions</option>
-                      <option value="Trauma">Trauma & PTSD</option>
-                    </select>
+                      <span>Continue to Intake Details</span>
+                      <span
+                        aria-hidden="true"
+                        className="material-symbols-outlined text-[18px]"
+                      >
+                        arrow_forward
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleBookingSubmit} className="space-y-5">
+                  <div className="rounded-xl border border-border-subtle bg-primary-light/50 p-4 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <span className="font-semibold text-text-primary tabular-nums">
+                          {selectedDate} &bull;{" "}
+                          {selectedStartHour !== null &&
+                            formatHourLabel(selectedStartHour)}{" "}
+                          &ndash;{" "}
+                          {selectedEndHour !== null &&
+                            formatHourLabel(selectedEndHour)}
+                        </span>
+                        <p className="text-xs text-text-secondary tabular-nums">
+                          Total Fee: &#8369;{estimatedTotal.toLocaleString()}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setBookingStep(1)}
+                        className="text-xs font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+                      >
+                        Change Time
+                      </button>
+                    </div>
                   </div>
 
                   <div>
-                    <label className="block font-label-sm text-[14px] text-on-surface-variant mb-1">Notes for Counselor (Optional)</label>
-                    <textarea 
-                      value={intakeNotes}
-                      onChange={(e) => setIntakeNotes(e.target.value)}
-                      placeholder="Briefly describe what you'd like to discuss..."
-                      className="w-full bg-surface border border-outline-variant rounded-lg px-4 py-2.5 font-body-md focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all min-h-[80px]"
+                    <label
+                      htmlFor="intake-reason"
+                      className="block text-sm font-medium text-text-primary"
+                    >
+                      What brings you to counseling?{" "}
+                      <span className="text-status-danger">*</span>
+                    </label>
+                    <textarea
+                      id="intake-reason"
+                      required
+                      rows={3}
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                      placeholder="Share briefly what you'd like to focus on in this session…"
+                      className="mt-1.5 w-full rounded-xl border border-border-subtle bg-background px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     />
                   </div>
-                  
-                  <div className="pt-4 border-t border-surface-container">
-                    <div className="flex justify-between items-center mb-4">
-                      <span className="font-label-md text-on-surface-variant">Total Amount:</span>
-                      <span className="font-headline-md text-primary font-bold">
-                        ₱{((selectedTimeRange?.slotsCount || 0) * 300).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                      </span>
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <label
+                        htmlFor="intake-modality"
+                        className="block text-sm font-medium text-text-primary"
+                      >
+                        Preferred Session Format
+                      </label>
+                      <select
+                        id="intake-modality"
+                        value={modality}
+                        onChange={(e) => setModality(e.target.value)}
+                        className="mt-1.5 w-full rounded-xl border border-border-subtle bg-background px-4 py-2.5 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      >
+                        <option value="Video Call (Google Meet)">
+                          Video Call (Google Meet)
+                        </option>
+                        <option value="Audio Only Call">Audio Only Call</option>
+                      </select>
                     </div>
-                    <button 
-                      type="submit"
-                      disabled={isBooking}
-                      className="w-full bg-primary text-on-primary font-label-lg font-bold py-3.5 rounded-lg hover:opacity-90 active:scale-[0.98] transition-all duration-200 shadow-sm disabled:opacity-50 flex justify-center items-center gap-2"
+
+                    <div>
+                      <label
+                        htmlFor="intake-notes"
+                        className="block text-sm font-medium text-text-primary"
+                      >
+                        Additional Notes (Optional)
+                      </label>
+                      <input
+                        id="intake-notes"
+                        type="text"
+                        value={additionalNotes}
+                        onChange={(e) => setAdditionalNotes(e.target.value)}
+                        placeholder="Language preference, accessibility needs, etc."
+                        className="mt-1.5 w-full rounded-xl border border-border-subtle bg-background px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <label
+                        htmlFor="intake-emergency-name"
+                        className="block text-sm font-medium text-text-primary"
+                      >
+                        Emergency Contact Name (Optional)
+                      </label>
+                      <input
+                        id="intake-emergency-name"
+                        type="text"
+                        value={emergencyContactName}
+                        onChange={(e) =>
+                          setEmergencyContactName(e.target.value)
+                        }
+                        placeholder="Trusted family member or friend"
+                        className="mt-1.5 w-full rounded-xl border border-border-subtle bg-background px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="intake-emergency-phone"
+                        className="block text-sm font-medium text-text-primary"
+                      >
+                        Emergency Contact Phone (Optional)
+                      </label>
+                      <input
+                        id="intake-emergency-phone"
+                        type="tel"
+                        value={emergencyContactPhone}
+                        onChange={(e) =>
+                          setEmergencyContactPhone(e.target.value)
+                        }
+                        placeholder="09XX-XXX-XXXX"
+                        className="mt-1.5 w-full rounded-xl border border-border-subtle bg-background px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      />
+                    </div>
+                  </div>
+
+                  <label className="flex items-start gap-2.5 rounded-xl border border-border-subtle bg-background p-3.5 text-xs text-text-secondary cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={privacyAgreed}
+                      onChange={(e) => setPrivacyAgreed(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-border-strong text-primary focus:ring-primary"
+                    />
+                    <span>
+                      I understand that my intake notes are confidential under
+                      RA 10173 and will be shared only with my selected
+                      counselor.
+                    </span>
+                  </label>
+
+                  <div className="flex flex-col-reverse gap-3 border-t border-border-subtle pt-4 sm:flex-row sm:justify-between">
+                    <button
+                      type="button"
+                      disabled={submitting}
+                      onClick={() => setBookingStep(1)}
+                      className="rounded-xl border border-border-subtle bg-background px-5 py-2.5 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
-                      {isBooking ? (
+                      Back to Time Selection
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    >
+                      {submitting ? (
                         <>
-                          <span className="material-symbols-outlined animate-spin text-[20px]">progress_activity</span>
-                          Processing...
+                          <span
+                            aria-hidden="true"
+                            className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+                          />
+                          <span>Submitting Booking…</span>
                         </>
                       ) : (
-                        <>
-                          <span className="material-symbols-outlined text-[20px]">event_available</span>
-                          Confirm Booking & View Payment Instructions
-                        </>
+                        <span>Confirm Booking Request</span>
                       )}
                     </button>
                   </div>
@@ -324,8 +824,22 @@ export default function FindCounselorPage() {
               )}
             </div>
           </div>
-        )}
-      </div>
-    </DashboardLayout>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function CounselorsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+          <div className="h-64 animate-pulse rounded-2xl bg-surface-elevated" />
+        </div>
+      }
+    >
+      <CounselorsContent />
+    </Suspense>
   );
 }

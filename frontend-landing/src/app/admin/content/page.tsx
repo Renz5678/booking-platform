@@ -1,137 +1,377 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import { api } from "@/lib/api";
+import { useToast } from "@/context/ToastContext";
+import { api, ApiError } from "@/lib/api";
 
-interface ContentItem {
-  key: string;
-  value: string;
+interface QuoteItem {
+  text: string;
+  author: string;
+}
+
+interface FaqItem {
+  question: string;
+  answer: string;
 }
 
 export default function AdminContentPage() {
-  const [contentMap, setContentMap] = useState<Record<string, string>>({});
+  const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [rawMode, setRawMode] = useState(false);
 
-  useEffect(() => {
-    fetchContent();
-  }, []);
+  const [quotes, setQuotes] = useState<QuoteItem[]>([]);
+  const [faqs, setFaqs] = useState<FaqItem[]>([]);
+  const [crisisText, setCrisisText] = useState("");
 
-  const fetchContent = async () => {
-    setLoading(true);
+  const [rawQuotes, setRawQuotes] = useState("[]");
+  const [rawFaqs, setRawFaqs] = useState("[]");
+
+  const loadContent = useCallback(async () => {
     try {
-      const data: ContentItem[] = await api.get("/admin/content");
-      const map: Record<string, string> = {};
-      data.forEach(item => {
-        map[item.key] = item.value;
-      });
-      setContentMap(map);
-    } catch (err) {
-      console.error(err);
+      const res = await api.get<{
+        items?: Array<{ key: string; value: string }>;
+      }>("/admin/content");
+      const items = res?.items || [];
+
+      const qBlock = items.find((i) => i.key === "homepage_quotes");
+      if (qBlock) {
+        setRawQuotes(qBlock.value);
+        try {
+          const parsed = JSON.parse(qBlock.value);
+          if (Array.isArray(parsed)) setQuotes(parsed);
+        } catch {
+          // keep empty
+        }
+      }
+
+      const fBlock = items.find((i) => i.key === "faq_entries");
+      if (fBlock) {
+        setRawFaqs(fBlock.value);
+        try {
+          const parsed = JSON.parse(fBlock.value);
+          if (Array.isArray(parsed)) setFaqs(parsed);
+        } catch {
+          // keep empty
+        }
+      }
+
+      const cBlock = items.find((i) => i.key === "crisis_banner_text");
+      if (cBlock) setCrisisText(cBlock.value);
+    } catch {
+      toast.error("Unable to load site content.");
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
-  const handleSave = async (key: string) => {
+  useEffect(() => {
+    loadContent();
+  }, [loadContent]);
+
+  const saveContentKey = async (key: string, value: string) => {
     setSavingKey(key);
     try {
-      await api.put(`/admin/content/${key}`, { value: contentMap[key] || "" });
-      alert("Saved successfully");
+      await api.put(`/admin/content/${key}`, { value });
+      toast.success(`Updated ${key.replace(/_/g, " ")}.`);
     } catch (err) {
-      console.error(err);
-      alert("Failed to save");
+      const msg =
+        err instanceof ApiError ? err.message : `Failed to save ${key}.`;
+      toast.error(msg);
     } finally {
       setSavingKey(null);
     }
   };
 
-  const handleChange = (key: string, value: string) => {
-    setContentMap(prev => ({ ...prev, [key]: value }));
-  };
+  return (
+    <ProtectedRoute allowedRoles={["admin"]}>
+      <DashboardLayout role="admin">
+        <div className="space-y-8">
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+            <div>
+              <h1 className="font-serif text-headline-lg text-text-primary">
+                Site Content
+              </h1>
+              <p className="mt-1 text-sm text-text-secondary">
+                Edit homepage quotes, FAQ entries, and the crisis banner notice.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (!rawMode) {
+                  setRawQuotes(JSON.stringify(quotes, null, 2));
+                  setRawFaqs(JSON.stringify(faqs, null, 2));
+                } else {
+                  try {
+                    const pq = JSON.parse(rawQuotes);
+                    if (Array.isArray(pq)) setQuotes(pq);
+                    const pf = JSON.parse(rawFaqs);
+                    if (Array.isArray(pf)) setFaqs(pf);
+                  } catch {
+                    toast.error("Invalid JSON syntax — fix before switching.");
+                    return;
+                  }
+                }
+                setRawMode((prev) => !prev);
+              }}
+              className="rounded-xl border border-border-subtle bg-surface-elevated px-4 py-2 text-xs font-semibold text-text-primary hover:bg-surface-muted"
+            >
+              {rawMode ? "Switch to Visual Editor" : "Edit Raw JSON"}
+            </button>
+          </div>
 
-  if (loading) {
-    return (
-      <DashboardLayout role="admin" allowedRoles={["admin"]}>
-        <div className="animate-pulse space-y-6 max-w-4xl">
-          <div className="h-48 bg-surface-variant rounded-xl"></div>
-          <div className="h-48 bg-surface-variant rounded-xl"></div>
+          {loading ? (
+            <div className="h-64 animate-pulse rounded-2xl border border-border-subtle bg-surface-elevated" />
+          ) : (
+            <div className="space-y-6">
+              {/* Crisis Banner */}
+              <section className="rounded-2xl border border-border-subtle bg-surface-elevated p-6 shadow-ambient space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="font-serif text-xl font-medium text-text-primary">
+                    Crisis Banner Text
+                  </h2>
+                  <button
+                    type="button"
+                    disabled={savingKey === "crisis_banner_text"}
+                    onClick={() =>
+                      saveContentKey("crisis_banner_text", crisisText)
+                    }
+                    className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-50"
+                  >
+                    {savingKey === "crisis_banner_text" ? "Saving…" : "Save"}
+                  </button>
+                </div>
+                <textarea
+                  rows={2}
+                  value={crisisText}
+                  onChange={(e) => setCrisisText(e.target.value)}
+                  placeholder="In immediate crisis? Call NCMH 1553 or 0917-899-8727 (24/7)."
+                  className="w-full rounded-xl border border-border-subtle bg-background px-4 py-2.5 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                />
+              </section>
+
+              {/* Homepage Quotes */}
+              <section className="rounded-2xl border border-border-subtle bg-surface-elevated p-6 shadow-ambient space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="font-serif text-xl font-medium text-text-primary">
+                    Homepage Quotes
+                  </h2>
+                  <div className="flex items-center gap-2">
+                    {!rawMode && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setQuotes((prev) => [
+                            ...prev,
+                            { text: "", author: "" },
+                          ])
+                        }
+                        className="rounded-xl border border-border-subtle bg-background px-3.5 py-2 text-xs font-semibold text-text-primary hover:bg-surface-muted"
+                      >
+                        + Add Quote
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      disabled={savingKey === "homepage_quotes"}
+                      onClick={() =>
+                        saveContentKey(
+                          "homepage_quotes",
+                          rawMode ? rawQuotes : JSON.stringify(quotes)
+                        )
+                      }
+                      className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-50"
+                    >
+                      {savingKey === "homepage_quotes" ? "Saving…" : "Save"}
+                    </button>
+                  </div>
+                </div>
+
+                {rawMode ? (
+                  <textarea
+                    rows={8}
+                    value={rawQuotes}
+                    onChange={(e) => setRawQuotes(e.target.value)}
+                    className="w-full rounded-xl border border-border-subtle bg-background p-4 font-mono text-xs text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  />
+                ) : quotes.length === 0 ? (
+                  <p className="text-sm text-text-muted">
+                    No custom quotes configured (defaults are shown on the
+                    homepage).
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {quotes.map((q, idx) => (
+                      <div
+                        key={idx}
+                        className="rounded-xl border border-border-subtle bg-background p-4 space-y-3"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-text-muted">
+                            Quote #{idx + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setQuotes((prev) =>
+                                prev.filter((_, i) => i !== idx)
+                              )
+                            }
+                            className="text-xs font-semibold text-status-danger hover:underline"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                        <textarea
+                          rows={2}
+                          value={q.text}
+                          onChange={(e) =>
+                            setQuotes((prev) =>
+                              prev.map((item, i) =>
+                                i === idx
+                                  ? { ...item, text: e.target.value }
+                                  : item
+                              )
+                            )
+                          }
+                          placeholder="Quote text…"
+                          className="w-full rounded-xl border border-border-subtle bg-surface-elevated px-3.5 py-2 text-sm text-text-primary"
+                        />
+                        <input
+                          type="text"
+                          value={q.author}
+                          onChange={(e) =>
+                            setQuotes((prev) =>
+                              prev.map((item, i) =>
+                                i === idx
+                                  ? { ...item, author: e.target.value }
+                                  : item
+                              )
+                            )
+                          }
+                          placeholder="Author / attribution"
+                          className="w-full rounded-xl border border-border-subtle bg-surface-elevated px-3.5 py-2 text-sm text-text-primary"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              {/* FAQ Entries */}
+              <section className="rounded-2xl border border-border-subtle bg-surface-elevated p-6 shadow-ambient space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="font-serif text-xl font-medium text-text-primary">
+                    FAQ Entries
+                  </h2>
+                  <div className="flex items-center gap-2">
+                    {!rawMode && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFaqs((prev) => [
+                            ...prev,
+                            { question: "", answer: "" },
+                          ])
+                        }
+                        className="rounded-xl border border-border-subtle bg-background px-3.5 py-2 text-xs font-semibold text-text-primary hover:bg-surface-muted"
+                      >
+                        + Add FAQ
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      disabled={savingKey === "faq_entries"}
+                      onClick={() =>
+                        saveContentKey(
+                          "faq_entries",
+                          rawMode ? rawFaqs : JSON.stringify(faqs)
+                        )
+                      }
+                      className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-50"
+                    >
+                      {savingKey === "faq_entries" ? "Saving…" : "Save"}
+                    </button>
+                  </div>
+                </div>
+
+                {rawMode ? (
+                  <textarea
+                    rows={10}
+                    value={rawFaqs}
+                    onChange={(e) => setRawFaqs(e.target.value)}
+                    className="w-full rounded-xl border border-border-subtle bg-background p-4 font-mono text-xs text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  />
+                ) : faqs.length === 0 ? (
+                  <p className="text-sm text-text-muted">
+                    No custom FAQ entries configured (defaults are shown on
+                    /faq).
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {faqs.map((faq, idx) => (
+                      <div
+                        key={idx}
+                        className="rounded-xl border border-border-subtle bg-background p-4 space-y-3"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-text-muted">
+                            FAQ #{idx + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setFaqs((prev) =>
+                                prev.filter((_, i) => i !== idx)
+                              )
+                            }
+                            className="text-xs font-semibold text-status-danger hover:underline"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          value={faq.question}
+                          onChange={(e) =>
+                            setFaqs((prev) =>
+                              prev.map((item, i) =>
+                                i === idx
+                                  ? { ...item, question: e.target.value }
+                                  : item
+                              )
+                            )
+                          }
+                          placeholder="Question"
+                          className="w-full rounded-xl border border-border-subtle bg-surface-elevated px-3.5 py-2 text-sm text-text-primary"
+                        />
+                        <textarea
+                          rows={3}
+                          value={faq.answer}
+                          onChange={(e) =>
+                            setFaqs((prev) =>
+                              prev.map((item, i) =>
+                                i === idx
+                                  ? { ...item, answer: e.target.value }
+                                  : item
+                              )
+                            )
+                          }
+                          placeholder="Answer"
+                          className="w-full rounded-xl border border-border-subtle bg-surface-elevated px-3.5 py-2 text-sm text-text-primary"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+          )}
         </div>
       </DashboardLayout>
-    );
-  }
-
-  return (
-    <DashboardLayout role="admin" allowedRoles={["admin"]}>
-      <h1 className="font-headline-xl text-primary mb-2">Content Management</h1>
-      <p className="font-body-lg text-on-surface-variant mb-8">Update dynamic text and configuration across the platform.</p>
-
-      <div className="space-y-8 max-w-4xl">
-        {/* Homepage Quotes */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-surface-container-highest">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="font-headline-md text-primary">Homepage Quotes</h2>
-            <button 
-              onClick={() => handleSave("homepage_quotes")}
-              disabled={savingKey === "homepage_quotes"}
-              className="bg-primary text-on-primary px-4 py-2 rounded-lg font-label-md hover:opacity-90 disabled:opacity-50"
-            >
-              {savingKey === "homepage_quotes" ? "Saving..." : "Save"}
-            </button>
-          </div>
-          <p className="font-body-sm text-on-surface-variant mb-4">Provide a JSON array of strings.</p>
-          <textarea
-            value={contentMap["homepage_quotes"] || ""}
-            onChange={(e) => handleChange("homepage_quotes", e.target.value)}
-            className="w-full h-40 border border-surface-variant rounded-lg p-3 font-body-md font-mono text-sm"
-            placeholder={'["Quote 1", "Quote 2"]'}
-          />
-        </div>
-
-        {/* FAQ Entries */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-surface-container-highest">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="font-headline-md text-primary">FAQ Entries</h2>
-            <button 
-              onClick={() => handleSave("faq_entries")}
-              disabled={savingKey === "faq_entries"}
-              className="bg-primary text-on-primary px-4 py-2 rounded-lg font-label-md hover:opacity-90 disabled:opacity-50"
-            >
-              {savingKey === "faq_entries" ? "Saving..." : "Save"}
-            </button>
-          </div>
-          <p className="font-body-sm text-on-surface-variant mb-4">Provide a JSON array of objects with `question` and `answer` properties.</p>
-          <textarea
-            value={contentMap["faq_entries"] || ""}
-            onChange={(e) => handleChange("faq_entries", e.target.value)}
-            className="w-full h-64 border border-surface-variant rounded-lg p-3 font-body-md font-mono text-sm"
-            placeholder={'[{"question": "...", "answer": "..."}]'}
-          />
-        </div>
-
-        {/* Crisis Banner */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-surface-container-highest">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="font-headline-md text-primary">Crisis Banner Text</h2>
-            <button 
-              onClick={() => handleSave("crisis_banner_text")}
-              disabled={savingKey === "crisis_banner_text"}
-              className="bg-primary text-on-primary px-4 py-2 rounded-lg font-label-md hover:opacity-90 disabled:opacity-50"
-            >
-              {savingKey === "crisis_banner_text" ? "Saving..." : "Save"}
-            </button>
-          </div>
-          <p className="font-body-sm text-on-surface-variant mb-4">Plain text displayed at the top of the site in case of emergency.</p>
-          <input
-            type="text"
-            value={contentMap["crisis_banner_text"] || ""}
-            onChange={(e) => handleChange("crisis_banner_text", e.target.value)}
-            className="w-full border border-surface-variant rounded-lg p-3 font-body-md"
-            placeholder="In a crisis? Call Hopeline..."
-          />
-        </div>
-      </div>
-    </DashboardLayout>
+    </ProtectedRoute>
   );
 }

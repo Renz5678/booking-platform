@@ -1,104 +1,156 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import { api } from "@/lib/api";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import DashboardLayout from "@/components/layout/DashboardLayout";
+import { useToast } from "@/context/ToastContext";
+import { api } from "@/lib/api";
+import type { Booking } from "@/types";
 
-export default function AdminBookingDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params);
-  const router = useRouter();
-  const [booking, setBooking] = useState<any>(null);
+function formatManilaDateTime(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", {
+    timeZone: "Asia/Manila",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+export default function AdminBookingDetailPage() {
+  const params = useParams<{ id: string }>();
+  const bookingId = params.id;
+  const { toast } = useToast();
+
+  const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchBooking = async () => {
+    let active = true;
+    const loadBooking = async () => {
       try {
-        const data = await api.get(`/bookings/${resolvedParams.id}`);
-        setBooking(data);
-      } catch (err) {
-        console.error(err);
+        const data = await api.get<Booking>(`/bookings/${bookingId}`);
+        if (active) setBooking(data);
+      } catch {
+        if (active) toast.error("Unable to load booking details.");
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
-    fetchBooking();
-  }, [resolvedParams.id]);
-
-  if (loading) {
-    return (
-      <DashboardLayout role="admin" allowedRoles={["admin"]}>
-        <div className="animate-pulse space-y-4 max-w-3xl">
-          <div className="h-8 bg-surface-variant w-1/3 rounded"></div>
-          <div className="h-48 bg-surface-variant rounded-xl"></div>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (!booking) {
-    return (
-      <DashboardLayout role="admin" allowedRoles={["admin"]}>
-        <div className="text-center p-8">
-          <p className="text-error">Booking not found.</p>
-          <button onClick={() => router.push('/admin/bookings')} className="mt-4 text-primary hover:underline">
-            Back to Bookings
-          </button>
-        </div>
-      </DashboardLayout>
-    );
-  }
+    loadBooking();
+    return () => {
+      active = false;
+    };
+  }, [bookingId, toast]);
 
   return (
-    <DashboardLayout role="admin" allowedRoles={["admin"]}>
-      <Link href="/admin/bookings" className="flex items-center gap-2 text-primary hover:underline mb-6 font-label-lg">
-        <span className="material-symbols-outlined">arrow_back</span> Back to Bookings
-      </Link>
-      
-      <div className="flex justify-between items-start mb-6">
-        <div>
-          <h1 className="font-headline-xl text-primary">Booking Details</h1>
-          <p className="font-body-lg text-on-surface-variant">ID: {booking.id}</p>
-        </div>
-        <div className="bg-surface-container px-4 py-2 rounded-lg text-on-surface font-label-md uppercase tracking-wider">
-          {booking.status.replace("_", " ")}
-        </div>
-      </div>
+    <ProtectedRoute allowedRoles={["admin"]}>
+      <DashboardLayout role="admin">
+        <div className="space-y-6">
+          <Link
+            href="/admin/bookings"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-text-secondary hover:text-primary"
+          >
+            <span
+              aria-hidden="true"
+              className="material-symbols-outlined text-[18px]"
+            >
+              arrow_back
+            </span>
+            <span>Back to Bookings</span>
+          </Link>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-surface-container-highest">
-          <h2 className="font-headline-md text-primary mb-4 border-b pb-2">Session Info</h2>
-          <div className="space-y-3 font-body-md">
-            <p><strong className="text-on-surface-variant">Client:</strong> {booking.client?.full_name}</p>
-            <p><strong className="text-on-surface-variant">Counselor:</strong> {booking.counselor?.user?.full_name}</p>
-            <p><strong className="text-on-surface-variant">Start:</strong> {new Date(booking.scheduled_start).toLocaleString()}</p>
-            <p><strong className="text-on-surface-variant">End:</strong> {new Date(booking.scheduled_end).toLocaleString()}</p>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-surface-container-highest">
-          <h2 className="font-headline-md text-primary mb-4 border-b pb-2">Intake Form</h2>
-          <div className="space-y-3 font-body-md">
-            <p><strong className="text-on-surface-variant">Concern Category:</strong> {booking.intake_form?.concern_category || "N/A"}</p>
-            <p><strong className="text-on-surface-variant">Notes:</strong> {booking.intake_form?.notes || "N/A"}</p>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-surface-container-highest md:col-span-2">
-          <h2 className="font-headline-md text-primary mb-4 border-b pb-2">Payment Info</h2>
-          {booking.payment ? (
-            <div className="space-y-3 font-body-md grid grid-cols-2">
-              <p><strong className="text-on-surface-variant">Amount:</strong> ₱{booking.payment.amount}</p>
-              <p><strong className="text-on-surface-variant">Status:</strong> {booking.payment.status}</p>
-              <p><strong className="text-on-surface-variant">Method:</strong> {booking.payment.payment_method}</p>
-              <p><strong className="text-on-surface-variant">Refund Status:</strong> {booking.payment.refund_status || "N/A"}</p>
+          {loading ? (
+            <div className="h-64 animate-pulse rounded-2xl border border-border-subtle bg-surface-elevated" />
+          ) : !booking ? (
+            <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-8 text-center">
+              <p className="text-sm text-text-secondary">Booking not found.</p>
             </div>
           ) : (
-            <p className="text-on-surface-variant italic">No payment record found.</p>
+            <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-6 sm:p-8 shadow-ambient space-y-6">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-primary">
+                    Booking #{booking.id.slice(0, 8)}
+                  </p>
+                  <h1 className="mt-1 font-serif text-2xl font-medium text-text-primary">
+                    {booking.client_name ||
+                      booking.client?.full_name ||
+                      "Client"}{" "}
+                    &rarr;{" "}
+                    {booking.counselor_name ||
+                      booking.counselor?.user?.full_name ||
+                      "Counselor"}
+                  </h1>
+                </div>
+                <span className="rounded-full bg-surface-muted px-3 py-1 text-xs font-semibold capitalize text-text-primary">
+                  {booking.status.replace("_", " ")}
+                </span>
+              </div>
+
+              <dl className="grid grid-cols-1 gap-4 border-t border-border-subtle pt-5 sm:grid-cols-2 lg:grid-cols-4">
+                <div>
+                  <dt className="text-xs text-text-muted">Start Time</dt>
+                  <dd className="mt-0.5 text-sm font-semibold text-text-primary tabular-nums">
+                    {formatManilaDateTime(booking.scheduled_start)} PHT
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-text-muted">End Time</dt>
+                  <dd className="mt-0.5 text-sm font-semibold text-text-primary tabular-nums">
+                    {formatManilaDateTime(booking.scheduled_end)} PHT
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-text-muted">Total Amount</dt>
+                  <dd className="mt-0.5 text-sm font-semibold text-text-primary tabular-nums">
+                    {booking.payment?.amount != null
+                      ? `₱${Number(booking.payment.amount).toLocaleString()}`
+                      : "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-text-muted">Payment Proof</dt>
+                  <dd className="mt-0.5 text-sm">
+                    {booking.payment?.proof_url ? (
+                      <a
+                        href={booking.payment.proof_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-semibold text-primary hover:underline"
+                      >
+                        View Receipt
+                      </a>
+                    ) : (
+                      <span className="text-text-muted">None</span>
+                    )}
+                  </dd>
+                </div>
+              </dl>
+
+              {booking.intake_form && (
+                <div className="border-t border-border-subtle pt-5 space-y-2">
+                  <h2 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                    Intake Notes
+                  </h2>
+                  <p className="text-sm text-text-primary">
+                    {booking.intake_form.concern_category}
+                  </p>
+                  {booking.intake_form.notes && (
+                    <p className="text-xs text-text-secondary">
+                      {booking.intake_form.notes}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
-      </div>
-    </DashboardLayout>
+      </DashboardLayout>
+    </ProtectedRoute>
   );
 }

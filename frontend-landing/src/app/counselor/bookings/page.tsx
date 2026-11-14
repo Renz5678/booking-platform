@@ -1,82 +1,193 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Booking } from "@/types";
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import { api } from "@/lib/api";
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import DashboardLayout from "@/components/layout/DashboardLayout";
+import { useToast } from "@/context/ToastContext";
+import { api } from "@/lib/api";
+import type { Booking } from "@/types";
+
+type FilterTab =
+  | "all"
+  | "needs_verification"
+  | "upcoming"
+  | "completed"
+  | "cancelled";
+
+function formatManilaDateTime(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", {
+    timeZone: "Asia/Manila",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
 export default function CounselorBookingsPage() {
+  const { toast } = useToast();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<FilterTab>("all");
 
   useEffect(() => {
-    const fetchBookings = async () => {
+    let active = true;
+    const loadBookings = async () => {
       try {
-        const data = await api.get("/bookings/counselor/me");
-        if (data) {
+        const data = await api.get<Booking[]>("/bookings/counselor/me");
+        if (active && Array.isArray(data)) {
           setBookings(data);
         }
-      } catch (err) {
-        console.error("Failed to fetch bookings:", err);
+      } catch {
+        if (active) toast.error("Unable to load counselor bookings.");
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
-    fetchBookings();
-  }, []);
+    loadBookings();
+    return () => {
+      active = false;
+    };
+  }, [toast]);
+
+  const filtered = useMemo(() => {
+    return bookings
+      .filter((b) => {
+        if (tab === "needs_verification") return b.status === "pending_payment";
+        if (tab === "upcoming") return b.status === "confirmed";
+        if (tab === "completed")
+          return b.status === "completed" || b.status === "no_show";
+        if (tab === "cancelled") return b.status === "cancelled";
+        return true;
+      })
+      .sort(
+        (a, b) =>
+          new Date(b.scheduled_start).getTime() -
+          new Date(a.scheduled_start).getTime()
+      );
+  }, [bookings, tab]);
+
+  const tabs: Array<{ key: FilterTab; label: string }> = [
+    { key: "all", label: "All" },
+    { key: "needs_verification", label: "Needs Verification" },
+    { key: "upcoming", label: "Upcoming" },
+    { key: "completed", label: "Completed" },
+    { key: "cancelled", label: "Cancelled" },
+  ];
 
   return (
-    <DashboardLayout role="counselor" allowedRoles={["counselor"]}>
-      <div className="max-w-5xl mx-auto">
-        <h1 className="font-headline-xl text-primary mb-2">My Bookings</h1>
-        <p className="font-body-lg text-on-surface-variant mb-8">Manage your upcoming sessions and review past appointments.</p>
+    <ProtectedRoute allowedRoles={["counselor"]}>
+      <DashboardLayout role="counselor">
+        <div className="space-y-6">
+          <div>
+            <h1 className="font-serif text-headline-lg text-text-primary">
+              Bookings
+            </h1>
+            <p className="mt-1 text-sm text-text-secondary">
+              Filter sessions by status, review payment proofs, and update
+              session outcomes.
+            </p>
+          </div>
 
-        {loading ? (
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 flex justify-between items-center shadow-sm">
-                <div className="space-y-2 flex-1">
-                  <div className="h-6 w-1/3 bg-surface-variant/30 rounded animate-pulse"></div>
-                  <div className="h-4 w-1/4 bg-surface-variant/20 rounded animate-pulse"></div>
-                  <div className="h-4 w-1/5 bg-surface-variant/20 rounded animate-pulse"></div>
-                </div>
-                <div className="h-10 w-32 bg-surface-variant/30 rounded-lg animate-pulse"></div>
-              </div>
-            ))}
+          <div
+            role="tablist"
+            aria-label="Filter bookings by status"
+            className="flex flex-wrap gap-2"
+          >
+            {tabs.map((t) => {
+              const active = tab === t.key;
+              return (
+                <button
+                  key={t.key}
+                  role="tab"
+                  type="button"
+                  aria-selected={active}
+                  onClick={() => setTab(t.key)}
+                  className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                    active
+                      ? "bg-primary text-white shadow-sm"
+                      : "border border-border-subtle bg-surface-elevated text-text-secondary hover:bg-surface-muted hover:text-text-primary"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
           </div>
-        ) : bookings.length === 0 ? (
-          <div className="bg-surface-container-low p-8 rounded-xl text-center text-on-surface-variant">
-            You don't have any bookings yet.
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {bookings.map((booking, idx) => (
-              <Link 
-                key={idx} 
-                href={`/counselor/bookings/${booking.id}`}
-                className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 flex justify-between items-center shadow-sm hover:-translate-y-1 hover:shadow-md transition-all duration-300 block"
-              >
-                <div>
-                  <p className="font-headline-md text-primary font-bold">Booking #{booking.id.substring(0, 8)}</p>
-                  <p className="font-label-md text-on-surface-variant mt-1">
-                    Status: <span className="uppercase text-secondary font-bold">{booking.status.replace("_", " ")}</span>
-                    {booking.status === "pending_payment" && (booking.payment?.provider_payment_id || booking.payment?.proof_url) && (
-                      <span className="ml-2 text-xs bg-secondary-container text-on-secondary-container px-2 py-0.5 rounded-full font-semibold">
-                        Proof Submitted
-                      </span>
-                    )}
-                  </p>
-                  <p className="font-label-sm text-on-surface-variant mt-1">{new Date(booking.scheduled_start).toLocaleString()}</p>
-                </div>
-                <div className="bg-secondary text-on-secondary px-4 py-2 rounded-lg font-label-md hover:opacity-90 active:scale-[0.98] transition-all duration-200 inline-block">
-                  View Details
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
-      </div>
-    </DashboardLayout>
+
+          {loading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((n) => (
+                <div
+                  key={n}
+                  className="h-24 animate-pulse rounded-2xl border border-border-subtle bg-surface-elevated"
+                />
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-10 text-center shadow-ambient">
+              <p className="text-sm text-text-secondary">
+                No bookings match this filter.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filtered.map((b) => {
+                const clientName =
+                  b.client_name || b.client?.full_name || "Client";
+                return (
+                  <div
+                    key={b.id}
+                    className="flex flex-col justify-between gap-4 rounded-2xl border border-border-subtle bg-surface-elevated p-5 shadow-ambient sm:flex-row sm:items-center"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-base font-semibold text-text-primary">
+                          {clientName}
+                        </h2>
+                        <span
+                          className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${
+                            b.status === "confirmed"
+                              ? "bg-status-success-bg text-status-success"
+                              : b.status === "pending_payment"
+                                ? "bg-status-warning-bg text-status-warning"
+                                : b.status === "cancelled"
+                                  ? "bg-status-danger-bg text-status-danger"
+                                  : "bg-surface-muted text-text-secondary"
+                          }`}
+                        >
+                          {b.status.replace("_", " ")}
+                        </span>
+                        {b.payment?.proof_url &&
+                          b.status === "pending_payment" && (
+                            <span className="rounded-full bg-primary-light px-2.5 py-0.5 text-xs font-semibold text-primary">
+                              Proof Uploaded
+                            </span>
+                          )}
+                      </div>
+                      <p className="text-xs text-text-secondary tabular-nums">
+                        {formatManilaDateTime(b.scheduled_start)} PHT
+                        {b.payment?.amount != null &&
+                          ` • ₱${Number(b.payment.amount).toLocaleString()}`}
+                      </p>
+                    </div>
+
+                    <Link
+                      href={`/counselor/bookings/${b.id}`}
+                      className="inline-flex shrink-0 items-center justify-center rounded-xl border border-border-subtle bg-background px-4 py-2 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    >
+                      Open Details
+                    </Link>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </DashboardLayout>
+    </ProtectedRoute>
   );
 }

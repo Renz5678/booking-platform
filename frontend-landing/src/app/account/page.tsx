@@ -2,192 +2,277 @@
 
 import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
+import { useToast } from "@/context/ToastContext";
 
 export default function AccountSettingsPage() {
+  const { user, checkAuth } = useAuth();
+  const { toast } = useToast();
+
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
-  
-  // Name form
   const [fullName, setFullName] = useState("");
   const [nameLoading, setNameLoading] = useState(false);
-  const [nameMessage, setNameMessage] = useState({ text: "", type: "" });
 
-  // Password form
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
-  const [passwordMessage, setPasswordMessage] = useState({ text: "", type: "" });
+  const [passwordError, setPasswordError] = useState("");
 
   useEffect(() => {
+    const fetchMe = async () => {
+      try {
+        const data = await api.get("/auth/me");
+        setEmail(data.email || "");
+        setFullName(data.full_name || "");
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
     fetchMe();
   }, []);
 
-  const fetchMe = async () => {
-    try {
-      const data = await api.get("/auth/me");
-      setEmail(data.email || "");
-      setFullName(data.full_name || "");
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleUpdateName = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!fullName.trim()) {
+      toast.error("Please enter your full name.");
+      return;
+    }
     setNameLoading(true);
-    setNameMessage({ text: "", type: "" });
     try {
-      await api.put("/auth/me", { full_name: fullName });
-      setNameMessage({ text: "Name updated successfully", type: "success" });
+      await api.put("/auth/me", { full_name: fullName.trim() });
+      await checkAuth();
+      toast.success("Profile name updated.");
     } catch (err) {
-      console.error(err);
-      setNameMessage({ text: "Failed to update name", type: "error" });
+      const msg =
+        err instanceof ApiError ? err.message : "Failed to update name.";
+      toast.error(msg);
     } finally {
       setNameLoading(false);
-      setTimeout(() => setNameMessage({ text: "", type: "" }), 3000);
     }
   };
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPassword !== confirmPassword) {
-      setPasswordMessage({ text: "New passwords do not match", type: "error" });
+    setPasswordError("");
+    if (newPassword.length < 8) {
+      setPasswordError("New password must be at least 8 characters long.");
       return;
     }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("New passwords do not match.");
+      return;
+    }
+
     setPasswordLoading(true);
-    setPasswordMessage({ text: "", type: "" });
     try {
-      await api.post("/auth/change-password", { 
-        current_password: currentPassword, 
-        new_password: newPassword 
+      await api.post("/auth/change-password", {
+        current_password: currentPassword,
+        new_password: newPassword,
       });
-      setPasswordMessage({ text: "Password changed successfully", type: "success" });
+      toast.success("Password updated successfully.");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
     } catch (err) {
-      console.error(err);
-      setPasswordMessage({ text: "Failed to change password", type: "error" });
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : "Failed to change password. Check your current password.";
+      setPasswordError(msg);
+      toast.error(msg);
     } finally {
       setPasswordLoading(false);
-      setTimeout(() => setPasswordMessage({ text: "", type: "" }), 3000);
     }
   };
 
+  const activeRole = user?.role || "client";
+
   if (loading) {
     return (
-      <DashboardLayout role="client" allowedRoles={["client", "counselor", "admin"]}>
-        <div className="max-w-2xl mx-auto space-y-6 animate-pulse">
-          <div className="h-40 bg-surface-variant rounded-xl"></div>
-          <div className="h-64 bg-surface-variant rounded-xl"></div>
+      <DashboardLayout role={activeRole} allowedRoles={["client", "counselor", "admin"]}>
+        <div className="max-w-2xl mx-auto w-full space-y-6 animate-pulse">
+          <div className="h-10 bg-surface-container w-1/2 rounded-lg" />
+          <div className="h-48 bg-surface-container rounded-2xl" />
+          <div className="h-72 bg-surface-container rounded-2xl" />
         </div>
       </DashboardLayout>
     );
   }
 
   return (
-    <DashboardLayout role="client" allowedRoles={["client", "counselor", "admin"]}>
-      <div className="max-w-2xl mx-auto space-y-8">
+    <DashboardLayout role={activeRole} allowedRoles={["client", "counselor", "admin"]}>
+      <div className="max-w-2xl mx-auto w-full space-y-8">
         <div>
           <h1 className="font-headline-xl text-primary mb-2">Account Settings</h1>
-          <p className="font-body-lg text-on-surface-variant mb-8">Manage your personal information and security settings.</p>
+          <p className="font-body-lg text-on-surface-variant">
+            Manage your personal details and account security.
+          </p>
         </div>
 
         {/* Profile Information */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-surface-container-highest relative">
-          {nameMessage.text && (
-            <div className={`absolute top-4 right-6 px-3 py-1 rounded font-label-sm ${nameMessage.type === 'success' ? 'bg-secondary text-on-secondary' : 'bg-error text-on-error'}`}>
-              {nameMessage.text}
-            </div>
-          )}
+        <section className="bg-surface-container-lowest p-6 md:p-8 rounded-2xl shadow-ambient border border-outline-variant/80">
           <h2 className="font-headline-md text-primary mb-6">Profile Information</h2>
           <form onSubmit={handleUpdateName} className="space-y-4">
             <div>
-              <label className="block font-label-md text-on-surface mb-1">Email Address</label>
-              <input 
-                type="email" 
+              <label
+                htmlFor="account-email"
+                className="block font-label-md text-on-surface mb-1.5"
+              >
+                Email Address
+              </label>
+              <input
+                id="account-email"
+                type="email"
                 value={email}
                 disabled
-                className="w-full border border-surface-variant rounded-lg p-3 font-body-md bg-surface-container-low text-on-surface-variant opacity-70 cursor-not-allowed"
+                className="w-full border border-outline-variant rounded-lg px-3.5 py-2.5 font-body-md bg-surface-container-low text-on-surface-variant cursor-not-allowed"
               />
-              <p className="font-body-sm text-on-surface-variant mt-1">Email cannot be changed.</p>
+              <p className="font-body-sm text-on-surface-variant mt-1.5">
+                Email addresses cannot be changed after verification.
+              </p>
             </div>
             <div>
-              <label className="block font-label-md text-on-surface mb-1">Full Name</label>
-              <input 
-                type="text" 
+              <label
+                htmlFor="account-full-name"
+                className="block font-label-md text-on-surface mb-1.5"
+              >
+                Full Name
+              </label>
+              <input
+                id="account-full-name"
+                name="fullName"
+                type="text"
+                autoComplete="name"
                 value={fullName}
-                onChange={e => setFullName(e.target.value)}
+                onChange={(e) => setFullName(e.target.value)}
                 required
-                className="w-full border border-surface-variant rounded-lg p-3 font-body-md"
+                className="w-full bg-surface border border-outline-variant rounded-lg px-3.5 py-2.5 font-body-md text-on-surface focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
               />
             </div>
             <div className="pt-2 flex justify-end">
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 disabled={nameLoading}
-                className="bg-primary text-on-primary px-6 py-2 rounded-lg font-label-md disabled:opacity-50"
+                className="bg-secondary text-on-secondary px-6 py-2.5 rounded-lg font-label-md hover:opacity-95 transition-opacity disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               >
-                {nameLoading ? "Saving..." : "Save Changes"}
+                {nameLoading ? "Saving…" : "Save Changes"}
               </button>
             </div>
           </form>
-        </div>
+        </section>
 
         {/* Password */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-surface-container-highest relative">
-          {passwordMessage.text && (
-            <div className={`absolute top-4 right-6 px-3 py-1 rounded font-label-sm ${passwordMessage.type === 'success' ? 'bg-secondary text-on-secondary' : 'bg-error text-on-error'}`}>
-              {passwordMessage.text}
+        <section className="bg-surface-container-lowest p-6 md:p-8 rounded-2xl shadow-ambient border border-outline-variant/80">
+          <h2 className="font-headline-md text-primary mb-6">Change Password</h2>
+          {passwordError && (
+            <div
+              role="alert"
+              className="mb-4 p-3.5 rounded-xl bg-error-container text-on-error-container font-body-sm"
+            >
+              {passwordError}
             </div>
           )}
-          <h2 className="font-headline-md text-primary mb-6">Change Password</h2>
           <form onSubmit={handleChangePassword} className="space-y-4">
             <div>
-              <label className="block font-label-md text-on-surface mb-1">Current Password</label>
-              <input 
-                type="password" 
-                value={currentPassword}
-                onChange={e => setCurrentPassword(e.target.value)}
-                required
-                className="w-full border border-surface-variant rounded-lg p-3 font-body-md"
-              />
+              <label
+                htmlFor="current-password"
+                className="block font-label-md text-on-surface mb-1.5"
+              >
+                Current Password
+              </label>
+              <div className="relative">
+                <input
+                  id="current-password"
+                  name="currentPassword"
+                  type={showCurrentPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  required
+                  className="w-full bg-surface border border-outline-variant rounded-lg pl-3.5 pr-11 py-2.5 font-body-md text-on-surface focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrentPassword((v) => !v)}
+                  aria-label={showCurrentPassword ? "Hide current password" : "Show current password"}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-on-surface-variant hover:text-primary rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                >
+                  <span className="material-symbols-outlined text-[20px]" aria-hidden="true">
+                    {showCurrentPassword ? "visibility_off" : "visibility"}
+                  </span>
+                </button>
+              </div>
             </div>
             <div>
-              <label className="block font-label-md text-on-surface mb-1">New Password</label>
-              <input 
-                type="password" 
-                value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
-                required
-                className="w-full border border-surface-variant rounded-lg p-3 font-body-md"
-              />
+              <label
+                htmlFor="new-password"
+                className="block font-label-md text-on-surface mb-1.5"
+              >
+                New Password
+              </label>
+              <div className="relative">
+                <input
+                  id="new-password"
+                  name="newPassword"
+                  type={showNewPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                  minLength={8}
+                  className="w-full bg-surface border border-outline-variant rounded-lg pl-3.5 pr-11 py-2.5 font-body-md text-on-surface focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword((v) => !v)}
+                  aria-label={showNewPassword ? "Hide new password" : "Show new password"}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-on-surface-variant hover:text-primary rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                >
+                  <span className="material-symbols-outlined text-[20px]" aria-hidden="true">
+                    {showNewPassword ? "visibility_off" : "visibility"}
+                  </span>
+                </button>
+              </div>
+              <p className="font-body-sm text-on-surface-variant mt-1">
+                Use at least 8 characters.
+              </p>
             </div>
             <div>
-              <label className="block font-label-md text-on-surface mb-1">Confirm New Password</label>
-              <input 
-                type="password" 
+              <label
+                htmlFor="confirm-password"
+                className="block font-label-md text-on-surface mb-1.5"
+              >
+                Confirm New Password
+              </label>
+              <input
+                id="confirm-password"
+                name="confirmPassword"
+                type="password"
+                autoComplete="new-password"
                 value={confirmPassword}
-                onChange={e => setConfirmPassword(e.target.value)}
+                onChange={(e) => setConfirmPassword(e.target.value)}
                 required
-                className="w-full border border-surface-variant rounded-lg p-3 font-body-md"
+                className="w-full bg-surface border border-outline-variant rounded-lg px-3.5 py-2.5 font-body-md text-on-surface focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
               />
             </div>
             <div className="pt-2 flex justify-end">
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 disabled={passwordLoading}
-                className="bg-primary text-on-primary px-6 py-2 rounded-lg font-label-md disabled:opacity-50"
+                className="bg-primary text-on-primary px-6 py-2.5 rounded-lg font-label-md hover:opacity-95 transition-opacity disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               >
-                {passwordLoading ? "Updating..." : "Update Password"}
+                {passwordLoading ? "Updating…" : "Update Password"}
               </button>
             </div>
           </form>
-        </div>
+        </section>
       </div>
     </DashboardLayout>
   );
