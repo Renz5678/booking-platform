@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { api, ApiError } from "@/lib/api";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth, type User } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 
 export default function AccountSettingsPage() {
@@ -26,7 +26,7 @@ export default function AccountSettingsPage() {
   useEffect(() => {
     const fetchMe = async () => {
       try {
-        const data = await api.get("/auth/me");
+        const data = await api.get<User>("/auth/me");
         setEmail(data.email || "");
         setFullName(data.full_name || "");
       } catch (err) {

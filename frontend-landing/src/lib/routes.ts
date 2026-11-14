@@ -14,8 +14,14 @@ export function isAuthRoute(pathname: string | null): boolean {
   return (
     pathname === "/login" ||
     pathname === "/signup" ||
+    pathname === "/forgot-password" ||
+    pathname === "/reset-password" ||
     pathname === "/counselor/setup"
   );
+}
+
+export function isDashboardChromeRoute(pathname: string | null): boolean {
+  return isWorkspaceRoute(pathname);
 }
 
 export function getDashboardPathForRole(role?: string | null): string {

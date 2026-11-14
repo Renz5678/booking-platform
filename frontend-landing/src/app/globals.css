@@ -42,7 +42,7 @@
   --color-tertiary: #0f3a31;
   --color-on-tertiary: #ffffff;
   --color-tertiary-container: #17493e;
-  --color-on-tertiary-container: #175a4e;
+  --color-on-tertiary-container: #a0f0df;
   --color-tertiary-fixed: #d3eee6;
   --color-tertiary-fixed-dim: #9fd8c8;
   --color-on-tertiary-fixed: #0f3a31;
@@ -58,6 +58,23 @@
   --color-on-error: #ffffff;
   --color-error-container: #fee4e2;
   --color-on-error-container: #7a271a;
+
+  /* Semantic UI Aliases (mapped to Sanctuary palette, WCAG AA+) */
+  --color-surface-elevated: #ffffff;
+  --color-surface-muted: #f2f4f5;
+  --color-text-primary: #191c1d;
+  --color-text-secondary: #41474d;
+  --color-text-muted: #656d74;
+  --color-border-subtle: #dde3e6;
+  --color-border-strong: #c1c7ce;
+  --color-primary-hover: #213749;
+  --color-primary-light: #d3e4f8;
+  --color-status-success: #14532d;
+  --color-status-success-bg: #dcfce7;
+  --color-status-warning: #7c2d12;
+  --color-status-warning-bg: #fef3c7;
+  --color-status-danger: #991b1b;
+  --color-status-danger-bg: #fee2e2;
 
   /* Layout Tokens */
   --spacing-section-gap: 72px;

@@ -2,8 +2,51 @@
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-interface RequestOptions extends RequestInit {
-  // Add any custom options here
+type RequestOptions = RequestInit;
+
+const SKIP_REFRESH_ENDPOINTS = new Set([
+  "/auth/login",
+  "/auth/refresh",
+  "/auth/logout",
+]);
+
+let refreshPromise: Promise<boolean> | null = null;
+
+async function refreshSession(): Promise<boolean> {
+  if (!refreshPromise) {
+    refreshPromise = fetch(`${API_BASE_URL}/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+    })
+      .then((res) => res.ok)
+      .catch(() => false)
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+}
+
+function formatErrorDetail(detail: unknown): string | null {
+  if (typeof detail === "string" && detail.trim()) {
+    return detail;
+  }
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object" && "msg" in item) {
+          const msg = String((item as { msg: unknown }).msg);
+          return msg.replace(/^Value error,\s*/i, "");
+        }
+        return null;
+      })
+      .filter((m): m is string => Boolean(m));
+    if (messages.length > 0) {
+      return messages.join("; ");
+    }
+  }
+  return null;
 }
 
 export class ApiError extends Error {
@@ -24,9 +67,10 @@ function serializeBody(body: unknown): BodyInit | undefined {
   return JSON.stringify(body);
 }
 
-async function fetchApi<T = any>(
+async function fetchApi<T = unknown>(
   endpoint: string,
-  options: RequestOptions = {}
+  options: RequestOptions = {},
+  hasRetried = false
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
 
@@ -45,6 +89,17 @@ async function fetchApi<T = any>(
 
   const response = await fetch(url, config);
 
+  if (
+    response.status === 401 &&
+    !hasRetried &&
+    !SKIP_REFRESH_ENDPOINTS.has(endpoint)
+  ) {
+    const refreshed = await refreshSession();
+    if (refreshed) {
+      return fetchApi<T>(endpoint, options, true);
+    }
+  }
+
   let data: unknown;
   try {
     data = await response.json();
@@ -53,10 +108,10 @@ async function fetchApi<T = any>(
   }
 
   if (!response.ok) {
-    const errObj = data as { detail?: string; msg?: string } | null;
+    const errObj = data as { detail?: unknown; msg?: unknown } | null;
     const errorMessage =
-      errObj?.detail ||
-      errObj?.msg ||
+      formatErrorDetail(errObj?.detail) ||
+      (typeof errObj?.msg === "string" ? errObj.msg : null) ||
       response.statusText ||
       "An API error occurred";
     throw new ApiError(response.status, errorMessage, data);
@@ -66,9 +121,9 @@ async function fetchApi<T = any>(
 }
 
 export const api = {
-  get: <T = any>(endpoint: string, options?: RequestOptions) =>
+  get: <T = unknown>(endpoint: string, options?: RequestOptions) =>
     fetchApi<T>(endpoint, { ...options, method: "GET" }),
-  post: <T = any>(
+  post: <T = unknown>(
     endpoint: string,
     body?: unknown,
     options?: RequestOptions
@@ -78,7 +133,7 @@ export const api = {
       method: "POST",
       body: serializeBody(body),
     }),
-  put: <T = any>(
+  put: <T = unknown>(
     endpoint: string,
     body?: unknown,
     options?: RequestOptions
@@ -88,9 +143,9 @@ export const api = {
       method: "PUT",
       body: serializeBody(body),
     }),
-  delete: <T = any>(endpoint: string, options?: RequestOptions) =>
+  delete: <T = unknown>(endpoint: string, options?: RequestOptions) =>
     fetchApi<T>(endpoint, { ...options, method: "DELETE" }),
-  patch: <T = any>(
+  patch: <T = unknown>(
     endpoint: string,
     body?: unknown,
     options?: RequestOptions
