@@ -36,6 +36,8 @@ class User(Base):
     locked_until = Column(DateTime(timezone=True), nullable=True)
     invite_token = Column(String, nullable=True)
     invite_token_expires_at = Column(DateTime(timezone=True), nullable=True)
+    reset_token_hash = Column(String, nullable=True, index=True)
+    reset_token_expires_at = Column(DateTime(timezone=True), nullable=True)
 
     counselor_profile = relationship(
         "CounselorProfile", back_populates="user", uselist=False

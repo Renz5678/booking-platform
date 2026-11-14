@@ -1,6 +1,8 @@
 import asyncio
 import base64
+import html
 import logging
+import urllib.parse
 from datetime import datetime, timezone
 from email.message import EmailMessage
 
@@ -133,14 +135,17 @@ async def send_booking_confirmation(
 
     start_str = to_manila(session_start).strftime("%Y-%m-%d %I:%M %p PHT")
 
+    safe_counselor = html.escape(counselor_name)
+    safe_link = html.escape(meeting_link, quote=True)
+
     html_body = f"""
     <html>
       <body style="font-family: sans-serif; color: #333;">
         <h2>Booking Confirmed</h2>
         <p>Great news! Your counseling session has been paid and confirmed.</p>
-        <p><strong>Counselor:</strong> {counselor_name}</p>
+        <p><strong>Counselor:</strong> {safe_counselor}</p>
         <p><strong>Session Time:</strong> {start_str}</p>
-        <p><strong>Meeting Link:</strong> <a href="{meeting_link}">{meeting_link}</a></p>
+        <p><strong>Meeting Link:</strong> <a href="{safe_link}">{safe_link}</a></p>
         <p><strong>Booking ID:</strong> {booking_id}</p>
         <p>We look forward to seeing you!</p>
       </body>
@@ -221,11 +226,14 @@ async def send_admin_cancellation_alert(
         
     subject = "Alert: Counselor Cancelled Session"
 
+    safe_counselor = html.escape(counselor_name)
+    safe_client = html.escape(client_name)
+
     html_body = f"""
     <html>
       <body style="font-family: sans-serif; color: #333;">
         <h2>Counselor Cancellation Alert</h2>
-        <p>Counselor <strong>{counselor_name}</strong> has cancelled a session with client <strong>{client_name}</strong>.</p>
+        <p>Counselor <strong>{safe_counselor}</strong> has cancelled a session with client <strong>{safe_client}</strong>.</p>
         <p><strong>Booking ID:</strong> {booking_id}</p>
       </body>
     </html>
@@ -299,3 +307,24 @@ async def send_counselor_invite_email(email: str, invite_token: str) -> None:
     </html>
     """
     await asyncio.to_thread(_send_email_sync, email, subject, html_body)
+
+
+async def send_password_reset_email(user_email: str, reset_token: str) -> None:
+    """Sends a password reset link containing a single-use cryptographic token."""
+    subject = "Reset your Alaga password"
+    link = f"{settings.FRONTEND_URL}/reset-password?token={urllib.parse.quote(reset_token)}"
+    safe_link = html.escape(link, quote=True)
+    html_body = f"""
+    <html>
+      <body style="font-family: sans-serif; color: #333;">
+        <h2>Password Reset Request</h2>
+        <p>We received a request to reset the password for your Alaga Counseling account.</p>
+        <p>Click the link below to choose a new password (valid for 15 minutes):</p>
+        <p><a href="{safe_link}">{safe_link}</a></p>
+        <p style="color:#888;font-size:12px;">
+          If you did not request a password reset, you can safely ignore this email.
+        </p>
+      </body>
+    </html>
+    """
+    await asyncio.to_thread(_send_email_sync, user_email, subject, html_body)

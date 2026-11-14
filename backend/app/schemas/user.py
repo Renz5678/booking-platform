@@ -7,6 +7,10 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 logger = logging.getLogger(__name__)
 
 
+def _normalize_email(v: str) -> str:
+    return v.strip().lower()
+
+
 def _check_password_strength(v: str) -> str:
     """
     Enforce a strong password policy:
@@ -46,6 +50,11 @@ class UserCreate(BaseModel):
     # Validated server-side in the auth router before the account is created.
     captcha_token: str | None = None
 
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return _normalize_email(v)
+
     @field_validator("password")
     @classmethod
     def validate_password_strength(cls, v: str) -> str:
@@ -57,6 +66,11 @@ class UserLogin(BaseModel):
 
     email: EmailStr
     password: str
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return _normalize_email(v)
 
 
 class UserResponse(BaseModel):
@@ -78,10 +92,21 @@ class CounselorInviteRequest(BaseModel):
     email: EmailStr
     full_name: str
 
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return _normalize_email(v)
+
+
 class AcceptInviteRequest(BaseModel):
     token: str
     email: EmailStr
     password: str = Field(..., min_length=8)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return _normalize_email(v)
 
     @field_validator("password")
     @classmethod
@@ -96,6 +121,29 @@ class UserUpdateProfileRequest(BaseModel):
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str = Field(..., min_length=8)
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password_strength(cls, v: str) -> str:
+        return _check_password_strength(v)
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+    website: str | None = None
+    captcha_token: str | None = None
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return _normalize_email(v)
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(..., min_length=20, max_length=128)
+    new_password: str = Field(..., min_length=8, max_length=128)
+    website: str | None = None
+    captcha_token: str | None = None
 
     @field_validator("new_password")
     @classmethod

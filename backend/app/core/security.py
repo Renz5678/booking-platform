@@ -9,7 +9,7 @@ from sqlalchemy.future import select
 from app.config import settings
 from app.db.session import get_db
 from app.models.user import User
-from app.services.auth_service import ALGORITHM
+from app.services.auth_service import ALGORITHM, get_password_fingerprint
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,24 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
         )
+    token_pwd = payload.get("pwd")
+    if token_pwd is not None and token_pwd != get_password_fingerprint(user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+        )
     return user
+
+
+def validate_upload_magic_bytes(content: bytes, content_type: str | None) -> bool:
+    """Verify uploaded file header matches the declared PDF/JPEG/PNG MIME type."""
+    if content_type == "application/pdf":
+        return content.startswith(b"%PDF-")
+    if content_type in ("image/jpeg", "image/jpg"):
+        return content.startswith(b"\xff\xd8\xff")
+    if content_type == "image/png":
+        return content.startswith(b"\x89PNG\r\n\x1a\n")
+    return False
 
 
 def require_role(allowed_roles: list[str]):

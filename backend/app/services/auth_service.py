@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta, timezone
+import hashlib
+import logging
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 import httpx
-import logging
 
 from app.config import settings
 
@@ -22,6 +23,14 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
+
+
+def hash_reset_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def get_password_fingerprint(password_hash: str) -> str:
+    return hashlib.sha256(password_hash.encode("utf-8")).hexdigest()[:12]
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
@@ -54,14 +63,17 @@ def decode_refresh_token(token: str) -> str | None:
         return None
 
 
-async def verify_captcha(token: str) -> bool:
+async def verify_captcha(token: str | None) -> bool:
     """
     Verify the CAPTCHA token with Google reCAPTCHA v3 API.
     """
     if not token:
         return False
-        
+
     if not settings.RECAPTCHA_SECRET_KEY:
+        if settings.ENVIRONMENT == "production":
+            logger.error("RECAPTCHA_SECRET_KEY is not set in production. Rejecting CAPTCHA.")
+            return False
         logger.warning("RECAPTCHA_SECRET_KEY is not set. Skipping CAPTCHA verification (dev mode fallback).")
         return True
 

@@ -3,7 +3,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, field_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -16,29 +16,49 @@ from app.models.user import RoleEnum, User
 from app.schemas.user import (
     AcceptInviteRequest,
     ChangePasswordRequest,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
     UserCreate,
     UserLogin,
     UserResponse,
     UserUpdateProfileRequest,
+    _normalize_email,
 )
 from app.services.auth_service import (
     create_access_token,
     create_refresh_token,
     decode_refresh_token,
+    get_password_fingerprint,
     get_password_hash,
+    hash_reset_token,
     verify_captcha,
     verify_password,
     REFRESH_TOKEN_EXPIRE_DAYS,
 )
-from app.services.email_service import send_verification_email
+from app.services.email_service import send_password_reset_email, send_verification_email
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+GENERIC_FORGOT_PASSWORD_MSG = (
+    "If an account with that email exists, a password reset link has been sent."
+)
+
+
+def _as_utc(dt: datetime | None) -> datetime | None:
+    if dt and dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
 
 class OTPVerify(BaseModel):
-    email: str
+    email: EmailStr
     otp: str
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return _normalize_email(v)
 
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/15minute")
@@ -93,7 +113,8 @@ async def signup(
 
 
 @router.post("/verify-otp")
-async def verify_otp(data: OTPVerify, db: AsyncSession = Depends(get_db)):
+@limiter.limit("5/15minute")
+async def verify_otp(request: Request, data: OTPVerify, db: AsyncSession = Depends(get_db)):
     """Verify a user's email address using the 6-digit OTP."""
     result = await db.execute(select(User).where(User.email == data.email))
     user = result.scalar_one_or_none()
@@ -104,41 +125,44 @@ async def verify_otp(data: OTPVerify, db: AsyncSession = Depends(get_db)):
     if user.is_verified:
         return {"msg": "Email already verified"}
 
-    if user.verification_otp != data.otp:
+    if not user.verification_otp or not secrets.compare_digest(user.verification_otp, data.otp):
+        user.failed_login_attempts += 1
+        if user.failed_login_attempts >= 5:
+            user.verification_otp = None
+            user.verification_otp_expires_at = None
+        await db.commit()
         raise HTTPException(status_code=400, detail="Invalid OTP")
-        
-    # Compare timezone-aware datetimes
+
     now = datetime.now(timezone.utc)
-    # Convert naive to aware if necessary (SQLite sometimes drops tzinfo)
-    expires_at = user.verification_otp_expires_at
-    if expires_at and expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-        
+    expires_at = _as_utc(user.verification_otp_expires_at)
+
     if not expires_at or expires_at < now:
         raise HTTPException(status_code=400, detail="OTP has expired")
 
     user.is_verified = True
     user.verification_otp = None
     user.verification_otp_expires_at = None
+    user.failed_login_attempts = 0
     await db.commit()
 
     return {"msg": "Email successfully verified"}
 
 
 @router.post("/accept-invite")
-async def accept_invite(data: AcceptInviteRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("5/15minute")
+async def accept_invite(
+    request: Request, data: AcceptInviteRequest, db: AsyncSession = Depends(get_db)
+):
     """Accept counselor invite and set password."""
     result = await db.execute(select(User).where(User.email == data.email))
     user = result.scalar_one_or_none()
-    
-    if not user or user.invite_token != data.token:
+
+    if not user or not user.invite_token or not secrets.compare_digest(user.invite_token, data.token):
         raise HTTPException(status_code=400, detail="Invalid token or email")
-        
+
     now = datetime.now(timezone.utc)
-    expires_at = user.invite_token_expires_at
-    if expires_at and expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-        
+    expires_at = _as_utc(user.invite_token_expires_at)
+
     if not expires_at or expires_at < now:
         raise HTTPException(status_code=400, detail="Invite token expired")
         
@@ -199,8 +223,9 @@ async def login(
         )
 
     # Issue token
-    access_token = create_access_token(data={"sub": str(user.id)})
-    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    pwd_fp = get_password_fingerprint(user.password_hash)
+    access_token = create_access_token(data={"sub": str(user.id), "pwd": pwd_fp})
+    refresh_token = create_refresh_token(data={"sub": str(user.id), "pwd": pwd_fp})
 
     is_production = getattr(settings, "FRONTEND_URL", "").startswith("https")
 
@@ -251,9 +276,18 @@ async def refresh_token(request: Request, response: Response, db: AsyncSession =
     if not user or not user.is_verified:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
 
+    from jose import jwt as jose_jwt
+    from app.services.auth_service import ALGORITHM
+
+    refresh_payload = jose_jwt.decode(refresh_token, settings.JWT_SECRET, algorithms=[ALGORITHM])
+    token_pwd = refresh_payload.get("pwd")
+    if token_pwd is not None and token_pwd != get_password_fingerprint(user.password_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token")
+
     # Issue new tokens
-    new_access_token = create_access_token(data={"sub": str(user.id)})
-    new_refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    pwd_fp = get_password_fingerprint(user.password_hash)
+    new_access_token = create_access_token(data={"sub": str(user.id), "pwd": pwd_fp})
+    new_refresh_token = create_refresh_token(data={"sub": str(user.id), "pwd": pwd_fp})
 
     is_production = getattr(settings, "FRONTEND_URL", "").startswith("https")
 
@@ -312,6 +346,82 @@ async def change_password(
     current_user.password_hash = get_password_hash(payload.new_password)
     await db.commit()
     return {"msg": "Password updated successfully"}
+
+
+@router.post("/forgot-password")
+@limiter.limit("3/15minute")
+async def forgot_password(
+    request: Request,
+    payload: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """Request a password reset email without revealing whether the email exists."""
+    if payload.website:
+        return {"msg": GENERIC_FORGOT_PASSWORD_MSG}
+
+    if not await verify_captcha(payload.captcha_token):
+        raise HTTPException(status_code=400, detail="Invalid CAPTCHA")
+
+    result = await db.execute(select(User).where(User.email == payload.email))
+    user = result.scalar_one_or_none()
+
+    if user and user.is_verified:
+        now = datetime.now(timezone.utc)
+        existing_expiry = _as_utc(user.reset_token_expires_at)
+        # 2-minute per-account cooldown prevents inbox bombing across rotated IPs.
+        if not existing_expiry or existing_expiry <= now + timedelta(minutes=13):
+            raw_token = secrets.token_urlsafe(32)
+            user.reset_token_hash = hash_reset_token(raw_token)
+            user.reset_token_expires_at = now + timedelta(minutes=15)
+            await db.commit()
+            background_tasks.add_task(send_password_reset_email, user.email, raw_token)
+
+    return {"msg": GENERIC_FORGOT_PASSWORD_MSG}
+
+
+@router.post("/reset-password")
+@limiter.limit("5/15minute")
+async def reset_password(
+    request: Request,
+    response: Response,
+    payload: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Reset password using a single-use token and invalidate existing sessions."""
+    if payload.website:
+        raise HTTPException(status_code=400, detail="Invalid or expired password reset token")
+
+    if not await verify_captcha(payload.captcha_token):
+        raise HTTPException(status_code=400, detail="Invalid CAPTCHA")
+
+    token_hash = hash_reset_token(payload.token.strip())
+    result = await db.execute(select(User).where(User.reset_token_hash == token_hash))
+    user = result.scalar_one_or_none()
+
+    now = datetime.now(timezone.utc)
+    expires_at = _as_utc(user.reset_token_expires_at) if user else None
+
+    if (
+        not user
+        or not user.reset_token_hash
+        or not secrets.compare_digest(user.reset_token_hash, token_hash)
+        or not expires_at
+        or expires_at < now
+    ):
+        raise HTTPException(status_code=400, detail="Invalid or expired password reset token")
+
+    user.password_hash = get_password_hash(payload.new_password)
+    user.reset_token_hash = None
+    user.reset_token_expires_at = None
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    await db.commit()
+
+    response.delete_cookie("access_token")
+    response.delete_cookie("refresh_token")
+
+    return {"msg": "Password has been reset successfully. You can now log in."}
 
 
 

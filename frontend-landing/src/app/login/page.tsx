@@ -14,6 +14,7 @@ function LoginForm() {
   const { checkAuth } = useAuth();
 
   const isVerified = searchParams.get("verified") === "true";
+  const isReset = searchParams.get("reset") === "true";
   const rawRedirect = searchParams.get("redirect");
   const safeRedirect =
     rawRedirect && rawRedirect.startsWith("/") && !rawRedirect.startsWith("//")
@@ -91,6 +92,23 @@ function LoginForm() {
         </div>
       )}
 
+      {isReset && (
+        <div
+          role="status"
+          className="mt-5 flex items-start gap-2.5 rounded-xl border border-status-success/30 bg-status-success-bg px-4 py-3 text-xs font-medium text-status-success"
+        >
+          <span
+            aria-hidden="true"
+            className="material-symbols-outlined text-[18px] shrink-0"
+          >
+            check_circle
+          </span>
+          <span>
+            Your password has been reset. Sign in below with your new password.
+          </span>
+        </div>
+      )}
+
       {error && (
         <div
           role="alert"
@@ -157,6 +175,14 @@ function LoginForm() {
                 {showPassword ? "visibility_off" : "visibility"}
               </span>
             </button>
+          </div>
+          <div className="mt-2 text-right">
+            <Link
+              href="/forgot-password"
+              className="text-xs font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+            >
+              Forgot password?
+            </Link>
           </div>
         </div>
 

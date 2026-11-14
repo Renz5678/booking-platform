@@ -17,7 +17,7 @@ class AuditLoggingMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next) -> Response:
         # Define paths that require audit logging
-        sensitive_paths = ["/admin", "/bookings", "/counselors/me", "/payments"]
+        sensitive_paths = ["/admin", "/auth", "/bookings", "/counselors/me", "/payments"]
         
         is_sensitive = any(request.url.path.startswith(path) for path in sensitive_paths)
 

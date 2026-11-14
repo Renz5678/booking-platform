@@ -7,7 +7,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
-from app.core.security import require_role
+from app.core.security import require_role, validate_upload_magic_bytes
 from app.db.session import get_db
 from app.models.booking import Booking, BookingStatus
 from app.models.payment import PaymentMethod, PaymentStatus
@@ -90,6 +90,11 @@ async def submit_payment_proof(
         content = await file.read()
         if len(content) > MAX_PROOF_BYTES:
             raise HTTPException(status_code=400, detail="File exceeds 5MB limit.")
+        if not validate_upload_magic_bytes(content, file.content_type):
+            raise HTTPException(
+                status_code=400,
+                detail="File content does not match the declared PDF, JPG, or PNG type.",
+            )
         encoded = base64.b64encode(content).decode("ascii")
         booking.payment.proof_url = f"data:{file.content_type};base64,{encoded}"
 

@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.core.rate_limit import limiter
-from app.core.security import require_role
+from app.core.security import require_role, validate_upload_magic_bytes
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.counselor import (
@@ -92,6 +92,11 @@ async def upload_my_credentials(
     content = await file.read()
     if len(content) > MAX_CREDENTIAL_BYTES:
         raise HTTPException(status_code=400, detail="File exceeds 5MB limit.")
+    if not validate_upload_magic_bytes(content, file.content_type):
+        raise HTTPException(
+            status_code=400,
+            detail="File content does not match the declared PDF, JPG, or PNG type.",
+        )
 
     counselor = await counselor_service.get_counselor_by_user_id(db, current_user.id)
     if not counselor:

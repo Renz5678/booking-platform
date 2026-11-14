@@ -52,3 +52,25 @@ async def test_availability_rejects_conflicting_day_and_date():
             start_time=time(9, 0),
             end_time=time(10, 0),
         )
+
+
+async def test_verify_captcha_fails_closed_in_production():
+    """Ensure missing RECAPTCHA_SECRET_KEY fails closed when ENVIRONMENT is production."""
+    from app.services.auth_service import verify_captcha
+
+    with (
+        patch("app.services.auth_service.settings.ENVIRONMENT", "production"),
+        patch("app.services.auth_service.settings.RECAPTCHA_SECRET_KEY", ""),
+    ):
+        assert await verify_captcha("dummy_token") is False
+
+
+async def test_upload_magic_bytes_validation():
+    """Ensure spoofed MIME headers without matching magic bytes are rejected."""
+    from app.core.security import validate_upload_magic_bytes
+
+    assert validate_upload_magic_bytes(b"%PDF-1.7", "application/pdf") is True
+    assert validate_upload_magic_bytes(b"\xff\xd8\xff\xe0", "image/jpeg") is True
+    assert validate_upload_magic_bytes(b"\x89PNG\r\n\x1a\n", "image/png") is True
+    assert validate_upload_magic_bytes(b"<script>alert(1)</script>", "image/png") is False
+    assert validate_upload_magic_bytes(b"%PDF-1.7", "image/jpeg") is False
