@@ -5,6 +5,7 @@ import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useToast } from "@/context/ToastContext";
 import { api, ApiError } from "@/lib/api";
+import { invalidateSiteContentCache } from "@/lib/content";
 
 interface QuoteItem {
   text: string;
@@ -105,6 +106,7 @@ export default function AdminContentPage() {
     setSavingKey(key);
     try {
       await api.put(`/admin/content/${key}`, { value });
+      invalidateSiteContentCache();
       toast.success(`Updated ${key.replace(/_/g, " ")}.`);
     } catch (err) {
       const msg =

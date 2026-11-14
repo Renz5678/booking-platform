@@ -272,18 +272,26 @@ export default function CounselorProfilePage() {
                     >
                       Select Date
                     </label>
-                    <select
-                      id="profile-date-select"
-                      value={selectedDate}
-                      onChange={(e) => setSelectedDate(e.target.value)}
-                      className="mt-1.5 w-full rounded-xl border border-border-subtle bg-background px-3.5 py-2.5 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                    >
-                      {upcomingDays.map((day) => (
-                        <option key={day.iso} value={day.iso}>
-                          {day.label}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="relative mt-1.5">
+                      <select
+                        id="profile-date-select"
+                        value={selectedDate}
+                        onChange={(e) => setSelectedDate(e.target.value)}
+                        className="select-control min-h-[44px] w-full rounded-xl border border-border-subtle bg-background py-2.5 pl-3.5 pr-10 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      >
+                        {upcomingDays.map((day) => (
+                          <option key={day.iso} value={day.iso}>
+                            {day.label}
+                          </option>
+                        ))}
+                      </select>
+                      <span
+                        aria-hidden="true"
+                        className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[20px] text-text-muted"
+                      >
+                        expand_more
+                      </span>
+                    </div>
                   </div>
 
                   <div>

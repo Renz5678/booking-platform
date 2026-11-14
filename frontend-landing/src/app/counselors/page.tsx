@@ -12,6 +12,7 @@ import WeeklySlotGrid, {
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 import { api, ApiError } from "@/lib/api";
+import { fallbackCounselors } from "@/data/site";
 import { getCaptchaToken } from "@/lib/captcha";
 import { getInitials } from "@/lib/routes";
 import type { CounselorProfile } from "@/types";
@@ -81,7 +82,28 @@ function CounselorsContent() {
           setCounselors(data);
         }
       } catch {
-        if (active) toast.error("Unable to load counselors right now.");
+        if (active) {
+          setCounselors(
+            fallbackCounselors.map((c) => ({
+              id: c.id,
+              bio: c.bio,
+              photo_url: c.photo_url || null,
+              specialization_tags: c.specializations,
+              google_calendar_connected: false,
+              is_verified: true,
+              is_active: true,
+              credentials_url: null,
+              user: {
+                id: c.id,
+                email: "care@alaga.ph",
+                full_name: c.name,
+                role: "counselor",
+                is_active: true,
+                is_verified: true,
+              },
+            }))
+          );
+        }
       } finally {
         if (active) setLoading(false);
       }
@@ -705,17 +727,25 @@ function CounselorsContent() {
                       >
                         Preferred Session Format
                       </label>
-                      <select
-                        id="intake-modality"
-                        value={modality}
-                        onChange={(e) => setModality(e.target.value)}
-                        className="mt-1.5 w-full rounded-xl border border-border-subtle bg-background px-4 py-2.5 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                      >
-                        <option value="Video Call (Google Meet)">
-                          Video Call (Google Meet)
-                        </option>
-                        <option value="Audio Only Call">Audio Only Call</option>
-                      </select>
+                      <div className="relative mt-1.5">
+                        <select
+                          id="intake-modality"
+                          value={modality}
+                          onChange={(e) => setModality(e.target.value)}
+                          className="select-control min-h-[44px] w-full rounded-xl border border-border-subtle bg-background py-2.5 pl-4 pr-10 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        >
+                          <option value="Video Call (Google Meet)">
+                            Video Call (Google Meet)
+                          </option>
+                          <option value="Audio Only Call">Audio Only Call</option>
+                        </select>
+                        <span
+                          aria-hidden="true"
+                          className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[20px] text-text-muted"
+                        >
+                          expand_more
+                        </span>
+                      </div>
                     </div>
 
                     <div>
@@ -831,6 +861,9 @@ export default function CounselorsPage() {
     <Suspense
       fallback={
         <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+          <h1 className="font-serif text-headline-xl text-primary mb-6">
+            Licensed Counselors &amp; Psychologists
+          </h1>
           <div className="h-64 animate-pulse rounded-2xl bg-surface-elevated" />
         </div>
       }

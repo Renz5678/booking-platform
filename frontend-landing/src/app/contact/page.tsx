@@ -82,7 +82,7 @@ export default function ContactPage() {
                     Support Hours
                   </h2>
                   <p className="mt-1 text-sm text-text-secondary">
-                    Monday &ndash; Saturday, 8:00 AM &ndash; 6:00 PM (PHT). We
+                    Monday to Saturday, 8:00 AM to 6:00 PM (PHT). We
                     typically reply within one business day.
                   </p>
                 </div>
@@ -160,13 +160,13 @@ export default function ContactPage() {
                     <button
                       type="button"
                       onClick={() => setSubmitted(false)}
-                      className="rounded-xl border border-border-subtle bg-background px-5 py-2.5 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      className="min-h-[44px] rounded-xl border border-border-subtle bg-background px-5 py-2.5 text-sm font-semibold text-text-primary transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-surface-muted active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       Send Another Message
                     </button>
                     <Link
                       href="/counselors"
-                      className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-primary-hover active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       Browse Counselors
                     </Link>
@@ -247,7 +247,7 @@ export default function ContactPage() {
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                    className="inline-flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-primary-hover active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 disabled:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                   >
                     {isSubmitting ? (
                       <>

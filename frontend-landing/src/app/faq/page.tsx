@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { api } from "@/lib/api";
+import { fetchSiteContentMap } from "@/lib/content";
 
 interface FaqItem {
   question: string;
@@ -54,16 +54,10 @@ export default function FaqPage() {
     let active = true;
     const loadFaqs = async () => {
       try {
-        const res = await api.get<
-          | Array<{ key: string; value: string }>
-          | { items?: Array<{ key: string; value: string }> }
-        >("/admin/content");
-        const items = Array.isArray(res) ? res : res?.items || [];
-        const faqItem =
-          items.find((i) => i.key === "faq") ||
-          items.find((i) => i.key === "faq_entries");
-        if (faqItem && active) {
-          const parsed = JSON.parse(faqItem.value);
+        const contentMap = await fetchSiteContentMap();
+        const faqRaw = contentMap.faq || contentMap.faq_entries;
+        if (faqRaw && active) {
+          const parsed = JSON.parse(faqRaw);
           if (Array.isArray(parsed) && parsed.length > 0) {
             const normalized = parsed
               .map(
@@ -192,7 +186,7 @@ export default function FaqPage() {
                     aria-expanded={isOpen}
                     aria-controls={panelId}
                     onClick={() => toggleItem(idx)}
-                    className="flex w-full items-center justify-between gap-4 px-6 py-4 text-left transition-colors hover:bg-surface-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+                    className="flex min-h-[52px] w-full items-center justify-between gap-4 px-6 py-4 text-left transition-colors hover:bg-surface-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
                   >
                     <span className="text-sm font-semibold text-text-primary sm:text-base">
                       {faq.question}
@@ -233,13 +227,13 @@ export default function FaqPage() {
           <div className="flex flex-wrap gap-3 shrink-0">
             <Link
               href="/contact"
-              className="inline-flex items-center justify-center rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-primary-hover active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               Contact Us
             </Link>
             <Link
               href="/counselors"
-              className="inline-flex items-center justify-center rounded-xl border border-border-subtle bg-surface-elevated px-5 py-2.5 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-border-subtle bg-surface-elevated px-5 py-2.5 text-sm font-semibold text-text-primary transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-surface-muted active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               Browse Counselors
             </Link>

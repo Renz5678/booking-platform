@@ -162,7 +162,7 @@ export default function AccountSettingsPage() {
               <button
                 type="submit"
                 disabled={nameLoading}
-                className="bg-secondary text-on-secondary px-6 py-2.5 rounded-lg font-label-md hover:opacity-95 transition-opacity disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                className="min-h-[44px] bg-secondary text-on-secondary px-6 py-2.5 rounded-lg font-label-md hover:opacity-95 hover:-translate-y-0.5 active:scale-[0.99] transition-[opacity,transform] disabled:opacity-50 disabled:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               >
                 {nameLoading ? "Saving…" : "Save Changes"}
               </button>
@@ -204,7 +204,7 @@ export default function AccountSettingsPage() {
                   type="button"
                   onClick={() => setShowCurrentPassword((v) => !v)}
                   aria-label={showCurrentPassword ? "Hide current password" : "Show current password"}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-on-surface-variant hover:text-primary rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 flex h-11 w-11 md:h-9 md:w-9 items-center justify-center text-on-surface-variant hover:text-primary rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                 >
                   <span className="material-symbols-outlined text-[20px]" aria-hidden="true">
                     {showCurrentPassword ? "visibility_off" : "visibility"}
@@ -235,7 +235,7 @@ export default function AccountSettingsPage() {
                   type="button"
                   onClick={() => setShowNewPassword((v) => !v)}
                   aria-label={showNewPassword ? "Hide new password" : "Show new password"}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-on-surface-variant hover:text-primary rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 flex h-11 w-11 md:h-9 md:w-9 items-center justify-center text-on-surface-variant hover:text-primary rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                 >
                   <span className="material-symbols-outlined text-[20px]" aria-hidden="true">
                     {showNewPassword ? "visibility_off" : "visibility"}
@@ -268,7 +268,7 @@ export default function AccountSettingsPage() {
               <button
                 type="submit"
                 disabled={passwordLoading}
-                className="bg-primary text-on-primary px-6 py-2.5 rounded-lg font-label-md hover:opacity-95 transition-opacity disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                className="min-h-[44px] bg-primary text-on-primary px-6 py-2.5 rounded-lg font-label-md hover:opacity-95 hover:-translate-y-0.5 active:scale-[0.99] transition-[opacity,transform] disabled:opacity-50 disabled:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               >
                 {passwordLoading ? "Updating…" : "Update Password"}
               </button>

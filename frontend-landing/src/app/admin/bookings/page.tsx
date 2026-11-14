@@ -104,19 +104,27 @@ export default function AdminBookingsPage() {
               />
             </div>
 
-            <select
-              aria-label="Filter by booking status"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded-xl border border-border-subtle bg-surface-elevated px-3.5 py-2 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            >
-              <option value="all">All Statuses</option>
-              <option value="pending_payment">Pending Payment</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-              <option value="no_show">No Show</option>
-            </select>
+            <div className="relative w-full sm:w-auto">
+              <select
+                aria-label="Filter by booking status"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="select-control min-h-[44px] w-full sm:w-auto rounded-xl border border-border-subtle bg-surface-elevated py-2 pl-3.5 pr-10 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <option value="all">All Statuses</option>
+                <option value="pending_payment">Pending Payment</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+                <option value="no_show">No Show</option>
+              </select>
+              <span
+                aria-hidden="true"
+                className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[20px] text-text-muted"
+              >
+                expand_more
+              </span>
+            </div>
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-border-subtle bg-surface-elevated shadow-ambient">
