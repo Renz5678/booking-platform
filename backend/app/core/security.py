@@ -42,6 +42,11 @@ async def get_current_user(
     try:
         # Decode and verify the JWT signature and expiry using our secret key.
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[ALGORITHM])
+        if payload.get("type") == "refresh":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials",
+            )
         user_id: str = payload.get("sub")
         if user_id is None:
             raise HTTPException(

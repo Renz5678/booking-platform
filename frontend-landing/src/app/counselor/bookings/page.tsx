@@ -59,7 +59,14 @@ export default function CounselorBookingsPage() {
               >
                 <div>
                   <p className="font-headline-md text-primary font-bold">Booking #{booking.id.substring(0, 8)}</p>
-                  <p className="font-label-md text-on-surface-variant mt-1">Status: <span className="uppercase text-secondary font-bold">{booking.status}</span></p>
+                  <p className="font-label-md text-on-surface-variant mt-1">
+                    Status: <span className="uppercase text-secondary font-bold">{booking.status.replace("_", " ")}</span>
+                    {booking.status === "pending_payment" && (booking.payment?.provider_payment_id || booking.payment?.proof_url) && (
+                      <span className="ml-2 text-xs bg-secondary-container text-on-secondary-container px-2 py-0.5 rounded-full font-semibold">
+                        Proof Submitted
+                      </span>
+                    )}
+                  </p>
                   <p className="font-label-sm text-on-surface-variant mt-1">{new Date(booking.scheduled_start).toLocaleString()}</p>
                 </div>
                 <div className="bg-secondary text-on-secondary px-4 py-2 rounded-lg font-label-md hover:opacity-90 active:scale-[0.98] transition-all duration-200 inline-block">

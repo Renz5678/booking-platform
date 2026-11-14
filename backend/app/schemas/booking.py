@@ -4,6 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from app.models.booking import BookingStatus
+from app.schemas.payment import PaymentResponse
 
 
 class BookingBase(BaseModel):
@@ -59,3 +60,8 @@ class IntakeFormResponse(BaseModel):
 
 class BookingCounselorResponse(BookingResponse):
     intake_form: IntakeFormResponse | None = None
+    payment: PaymentResponse | None = None
+
+
+class BookingDetailResponse(BookingCounselorResponse):
+    pass

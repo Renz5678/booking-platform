@@ -105,7 +105,7 @@ function SuccessContent() {
           </div>
           <h2 className="font-display-sm font-bold text-primary mb-4">Payment Pending</h2>
           <p className="font-body-lg text-on-surface-variant mb-10 max-w-md">
-            We are still waiting for confirmation from the payment provider. Please check your dashboard later to see the updated status.
+            Your payment is awaiting counselor verification. Please check your dashboard or booking page to see the updated status.
           </p>
           <button 
             onClick={() => router.push("/dashboard")}

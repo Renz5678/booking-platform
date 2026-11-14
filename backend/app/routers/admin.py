@@ -1,7 +1,8 @@
 import logging
-from datetime import date
+from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from sqlalchemy import case, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
@@ -28,6 +29,21 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 # ---------------------------------------------------------------------------
 
 
+@router.get("/counselors", response_model=list[CounselorProfilePrivateResponse])
+async def list_all_counselors(
+    current_user: User = Depends(require_role(["admin"])),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: List all counselors (pending, active, and deactivated)."""
+    result = await db.execute(
+        select(CounselorProfile).options(
+            selectinload(CounselorProfile.user),
+            selectinload(CounselorProfile.availabilities),
+        )
+    )
+    return result.scalars().all()
+
+
 @router.get("/counselors/pending", response_model=list[CounselorProfilePrivateResponse])
 async def list_pending_counselors(
     current_user: User = Depends(require_role(["admin"])),
@@ -42,9 +58,31 @@ async def list_pending_counselors(
     return result.scalars().all()
 
 
+@router.get("/counselors/{counselor_id}", response_model=CounselorProfilePrivateResponse)
+async def get_admin_counselor_detail(
+    counselor_id: str,
+    current_user: User = Depends(require_role(["admin"])),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: View any counselor's profile regardless of verification or active status."""
+    result = await db.execute(
+        select(CounselorProfile)
+        .options(
+            selectinload(CounselorProfile.user),
+            selectinload(CounselorProfile.availabilities),
+        )
+        .where(CounselorProfile.id == counselor_id)
+    )
+    counselor = result.scalar_one_or_none()
+    if not counselor:
+        raise HTTPException(status_code=404, detail="Counselor not found")
+    return counselor
+
+
 @router.post("/counselors/invite", response_model=dict)
 async def invite_counselor(
     data: CounselorInviteRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(require_role(["admin"])),
     db: AsyncSession = Depends(get_db),
 ):
@@ -76,15 +114,14 @@ async def invite_counselor(
     profile = CounselorProfile(
         user_id=new_user.id,
         bio="",
-        specialties=[],
-        hourly_rate=0.0
+        specialization_tags=[],
     )
     db.add(profile)
     await db.commit()
     
     from app.services.email_service import send_counselor_invite_email
-    import asyncio
-    asyncio.create_task(send_counselor_invite_email(data.email, invite_token))
+
+    background_tasks.add_task(send_counselor_invite_email, data.email, invite_token)
     
     return {"msg": "Invite sent successfully."}
 
@@ -210,7 +247,7 @@ async def get_all_bookings(
     if date_from is not None:
         query = query.where(Booking.scheduled_start >= date_from)
     if date_to is not None:
-        query = query.where(Booking.scheduled_start <= date_to)
+        query = query.where(Booking.scheduled_start < date_to + timedelta(days=1))
 
     result = await db.execute(query)
     return result.scalars().all()
@@ -229,8 +266,6 @@ async def get_analytics(
     """
     Admin: Platform analytics with totals, status breakdown, and per-counselor stats.
     """
-    from sqlalchemy import func
-
     # --- Overall totals ---
     bookings_res = await db.execute(select(func.count(Booking.id)))
     total_bookings = bookings_res.scalar_one_or_none() or 0
@@ -247,11 +282,12 @@ async def get_analytics(
     status_breakdown = {row[0].value: row[1] for row in status_res.all()}
 
     # --- Per-counselor stats ---
+    paid_amount = case((Payment.status == PaymentStatus.paid, Payment.amount), else_=0.0)
     counselor_res = await db.execute(
         select(
             CounselorProfile.id,
             func.count(Booking.id).label("total_sessions"),
-            func.sum(Payment.amount).label("total_revenue"),
+            func.sum(paid_amount).label("total_revenue"),
         )
         .outerjoin(Booking, Booking.counselor_id == CounselorProfile.id)
         .outerjoin(Payment, Payment.booking_id == Booking.id)

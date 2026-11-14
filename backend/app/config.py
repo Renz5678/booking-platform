@@ -4,9 +4,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     DATABASE_URL: str
     JWT_SECRET: str
-    PAYMONGO_SECRET_KEY: str
-    PAYMONGO_PUBLIC_KEY: str | None = None
-    PAYMONGO_WEBHOOK_SECRET: str
     GOOGLE_CLIENT_ID: str
     GOOGLE_CLIENT_SECRET: str
     GOOGLE_REFRESH_TOKEN: str | None = None
@@ -20,7 +17,11 @@ class Settings(BaseSettings):
     SENTRY_DSN: str | None = None
     SENTRY_ENVIRONMENT: str = "development"
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=(".env", "../.env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 settings = Settings()

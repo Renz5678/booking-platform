@@ -1,10 +1,29 @@
 import logging
 import re
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 # Use the module-level logger so validation errors can be traced if needed.
 logger = logging.getLogger(__name__)
+
+
+def _check_password_strength(v: str) -> str:
+    """
+    Enforce a strong password policy:
+      - At least 8 characters
+      - At least one uppercase letter
+      - At least one lowercase letter
+      - At least one digit
+    """
+    if len(v) < 8:
+        raise ValueError("Password must be at least 8 characters long")
+    if not re.search(r"[A-Z]", v):
+        raise ValueError("Password must contain at least one uppercase letter")
+    if not re.search(r"[a-z]", v):
+        raise ValueError("Password must contain at least one lowercase letter")
+    if not re.search(r"\d", v):
+        raise ValueError("Password must contain at least one number")
+    return v
 
 
 class UserCreate(BaseModel):
@@ -30,22 +49,7 @@ class UserCreate(BaseModel):
     @field_validator("password")
     @classmethod
     def validate_password_strength(cls, v: str) -> str:
-        """
-        Enforce a strong password policy:
-          - At least 8 characters
-          - At least one uppercase letter
-          - At least one lowercase letter
-          - At least one digit
-        """
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters long")
-        if not re.search(r"[A-Z]", v):
-            raise ValueError("Password must contain at least one uppercase letter")
-        if not re.search(r"[a-z]", v):
-            raise ValueError("Password must contain at least one lowercase letter")
-        if not re.search(r"\d", v):
-            raise ValueError("Password must contain at least one number")
-        return v
+        return _check_password_strength(v)
 
 
 class UserLogin(BaseModel):
@@ -68,8 +72,7 @@ class UserResponse(BaseModel):
     is_active: bool = True
     google_calendar_connected: bool = False
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class CounselorInviteRequest(BaseModel):
     email: EmailStr
@@ -83,12 +86,18 @@ class AcceptInviteRequest(BaseModel):
     @field_validator("password")
     @classmethod
     def validate_password_strength(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters long")
-        if not re.search(r"[A-Z]", v):
-            raise ValueError("Password must contain at least one uppercase letter")
-        if not re.search(r"[a-z]", v):
-            raise ValueError("Password must contain at least one lowercase letter")
-        if not re.search(r"\d", v):
-            raise ValueError("Password must contain at least one number")
-        return v
+        return _check_password_strength(v)
+
+
+class UserUpdateProfileRequest(BaseModel):
+    full_name: str = Field(..., min_length=2, max_length=100)
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=8)
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password_strength(cls, v: str) -> str:
+        return _check_password_strength(v)

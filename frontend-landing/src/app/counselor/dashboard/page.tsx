@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 
 interface Booking {
@@ -14,23 +16,19 @@ interface Booking {
 }
 
 export default function CounselorDashboardPage() {
-  const [lastName, setLastName] = useState("");
-  const [isActive, setIsActive] = useState(false);
+  const { user } = useAuth();
   const [sessionsThisWeek, setSessionsThisWeek] = useState(0);
   const [newBookings, setNewBookings] = useState(0);
   const [todaysBookings, setTodaysBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const names = user?.full_name?.split(" ");
+  const lastName = names && names.length > 1 ? names[names.length - 1] : user?.full_name || "";
+  const isActive = Boolean((user as { is_active?: boolean } | null)?.is_active);
+
   useEffect(() => {
     async function fetchData() {
       try {
-        // Fetch User Info
-        const user = await api.get("/auth/me");
-        const names = user.full_name?.split(" ");
-        setLastName(names && names.length > 1 ? names[names.length - 1] : user.full_name);
-        setIsActive(user.is_active);
-
-        // Fetch Bookings
         const bookings: Booking[] = await api.get("/bookings/counselor/me");
           
           const now = new Date();
@@ -118,7 +116,7 @@ export default function CounselorDashboardPage() {
           {/* Snapshot Row (Bento Grid Style) */}
           <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
             {/* Card 1 */}
-            <div className="bg-surface-container-lowest rounded-xl shadow-ambient p-6 flex flex-col justify-between group hover:-translate-y-1 transition-transform duration-300 cursor-pointer border border-white">
+            <Link href="/counselor/bookings" className="bg-surface-container-lowest rounded-xl shadow-ambient p-6 flex flex-col justify-between group hover:-translate-y-1 transition-transform duration-300 border border-white">
               <div className="flex items-start justify-between mb-4">
                 <div className="bg-surface-container-low p-3 rounded-lg text-primary">
                   <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>groups</span>
@@ -129,10 +127,10 @@ export default function CounselorDashboardPage() {
                 <h3 className="font-headline-lg text-[32px] font-semibold text-primary mb-1">{sessionsThisWeek}</h3>
                 <p className="font-label-md text-[14px] font-medium text-on-surface-variant">Sessions This Week</p>
               </div>
-            </div>
+            </Link>
 
             {/* Card 2 */}
-            <div className="bg-surface-container-lowest rounded-xl shadow-ambient p-6 flex flex-col justify-between group hover:-translate-y-1 transition-transform duration-300 cursor-pointer border border-white">
+            <Link href="/counselor/bookings" className="bg-surface-container-lowest rounded-xl shadow-ambient p-6 flex flex-col justify-between group hover:-translate-y-1 transition-transform duration-300 border border-white">
               <div className="flex items-start justify-between mb-4">
                 <div className="bg-surface-container-low p-3 rounded-lg text-primary">
                   <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>edit_document</span>
@@ -143,10 +141,10 @@ export default function CounselorDashboardPage() {
                 <h3 className="font-headline-lg text-[32px] font-semibold text-primary mb-1">0</h3>
                 <p className="font-label-md text-[14px] font-medium text-on-surface-variant">Pending Notes</p>
               </div>
-            </div>
+            </Link>
 
             {/* Card 3 */}
-            <div className="bg-surface-container-lowest rounded-xl shadow-ambient p-6 flex flex-col justify-between group hover:-translate-y-1 transition-transform duration-300 cursor-pointer border border-white">
+            <Link href="/counselor/bookings" className="bg-surface-container-lowest rounded-xl shadow-ambient p-6 flex flex-col justify-between group hover:-translate-y-1 transition-transform duration-300 border border-white">
               <div className="flex items-start justify-between mb-4">
                 <div className="bg-secondary-container p-3 rounded-lg text-on-secondary-container">
                   <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>notification_add</span>
@@ -157,7 +155,7 @@ export default function CounselorDashboardPage() {
                 <h3 className="font-headline-lg text-[32px] font-semibold text-primary mb-1">{newBookings}</h3>
                 <p className="font-label-md text-[14px] font-medium text-on-surface-variant">Active Bookings</p>
               </div>
-            </div>
+            </Link>
           </section>
 
           {/* Today's Schedule */}
@@ -167,7 +165,7 @@ export default function CounselorDashboardPage() {
                 <span className="material-symbols-outlined text-secondary">today</span>
                 Today's Schedule
               </h2>
-              <button className="font-label-sm text-[12px] font-semibold tracking-wider text-secondary hover:underline">View Full Calendar</button>
+              <Link href="/counselor/availability" className="font-label-sm text-[12px] font-semibold tracking-wider text-secondary hover:underline">View Full Calendar</Link>
             </div>
 
             <div className="space-y-4">
@@ -204,7 +202,7 @@ export default function CounselorDashboardPage() {
                             Join Session
                           </a>
                         ) : (
-                          <button className="text-primary border border-outline-variant font-label-md text-[14px] font-medium px-4 py-2 rounded-lg hover:bg-surface-container-low transition-colors w-full md:w-auto">Review Intake</button>
+                          <Link href={`/counselor/bookings/${booking.id}`} className="text-center text-primary border border-outline-variant font-label-md text-[14px] font-medium px-4 py-2 rounded-lg hover:bg-surface-container-low transition-colors w-full md:w-auto block">Review Intake</Link>
                         )}
                       </div>
                     </div>

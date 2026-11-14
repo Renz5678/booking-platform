@@ -3,7 +3,6 @@ from fastapi import status
 from httpx import AsyncClient
 from unittest.mock import patch
 
-from app.main import app
 
 pytestmark = pytest.mark.asyncio
 
@@ -26,6 +25,30 @@ async def test_unauthenticated_access_blocked(async_client: AsyncClient):
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
-# We would ideally test RBAC here, but creating full user sessions in tests
-# requires setting up test DB fixtures for clients, counselors, and admins.
-# For MVP, we've added the structure and verified unauthenticated access.
+async def test_refresh_token_rejected_as_access_token(async_client: AsyncClient):
+    """Ensure a refresh JWT cannot be used in place of an access_token cookie."""
+    from app.services.auth_service import create_refresh_token
+
+    refresh_jwt = create_refresh_token(data={"sub": "00000000-0000-0000-0000-000000000001"})
+    async_client.cookies.set("access_token", refresh_jwt)
+    try:
+        response = await async_client.get("/auth/me")
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+    finally:
+        async_client.cookies.clear()
+
+
+async def test_availability_rejects_conflicting_day_and_date():
+    """Ensure recurring availability rejects a specific_date and vice versa."""
+    from datetime import date, time
+    from pydantic import ValidationError
+    from app.schemas.availability import AvailabilityCreate
+
+    with pytest.raises(ValidationError):
+        AvailabilityCreate(
+            is_recurring=True,
+            day_of_week=1,
+            specific_date=date(2026, 11, 15),
+            start_time=time(9, 0),
+            end_time=time(10, 0),
+        )

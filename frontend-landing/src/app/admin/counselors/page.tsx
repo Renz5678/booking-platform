@@ -52,7 +52,7 @@ export default function AdminCounselorsPage() {
         try {
           // Let's try to get them. If there's an issue, we just show empty.
           // The prompt says "Other tabs fetch all counselors and filter client-side"
-          const data = await api.get("/counselors");
+          const data = await api.get("/admin/counselors");
           const all: Counselor[] = data || [];
           if (activeTab === "active") {
             setCounselors(all.filter(c => c.is_verified && c.is_active));
@@ -119,7 +119,7 @@ export default function AdminCounselorsPage() {
     e.preventDefault();
     setInviteLoading(true);
     try {
-      await api.post("/admin/counselors/invite", { email: inviteEmail, name: inviteName });
+      await api.post("/admin/counselors/invite", { email: inviteEmail, full_name: inviteName });
       setShowInviteModal(false);
       setInviteEmail("");
       setInviteName("");

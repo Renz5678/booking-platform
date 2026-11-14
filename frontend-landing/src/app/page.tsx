@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
@@ -50,9 +51,9 @@ export default function Home() {
           <p className="font-body-lg text-body-lg text-on-surface-variant mb-8 max-w-md">
             Accessible, confidential, and compassionate online therapy tailored for the Philippines. Connect with licensed professionals from the comfort of your safe space.
           </p>
-          <button className="bg-secondary text-on-secondary px-8 py-4 rounded-full font-label-md text-lg hover:opacity-90 transition-opacity shadow-md hover:shadow-lg">
+          <Link href="/counselors" className="inline-block bg-secondary text-on-secondary px-8 py-4 rounded-full font-label-md text-lg hover:opacity-90 transition-opacity shadow-md hover:shadow-lg">
             Book a Session
-          </button>
+          </Link>
         </div>
         <div className="relative h-64 md:h-[500px] rounded-2xl overflow-hidden custom-shadow">
           <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuBiCTk6Co4rdBNY7PtEJKqjdcG3ThIhRiiRAUtA1UipYcupQZdR0pM2uEoQFFVXWwp5KlzBK0jTY4Fwco6zrNZSPklmqM_eOuATVAwJgeKGismQuV_PQWXFNnwQ7aOs6AEw_fKGIpEbWlgAGNW_UFdSF5eli6tHwzIZsUcQglipLY3zoTbWp21fUmvgsUT0LUT8NldWBszZOIMbRkA3gBR-MNcVmfaUfLv1KpQGtYR9iO2eCaqbw2HzYsc6K-RkZQdLjDKAnQ8W8ZY" alt="A serene, well-lit modern home office or living room space serving as a safe setting for online therapy. The room features soft neutral tones, minimal decor, a comfortable armchair, and warm natural light streaming through a window. The overall aesthetic is calm, professional, and therapeutic, utilizing a corporate modern minimalist style with pale mint and pure white accents." className="w-full h-full object-cover" fill unoptimized />
@@ -116,9 +117,9 @@ export default function Home() {
               <h2 className="font-headline-lg text-headline-lg text-primary mb-2">Featured Professionals</h2>
               <p className="font-body-md text-body-md text-on-surface-variant">Meet some of our highly qualified counselors.</p>
             </div>
-            <button className="hidden md:flex text-on-tertiary-container font-label-md hover:underline items-center gap-1">
+            <Link href="/counselors" className="hidden md:flex text-on-tertiary-container font-label-md hover:underline items-center gap-1">
               View All <span className="material-symbols-outlined text-sm">arrow_forward</span>
-            </button>
+            </Link>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Card 1 */}
@@ -164,14 +165,14 @@ export default function Home() {
               </div>
             </div>
           </div>
-          <button className="md:hidden w-full mt-8 bg-surface-container text-primary py-3 rounded-full font-label-md">
+          <Link href="/counselors" className="block text-center md:hidden w-full mt-8 bg-surface-container text-primary py-3 rounded-full font-label-md">
             View All Counselors
-          </button>
+          </Link>
         </div>
       </section>
 
       {/* About Section */}
-      <section className="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop py-section-gap grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+      <section id="about" className="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop py-section-gap grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
         <div className="order-2 md:order-1 relative h-64 md:h-[400px] rounded-2xl overflow-hidden custom-shadow">
           <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuC5gvjiTgJkatt3S7PVBB8GBs_aPSpQfjFyjqJ-mF9I82dK5QZQFVyzAupj5ur4H8wB5zZzaYRvaaSF_xD14qyYnnQQ_gBEEGTw2pXi7J7WX9LJv_XmbE090ZZK5J5IFVCx0UMnmE182tZ6VO3ud7js-Qv2jLkfnF-Ifn0DTgOvH1O5MfBNG0og6hC1-4WVDQKgPavP1hrUHfusJAT9n0wAQ7L0UI0bg_H1VObF1xyxFwwnvBwU_iOfMZRHNuKaEaO2xYndCcy5onY" alt="An abstract, minimalist conceptual image representing mental health and wellness." className="w-full h-full object-cover" fill unoptimized />
         </div>
@@ -183,9 +184,9 @@ export default function Home() {
           <p className="font-body-md text-body-md text-on-surface-variant mb-6">
             Our platform provides a safe, stigma-free digital environment connecting Filipinos with licensed mental health professionals. We are committed to making quality therapy accessible, reliable, and grounded in professional authority.
           </p>
-          <button className="text-on-tertiary-container font-label-md font-semibold hover:underline flex items-center gap-1">
+          <Link href="/faq" className="text-on-tertiary-container font-label-md font-semibold hover:underline flex items-center gap-1">
             Learn more about us <span className="material-symbols-outlined text-sm">arrow_forward</span>
-          </button>
+          </Link>
         </div>
       </section>
     </>

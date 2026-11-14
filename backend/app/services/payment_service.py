@@ -1,95 +1,30 @@
-import base64
 import logging
 from datetime import datetime, timezone
 
-import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
-from app.config import settings
 from app.core.encryption import decrypt_token
 from app.models.booking import Booking, BookingStatus
 from app.models.counselor_profile import CounselorProfile
 from app.models.payment import Payment, PaymentMethod, PaymentStatus
 from app.models.user import User
 from app.services.calendar_service import (
+    MANILA_TZ,
     add_event_to_calendar,
     create_google_meet_event,
+    to_manila,
 )
 from app.services.email_service import send_booking_confirmation
 
 logger = logging.getLogger(__name__)
 
-PAYMONGO_BASE_URL = "https://api.paymongo.com/v1"
-
-
-def _get_paymongo_auth_header() -> str:
-    """Returns the base64-encoded Basic auth header for PayMongo API calls."""
-    auth_str = f"{settings.PAYMONGO_SECRET_KEY}:"
-    return base64.b64encode(auth_str.encode()).decode()
-
-
-async def create_paymongo_checkout(amount: float, booking_id: str) -> str:
-    """
-    Creates a payment link via PayMongo Checkout API.
-    Amount is assumed to be in PHP (float). PayMongo expects cents (integer).
-    """
-    amount_cents = int(amount * 100)
-
-    b64_auth = _get_paymongo_auth_header()
-    headers = {
-        "accept": "application/json",
-        "content-type": "application/json",
-        "authorization": f"Basic {b64_auth}",
-    }
-
-    frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:3000")
-
-    payload = {
-        "data": {
-            "attributes": {
-                "send_email_receipt": False,
-                "show_description": True,
-                "show_line_items": True,
-                "description": f"Counseling Session Booking {booking_id}",
-                "line_items": [
-                    {
-                        "currency": "PHP",
-                        "amount": amount_cents,
-                        "name": "Counseling Session",
-                        "quantity": 1,
-                    }
-                ],
-                "payment_method_types": ["gcash", "paymaya", "card", "grab_pay"],
-                "success_url": f"{frontend_url}/payment/success?booking_id={booking_id}",
-                "cancel_url": f"{frontend_url}/counselors",
-            }
-        }
-    }
-
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            f"{PAYMONGO_BASE_URL}/checkout_sessions",
-            json=payload,
-            headers=headers,
-        )
-        if response.status_code != 200:
-            raise Exception(f"Failed to create PayMongo checkout: {response.text}")
-
-        data = response.json()
-        return data["data"]["attributes"]["checkout_url"]
-
 
 async def refund_payment(booking_id: str, db: AsyncSession) -> bool:
     """
-    Issues a refund via the PayMongo Refunds API for the payment associated
-    with the given booking.
-
-    Returns True if the refund was successfully issued, False otherwise.
-
-    The PayMongo refund API requires the Payment Intent ID (provider_payment_id),
-    which is stored on the Payment record after the webhook confirms payment.
+    Marks a paid manual payment as refunded upon eligible cancellation.
+    Returns True if refunded (or already refunded), False otherwise.
     """
     payment_result = await db.execute(
         select(Payment).where(Payment.booking_id == booking_id)
@@ -112,49 +47,9 @@ async def refund_payment(booking_id: str, db: AsyncSession) -> bool:
         )
         return False
 
-    if not payment.provider_payment_id:
-        logger.error(
-            "refund_payment: No provider_payment_id stored for booking %s. "
-            "Cannot issue refund without the PayMongo Payment Intent ID.",
-            booking_id,
-        )
-        return False
-
-    amount_cents = int(payment.amount * 100)
-    b64_auth = _get_paymongo_auth_header()
-    headers = {
-        "accept": "application/json",
-        "content-type": "application/json",
-        "authorization": f"Basic {b64_auth}",
-    }
-    payload = {
-        "data": {
-            "attributes": {
-                "amount": amount_cents,
-                "payment_id": payment.provider_payment_id,
-                "reason": "others",
-                "notes": f"Refund for cancelled booking {booking_id}",
-            }
-        }
-    }
-
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            f"{PAYMONGO_BASE_URL}/refunds",
-            json=payload,
-            headers=headers,
-        )
-        if response.status_code not in (200, 201):
-            logger.error(
-                "refund_payment: PayMongo refund failed for booking %s: %s",
-                booking_id,
-                response.text,
-            )
-            return False
-
     payment.status = PaymentStatus.refunded
     await db.commit()
-    logger.info("refund_payment: Refund issued successfully for booking %s", booking_id)
+    logger.info("refund_payment: Manual refund recorded for booking %s", booking_id)
     return True
 
 
@@ -165,13 +60,13 @@ async def process_successful_payment(
     payment_method: PaymentMethod | None = None,
 ) -> str:
     """
-    Processes a successful payment, confirming the booking and generating a Meet link.
+    Processes a verified payment, confirming the booking and generating a Meet link.
 
     Args:
         booking_id: The booking to confirm.
         db: Async DB session.
-        provider_payment_id: The PayMongo Payment ID from the webhook event, used for future refunds.
-        payment_method: The payment method used (gcash, maya, card), extracted from the webhook.
+        provider_payment_id: Reference number provided by the client for manual verification.
+        payment_method: The payment method used (gcash, maya, card).
     """
     # Find the booking and payment
     booking_result = await db.execute(select(Booking).where(Booking.id == booking_id))
@@ -256,24 +151,25 @@ async def process_successful_payment(
         if profile and profile.user:
             counselor_name = profile.user.full_name
             
-        await send_booking_confirmation(
-            client.email, 
-            booking.id,
-            counselor_name,
-            booking.scheduled_start,
-            booking.meeting_link or ""
-        )
+        try:
+            await send_booking_confirmation(
+                client.email,
+                booking.id,
+                counselor_name,
+                booking.scheduled_start,
+                booking.meeting_link or "",
+            )
+        except Exception as e:
+            logger.error("Failed to send booking confirmation email for %s: %s", booking_id, e)
         
         # Schedule reminder emails
         from datetime import timedelta
         from app.tasks.reminders import send_session_reminder_task
         
         # Only schedule if the session is still in the future
-        now = datetime.now(timezone.utc)
-        start_time = booking.scheduled_start
-        if start_time.tzinfo is None:
-            start_time = start_time.replace(tzinfo=timezone.utc)
-            
+        now = datetime.now(MANILA_TZ)
+        start_time = to_manila(booking.scheduled_start)
+
         time_until_session = start_time - now
         
         if time_until_session > timedelta(hours=24):

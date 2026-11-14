@@ -1,25 +1,26 @@
-import asyncio
 import logging
 import secrets
-import urllib.parse
 from datetime import datetime, timedelta, timezone
 
-import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.config import settings
-from app.core.encryption import encrypt_token
 from app.core.rate_limit import limiter
 from app.core.security import get_current_user
 from app.db.session import get_db
-from app.models.counselor_profile import CounselorProfile
 from app.models.user import RoleEnum, User
-from app.schemas.user import UserCreate, UserLogin, UserResponse, AcceptInviteRequest
+from app.schemas.user import (
+    AcceptInviteRequest,
+    ChangePasswordRequest,
+    UserCreate,
+    UserLogin,
+    UserResponse,
+    UserUpdateProfileRequest,
+)
 from app.services.auth_service import (
     create_access_token,
     create_refresh_token,
@@ -42,7 +43,10 @@ class OTPVerify(BaseModel):
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/15minute")
 async def signup(
-    request: Request, user_data: UserCreate, db: AsyncSession = Depends(get_db)
+    request: Request,
+    user_data: UserCreate,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
 ):
     """Sign up a new client."""
     # Honeypot check
@@ -82,8 +86,8 @@ async def signup(
         await db.rollback()
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    # Send the verification email asynchronously
-    asyncio.create_task(send_verification_email(new_user.email, otp))
+    # Send the verification email in the background
+    background_tasks.add_task(send_verification_email, new_user.email, otp)
 
     return {"msg": "Signup successful. Please check your email for the OTP."}
 
@@ -241,12 +245,7 @@ async def refresh_token(request: Request, response: Response, db: AsyncSession =
     if not user_id_str:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token")
 
-    try:
-        user_id = int(user_id_str)
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token subject")
-
-    result = await db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(select(User).where(User.id == user_id_str))
     user = result.scalar_one_or_none()
 
     if not user or not user.is_verified:
@@ -283,6 +282,36 @@ async def refresh_token(request: Request, response: Response, db: AsyncSession =
 async def read_users_me(current_user: User = Depends(get_current_user)):
     """Get the currently logged-in user's profile."""
     return current_user
+
+
+@router.put("/me", response_model=UserResponse)
+async def update_users_me(
+    payload: UserUpdateProfileRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update the currently logged-in user's full name."""
+    cleaned_name = payload.full_name.strip()
+    if len(cleaned_name) < 2:
+        raise HTTPException(status_code=400, detail="Full name must be at least 2 characters")
+    current_user.full_name = cleaned_name
+    await db.commit()
+    await db.refresh(current_user)
+    return current_user
+
+
+@router.post("/change-password")
+async def change_password(
+    payload: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Change the password for the currently logged-in user."""
+    if not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Incorrect current password")
+    current_user.password_hash = get_password_hash(payload.new_password)
+    await db.commit()
+    return {"msg": "Password updated successfully"}
 
 
 

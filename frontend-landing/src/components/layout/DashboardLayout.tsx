@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import ProtectedRoute, { clearAuthCache } from "../auth/ProtectedRoute";
-import { api } from "@/lib/api";
+import { usePathname } from "next/navigation";
+import ProtectedRoute from "../auth/ProtectedRoute";
+import { useAuth } from "@/context/AuthContext";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -14,14 +14,12 @@ interface DashboardLayoutProps {
 
 export default function DashboardLayout({ children, allowedRoles, role }: DashboardLayoutProps) {
   const pathname = usePathname();
-  const router = useRouter();
+  const { logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const handleLogout = async () => {
     try {
-      await api.post("/auth/logout", {});
-      clearAuthCache();
-      router.push("/");
+      await logout();
     } catch (err) {
       console.error("Failed to log out", err);
     }

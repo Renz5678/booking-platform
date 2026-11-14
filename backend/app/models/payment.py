@@ -29,8 +29,9 @@ class Payment(Base):
 
     amount = Column(Numeric(10, 2), nullable=False)
     currency = Column(String, default="PHP", nullable=False)
-    provider = Column(String, default="paymongo", nullable=False)
+    provider = Column(String, default="manual", nullable=False)
     provider_payment_id = Column(String, nullable=True)
+    proof_url = Column(String, nullable=True)
 
     status = Column(
         Enum(PaymentStatus, native_enum=False),

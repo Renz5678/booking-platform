@@ -19,11 +19,11 @@ def _run_async(coro):
 
 async def _send_reminder_if_confirmed(user_email: str, booking_id: str, hours_before: int):
     # Fetch DB explicitly for this async scope
-    from app.db.session import async_session_maker
+    from app.db.session import AsyncSessionLocal
     from sqlalchemy.future import select
     from app.models.booking import Booking, BookingStatus
 
-    async with async_session_maker() as db:
+    async with AsyncSessionLocal() as db:
         result = await db.execute(select(Booking).where(Booking.id == booking_id))
         booking = result.scalar_one_or_none()
 
@@ -55,12 +55,12 @@ def expire_stale_bookings_task():
     """
     Periodic task to sweep and cancel stale pending_payment bookings.
     """
-    from app.db.session import async_session_maker
+    from app.db.session import AsyncSessionLocal
     from app.services.booking_service import cancel_stale_pending_bookings
     
     async def _sweep():
-        async with async_session_maker() as db:
-            return await cancel_stale_pending_bookings(db, max_age_minutes=15)
+        async with AsyncSessionLocal() as db:
+            return await cancel_stale_pending_bookings(db, max_age_minutes=60)
             
     try:
         count = _run_async(_sweep())

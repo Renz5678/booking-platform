@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+import base64
+
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -68,6 +70,41 @@ async def update_my_counselor_profile(
         db, counselor, update_data
     )
     return updated_profile
+
+
+ALLOWED_CREDENTIAL_TYPES = {"application/pdf", "image/jpeg", "image/jpg", "image/png"}
+MAX_CREDENTIAL_BYTES = 5 * 1024 * 1024
+
+
+@router.post("/me/credentials")
+async def upload_my_credentials(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(["counselor"])),
+):
+    """Counselor-only endpoint to upload verification credentials (PDF/JPG/PNG, <= 5MB)."""
+    if file.content_type not in ALLOWED_CREDENTIAL_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported file type. Please upload PDF, JPG, or PNG.",
+        )
+
+    content = await file.read()
+    if len(content) > MAX_CREDENTIAL_BYTES:
+        raise HTTPException(status_code=400, detail="File exceeds 5MB limit.")
+
+    counselor = await counselor_service.get_counselor_by_user_id(db, current_user.id)
+    if not counselor:
+        raise HTTPException(status_code=404, detail="Counselor profile not found")
+
+    encoded = base64.b64encode(content).decode("ascii")
+    counselor.credentials_url = f"data:{file.content_type};base64,{encoded}"
+    await db.commit()
+
+    return {
+        "msg": "Credentials uploaded successfully",
+        "credentials_url": counselor.credentials_url,
+    }
 
 @router.get("/me/stats")
 async def get_my_counselor_stats(

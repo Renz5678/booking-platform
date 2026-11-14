@@ -28,8 +28,12 @@ export default function AdminDashboardPage() {
   async function fetchData() {
     setLoading(true);
     try {
-      // Fetch Analytics
-      const analyticsData = await api.get("/admin/analytics");
+      const [analyticsData, pendingData, bookingsData] = await Promise.all([
+        api.get("/admin/analytics"),
+        api.get("/admin/counselors/pending"),
+        api.get("/admin/bookings"),
+      ]);
+
       setTotalBookings(analyticsData.total_bookings);
       if (analyticsData.total_revenue >= 1000) {
         setTotalRevenue((analyticsData.total_revenue / 1000).toFixed(1) + "k");
@@ -37,12 +41,7 @@ export default function AdminDashboardPage() {
         setTotalRevenue(analyticsData.total_revenue.toString());
       }
 
-      // Fetch Pending Counselors
-      const pendingData = await api.get("/admin/counselors/pending");
       setPendingCounselors(pendingData);
-
-      // Fetch Bookings to calculate "Bookings Today"
-      const bookingsData = await api.get("/admin/bookings");
       const now = new Date();
       const startOfDay = new Date(now);
       startOfDay.setHours(0, 0, 0, 0);

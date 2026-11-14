@@ -13,7 +13,7 @@ class PaymentBase(BaseModel):
 
 class PaymentCreate(PaymentBase):
     booking_id: str
-    provider: str = "simulated"
+    provider: str = "manual"
 
 
 class PaymentResponse(PaymentBase):
@@ -21,6 +21,7 @@ class PaymentResponse(PaymentBase):
     booking_id: str
     provider: str
     provider_payment_id: str | None = None
+    proof_url: str | None = None
     status: PaymentStatus
     created_at: datetime
     paid_at: datetime | None = None

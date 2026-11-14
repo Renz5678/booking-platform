@@ -76,6 +76,22 @@ async def create_my_availability(
     )
 
 
+@router.put("/me/blocks", response_model=list[AvailabilityResponse])
+async def replace_my_availability(
+    blocks: list[AvailabilityCreate],
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(["counselor"])),
+):
+    """Counselor-only endpoint to replace all recurring availability blocks in one transaction."""
+    counselor = await counselor_service.get_counselor_by_user_id(db, current_user.id)
+    if not counselor:
+        raise HTTPException(status_code=404, detail="Counselor profile not found")
+
+    return await availability_service.replace_recurring_availability_blocks(
+        db, counselor.id, blocks
+    )
+
+
 @router.delete("/me/blocks/{availability_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_my_availability(
     availability_id: str,

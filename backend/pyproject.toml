@@ -1,0 +1,49 @@
+[project]
+name = "alaga-backend"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "alembic>=1.13.2",
+    "asyncpg>=0.30.0",
+    "bcrypt<4.0.0",
+    "celery>=5.4.0",
+    "cryptography>=50.0.2",
+    "fastapi>=0.111.0",
+    "google-api-python-client>=2.202.0",
+    "google-auth>=2.62.2",
+    "google-auth-oauthlib>=1.5.0",
+    "greenlet>=3.1.0",
+    "httpx>=0.27.0",
+    "passlib[bcrypt]>=1.7.4",
+    "pydantic-settings>=2.3.4",
+    "pydantic[email]>=2.14.3",
+    "python-dotenv>=1.2.4",
+    "python-jose[cryptography]>=3.3.0",
+    "python-multipart>=0.0.33",
+    "redis>=5.0.7",
+    "sentry-sdk[fastapi]>=2.75.0",
+    "slowapi>=0.1.9",
+    "sqlalchemy>=2.0.31",
+    "tzdata>=2026.6",
+    "uvicorn[standard]>=0.30.1",
+]
+
+[dependency-groups]
+dev = [
+    "aiosqlite>=0.22.1",
+    "pytest==8.2.2",
+    "pytest-asyncio==0.23.7",
+    "ruff>=0.17.5",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+asyncio_mode = "auto"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+ignore = ["E712"]
+
+[tool.ruff.lint.per-file-ignores]
+"alembic/env.py" = ["E402"]
+"app/models/__init__.py" = ["F401"]

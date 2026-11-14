@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function Footer() {
   return (
     <footer className="w-full mt-section-gap bg-surface-container-highest border-t border-outline-variant py-section-gap">
@@ -16,16 +18,16 @@ export default function Footer() {
         </div>
         <div className="flex flex-col gap-3">
           <h4 className="font-label-md text-label-md text-primary font-bold mb-2">Company</h4>
-          <a className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="#">About Us</a>
-          <a className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="#">Find a Counselor</a>
-          <a className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="#">FAQ</a>
-          <a className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="#">Contact Us</a>
+          <Link className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="/#about">About Us</Link>
+          <Link className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="/counselors">Find a Counselor</Link>
+          <Link className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="/faq">FAQ</Link>
+          <Link className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="/contact">Contact Us</Link>
         </div>
         <div className="flex flex-col gap-3">
           <h4 className="font-label-md text-label-md text-primary font-bold mb-2">Legal</h4>
-          <a className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="/privacy-policy">Privacy Policy</a>
-          <a className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="#">Terms of Service</a>
-          <a className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="#">Crisis Resources</a>
+          <Link className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="/privacy-policy">Privacy Policy</Link>
+          <Link className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="/privacy-policy">Terms of Service</Link>
+          <Link className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="/contact">Crisis Resources</Link>
         </div>
       </div>
       <div className="max-w-container-max mx-auto px-margin-desktop mt-12 pt-6 border-t border-outline-variant text-center md:text-left">

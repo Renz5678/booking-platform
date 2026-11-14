@@ -14,7 +14,6 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
-VERIFICATION_TOKEN_EXPIRE_HOURS = 24
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -55,25 +54,6 @@ def decode_refresh_token(token: str) -> str | None:
         return None
 
 
-def create_verification_token(email: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(
-        hours=VERIFICATION_TOKEN_EXPIRE_HOURS
-    )
-    to_encode = {"sub": email, "type": "verification", "exp": expire}
-    return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=ALGORITHM)
-
-
-def verify_email_token(token: str) -> str | None:
-    try:
-        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[ALGORITHM])
-        if payload.get("type") != "verification":
-            return None
-        email: str = payload.get("sub")
-        return email
-    except JWTError:
-        return None
-
-
 async def verify_captcha(token: str) -> bool:
     """
     Verify the CAPTCHA token with Google reCAPTCHA v3 API.
@@ -85,13 +65,17 @@ async def verify_captcha(token: str) -> bool:
         logger.warning("RECAPTCHA_SECRET_KEY is not set. Skipping CAPTCHA verification (dev mode fallback).")
         return True
 
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            "https://www.google.com/recaptcha/api/siteverify",
-            data={
-                "secret": settings.RECAPTCHA_SECRET_KEY,
-                "response": token
-            }
-        )
-        result = response.json()
-        return result.get("success", False) and result.get("score", 0.0) >= 0.5
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.post(
+                "https://www.google.com/recaptcha/api/siteverify",
+                data={
+                    "secret": settings.RECAPTCHA_SECRET_KEY,
+                    "response": token
+                }
+            )
+            result = response.json()
+            return result.get("success", False) and result.get("score", 0.0) >= 0.5
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.error("CAPTCHA verification request failed: %s", exc)
+        return False

@@ -4,11 +4,9 @@ import { useEffect, useState, use } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { api } from "@/lib/api";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 
 export default function CounselorBookingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
-  const router = useRouter();
   const [booking, setBooking] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -58,6 +56,30 @@ export default function CounselorBookingDetailPage({ params }: { params: Promise
     } catch (err) {
       console.error(err);
       alert("Failed to cancel booking");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handlePaymentDecision = async (decision: "verify" | "reject") => {
+    if (
+      decision === "reject" &&
+      !confirm("Reject this payment and cancel the booking?")
+    ) {
+      return;
+    }
+    setActionLoading(decision);
+    try {
+      await api.post(`/payments/${booking.id}/${decision}`, {});
+      showToast(
+        decision === "verify"
+          ? "Payment verified and session confirmed"
+          : "Payment rejected and booking cancelled"
+      );
+      fetchBooking();
+    } catch (err) {
+      console.error(err);
+      alert(`Failed to ${decision} payment`);
     } finally {
       setActionLoading(null);
     }
@@ -125,10 +147,10 @@ export default function CounselorBookingDetailPage({ params }: { params: Promise
               <p><strong className="text-on-surface-variant w-24 inline-block">End:</strong> {sessionEnd.toLocaleString()}</p>
             </div>
             
-            {booking.google_meet_link && (
+            {booking.meeting_link && (
               <div className="mt-6">
                 <a 
-                  href={booking.google_meet_link} 
+                  href={booking.meeting_link} 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="inline-flex items-center justify-center gap-2 w-full bg-primary text-on-primary px-4 py-3 rounded-lg font-label-lg hover:bg-primary/90 transition-colors"
@@ -161,6 +183,69 @@ export default function CounselorBookingDetailPage({ params }: { params: Promise
             </div>
           </div>
         </div>
+
+        {/* Payment Verification */}
+        {booking.payment && (
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-surface-container-highest mb-6">
+            <h2 className="font-headline-md text-primary mb-4 flex items-center gap-2">
+              <span className="material-symbols-outlined text-secondary">payments</span>
+              Payment Verification
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 font-body-md mb-4">
+              <p>
+                <strong className="text-on-surface-variant">Amount:</strong> ₱
+                {Number(booking.payment.amount).toFixed(2)} {booking.payment.currency}
+              </p>
+              <p>
+                <strong className="text-on-surface-variant">Status:</strong>{" "}
+                <span className="uppercase font-bold">{booking.payment.status}</span>
+              </p>
+              <p>
+                <strong className="text-on-surface-variant">Method:</strong>{" "}
+                {booking.payment.payment_method
+                  ? booking.payment.payment_method.toUpperCase()
+                  : "Not specified"}
+              </p>
+              <p>
+                <strong className="text-on-surface-variant">Reference No.:</strong>{" "}
+                {booking.payment.provider_payment_id || "None submitted"}
+              </p>
+            </div>
+            {booking.payment.proof_url && (
+              <div className="mb-4">
+                <a
+                  href={booking.payment.proof_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-primary font-label-md underline"
+                >
+                  <span className="material-symbols-outlined text-[18px]">receipt_long</span>
+                  View Client Payment Receipt
+                </a>
+              </div>
+            )}
+            {booking.status === "pending_payment" && (
+              <div className="flex gap-4 flex-wrap pt-2 border-t border-surface-variant">
+                <button
+                  onClick={() => handlePaymentDecision("verify")}
+                  disabled={!!actionLoading}
+                  className="bg-primary text-on-primary px-5 py-2.5 rounded-lg font-label-md hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
+                >
+                  <span className="material-symbols-outlined">verified</span>
+                  {actionLoading === "verify" ? "Verifying..." : "Verify Payment & Confirm"}
+                </button>
+                <button
+                  onClick={() => handlePaymentDecision("reject")}
+                  disabled={!!actionLoading}
+                  className="bg-error-container text-on-error-container px-5 py-2.5 rounded-lg font-label-md hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
+                >
+                  <span className="material-symbols-outlined">cancel</span>
+                  {actionLoading === "reject" ? "Rejecting..." : "Reject Payment"}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Action Buttons */}
         {booking.status === "confirmed" && (

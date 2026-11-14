@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import { api } from "@/lib/api";
+import { formatLocalDate } from "@/components/dashboard/WeeklySlotGrid";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -12,11 +13,8 @@ export default function PublicCounselorProfilePage({ params }: { params: Promise
   const [counselor, setCounselor] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   
-  const [selectedDate, setSelectedDate] = useState(() => {
-    const d = new Date();
-    return d.toISOString().split("T")[0]; // YYYY-MM-DD
-  });
-  const [slots, setSlots] = useState<{start: string, end: string}[]>([]);
+  const [selectedDate, setSelectedDate] = useState(() => formatLocalDate(new Date()));
+  const [slots, setSlots] = useState<string[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
 
   useEffect(() => {
@@ -38,8 +36,10 @@ export default function PublicCounselorProfilePage({ params }: { params: Promise
     const fetchSlots = async () => {
       setSlotsLoading(true);
       try {
-        const data = await api.get(`/availability/${counselor.id}/slots?date=${selectedDate}`);
-        setSlots(data || []);
+        const data = await api.get(
+          `/availability/${counselor.id}/slots?start_date=${selectedDate}&end_date=${selectedDate}&duration=60`
+        );
+        setSlots(data?.[selectedDate]?.available || []);
       } catch (err) {
         console.error(err);
         setSlots([]);
@@ -50,12 +50,8 @@ export default function PublicCounselorProfilePage({ params }: { params: Promise
     fetchSlots();
   }, [counselor, selectedDate]);
 
-  const handleBook = (slotStart: string) => {
-    // Instead of a full modal here, we can redirect to a booking flow or 
-    // open a simplified modal. Given instructions, we'll redirect to a 
-    // hypothetical generic booking flow or simulate it. 
-    // Usually there's a Bookings modal in the list page.
-    alert(`Initiating booking for ${new Date(slotStart).toLocaleTimeString()}... Please use the main counselors list to complete bookings or implement the modal here.`);
+  const handleBook = () => {
+    router.push(`/counselors?counselor=${counselor.id}`);
   };
 
   if (loading) {
@@ -133,7 +129,7 @@ export default function PublicCounselorProfilePage({ params }: { params: Promise
             <input 
               type="date" 
               value={selectedDate}
-              min={new Date().toISOString().split("T")[0]}
+              min={formatLocalDate(new Date())}
               onChange={(e) => setSelectedDate(e.target.value)}
               className="w-full sm:w-[200px] border border-surface-variant rounded-lg p-3 font-body-md"
             />
@@ -152,10 +148,10 @@ export default function PublicCounselorProfilePage({ params }: { params: Promise
               {slots.map((slot, idx) => (
                 <button
                   key={idx}
-                  onClick={() => handleBook(slot.start)}
+                  onClick={handleBook}
                   className="bg-surface-container-lowest border border-outline-variant text-on-surface px-4 py-3 rounded-lg font-label-md hover:bg-primary hover:text-on-primary hover:border-primary transition-colors text-center"
                 >
-                  {new Date(slot.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {new Date(slot).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Manila' })}
                 </button>
               ))}
             </div>

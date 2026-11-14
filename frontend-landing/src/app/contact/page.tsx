@@ -24,7 +24,7 @@ export default function ContactPage() {
         email,
         message,
         captcha_token: "dummy_token", // Replace with real reCAPTCHA/hCaptcha integration if needed
-        website
+        honeypot: website
       });
       setStatusMsg({ text: "Your message has been sent successfully. We will get back to you soon.", type: "success" });
       setName("");

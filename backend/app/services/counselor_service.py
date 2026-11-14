@@ -76,11 +76,12 @@ async def update_counselor_profile(
     """Update an existing counselor profile."""
     if update_data.bio is not None:
         profile.bio = update_data.bio
+    if update_data.photo_url is not None:
+        profile.photo_url = str(update_data.photo_url) if update_data.photo_url else None
     if update_data.specialization_tags is not None:
         profile.specialization_tags = update_data.specialization_tags
     if update_data.credentials_url is not None:
         profile.credentials_url = str(update_data.credentials_url)
 
     await db.commit()
-    await db.refresh(profile)
-    return profile
+    return await get_counselor_by_user_id(db, profile.user_id)

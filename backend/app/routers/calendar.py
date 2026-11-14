@@ -90,8 +90,8 @@ async def google_callback(code: str, state: str, db: AsyncSession = Depends(get_
     
     await db.commit()
     
-    # Redirect to counselor dashboard schedule tab
-    return RedirectResponse(f"{settings.FRONTEND_URL}/counselor/dashboard?tab=schedule")
+    # Redirect to counselor availability page
+    return RedirectResponse(f"{settings.FRONTEND_URL}/counselor/availability")
 
 
 @router.get("/google/client/login")

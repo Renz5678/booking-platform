@@ -14,7 +14,6 @@ const times = ["8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 P
 
 export default function AvailabilityPage() {
   const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
-  const [existingBlocks, setExistingBlocks] = useState<AvailabilityBlock[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   
   // Drag Selection State
@@ -31,7 +30,6 @@ export default function AvailabilityPage() {
         setIsConnected(profile.google_calendar_connected);
 
         const blocks = await api.get("/availability/me/blocks");
-        setExistingBlocks(blocks);
         
         const newSet = new Set<string>();
         blocks.forEach((b: AvailabilityBlock) => {
@@ -83,33 +81,22 @@ export default function AvailabilityPage() {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      // 1. Delete all existing blocks (simple sync approach)
-      for (const block of existingBlocks) {
-        await api.delete(`/availability/me/blocks/${block.id}`);
-      }
-
-      // 2. Create new blocks
-      const createdBlocks = [];
-      for (const slotKey of selectedSlots) {
+      const payloads = Array.from(selectedSlots).map((slotKey) => {
         const [dayIndexStr, timeIndexStr] = slotKey.split("-");
-        const dayIndex = parseInt(dayIndexStr);
-        const timeIndex = parseInt(timeIndexStr);
-        
+        const dayIndex = parseInt(dayIndexStr, 10);
+        const timeIndex = parseInt(timeIndexStr, 10);
         const startHour = 8 + timeIndex;
         const endHour = startHour + 1;
-        
-        const payload = {
-          day_of_week: dayIndex,
-          start_time: `${startHour.toString().padStart(2, '0')}:00:00`,
-          end_time: `${endHour.toString().padStart(2, '0')}:00:00`,
-          is_recurring: true
-        };
 
-        const res = await api.post("/availability/me/blocks", payload);
-        createdBlocks.push(res);
-      }
-      
-      setExistingBlocks(createdBlocks);
+        return {
+          day_of_week: dayIndex,
+          start_time: `${startHour.toString().padStart(2, "0")}:00:00`,
+          end_time: `${endHour.toString().padStart(2, "0")}:00:00`,
+          is_recurring: true,
+        };
+      });
+
+      await api.put("/availability/me/blocks", payloads);
       alert("Availability saved successfully!");
     } catch (err) {
       console.error("Failed to save:", err);
@@ -133,7 +120,7 @@ export default function AvailabilityPage() {
             Connected to Google Calendar
           </button>
         ) : (
-          <a href={`${API_URL}/auth/google/login`} className="flex items-center gap-2 px-6 py-3 rounded-full border border-tertiary-container text-tertiary-container hover:bg-surface-container-highest transition-colors font-label-md text-[14px] font-medium">
+          <a href={`${API_URL}/calendar/google/login`} className="flex items-center gap-2 px-6 py-3 rounded-full border border-tertiary-container text-tertiary-container hover:bg-surface-container-highest transition-colors font-label-md text-[14px] font-medium">
             <span className="material-symbols-outlined">calendar_today</span>
             Connect Google Calendar
           </a>

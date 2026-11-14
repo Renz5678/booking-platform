@@ -17,6 +17,20 @@ export interface CounselorProfile {
   };
 }
 
+export interface PaymentInfo {
+  id: string;
+  booking_id: string;
+  amount: number;
+  currency: string;
+  provider: string;
+  provider_payment_id?: string | null;
+  proof_url?: string | null;
+  status: "pending" | "paid" | "failed" | "refunded";
+  payment_method?: "gcash" | "maya" | "card" | null;
+  created_at: string;
+  paid_at?: string | null;
+}
+
 export interface Booking {
   id: string;
   client_id: string;
@@ -26,6 +40,8 @@ export interface Booking {
   scheduled_end: string;
   status: "pending_payment" | "confirmed" | "completed" | "cancelled" | "no_show";
   meeting_link?: string;
+  created_at?: string;
+  payment?: PaymentInfo | null;
   client?: {
     id: string;
     full_name: string;

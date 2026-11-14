@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, String
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, String, inspect
 from sqlalchemy.orm import relationship
 
 from app.db.base import Base
@@ -50,8 +50,14 @@ class Booking(Base):
 
     @property
     def client_name(self) -> str | None:
-        return self.client.full_name if self.client else None
+        if "client" in inspect(self).unloaded or not self.client:
+            return None
+        return self.client.full_name
 
     @property
     def counselor_name(self) -> str | None:
-        return self.counselor.user.full_name if self.counselor and self.counselor.user else None
+        if "counselor" in inspect(self).unloaded or not self.counselor:
+            return None
+        if "user" in inspect(self.counselor).unloaded or not self.counselor.user:
+            return None
+        return self.counselor.user.full_name

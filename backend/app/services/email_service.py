@@ -10,6 +10,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from app.config import settings
+from app.services.calendar_service import to_manila
 
 # Use Python's standard logger instead of print() for production-grade logging.
 # This allows log level filtering, file output, and structured logging in the future.
@@ -129,8 +130,8 @@ async def send_booking_confirmation(
         meeting_link: Google Meet link.
     """
     subject = "Your Session is Confirmed! ✅"
-    
-    start_str = session_start.strftime("%Y-%m-%d %I:%M %p UTC")
+
+    start_str = to_manila(session_start).strftime("%Y-%m-%d %I:%M %p PHT")
 
     html_body = f"""
     <html>
@@ -262,15 +263,17 @@ async def send_session_reminder(
 
 def generate_ics_content(title: str, start: datetime, end: datetime, location: str, description: str) -> str:
     """Generates an .ics file content."""
-    dtstart = start.strftime('%Y%m%dT%H%M%SZ')
-    dtend = end.strftime('%Y%m%dT%H%M%SZ')
+    start_utc = to_manila(start).astimezone(timezone.utc)
+    end_utc = to_manila(end).astimezone(timezone.utc)
+    dtstart = start_utc.strftime('%Y%m%dT%H%M%SZ')
+    dtend = end_utc.strftime('%Y%m%dT%H%M%SZ')
     dtstamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     
     ics = f"""BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//Alaga Counseling//EN
 BEGIN:VEVENT
-UID:{dtstamp}-{start.strftime('%Y%m%d')}@alaga.com
+UID:{dtstamp}-{start_utc.strftime('%Y%m%d')}@alaga.com
 DTSTAMP:{dtstamp}
 DTSTART:{dtstart}
 DTEND:{dtend}
@@ -280,16 +283,6 @@ LOCATION:{location}
 END:VEVENT
 END:VCALENDAR"""
     return ics
-
-def generate_google_calendar_link(title: str, start: datetime, end: datetime, location: str) -> str:
-    """Generates a Google Calendar 'Add to Calendar' link."""
-    dtstart = start.strftime('%Y%m%dT%H%M%SZ')
-    dtend = end.strftime('%Y%m%dT%H%M%SZ')
-    import urllib.parse
-    
-    base_url = "https://calendar.google.com/calendar/render?action=TEMPLATE"
-    params = f"&text={urllib.parse.quote(title)}&dates={dtstart}/{dtend}&location={urllib.parse.quote(location)}"
-    return base_url + params
 
 
 async def send_counselor_invite_email(email: str, invite_token: str) -> None:

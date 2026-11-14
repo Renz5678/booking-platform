@@ -3,28 +3,25 @@
 import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import RescheduleModal from "@/components/dashboard/RescheduleModal";
+import { useAuth } from "@/context/AuthContext";
 import { api, ApiError } from "@/lib/api";
 
 import { Booking } from "@/types";
 import Link from "next/link";
 
 export default function ClientDashboardPage() {
-  const [firstName, setFirstName] = useState("");
+  const { user } = useAuth();
   const [upcomingBooking, setUpcomingBooking] = useState<Booking | null>(null);
   const [pastBookings, setPastBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [reschedulingBooking, setReschedulingBooking] = useState<Booking | null>(null);
-  const [calendarConnected, setCalendarConnected] = useState(false);
+
+  const firstName = user?.full_name?.split(" ")[0] || "";
+  const calendarConnected = user?.google_calendar_connected || false;
 
   useEffect(() => {
     async function fetchData() {
       try {
-        // Fetch User Info
-        const user = await api.get("/auth/me");
-        setFirstName(user.full_name?.split(" ")[0] || "there");
-        setCalendarConnected(user.google_calendar_connected || false);
-
-        // Fetch Bookings
         const bookings: Booking[] = await api.get("/bookings/me");
         
         const now = new Date();
@@ -112,7 +109,7 @@ export default function ClientDashboardPage() {
             Connected to Google Calendar
           </button>
         ) : (
-          <a href={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/auth/google/client/login`} className="flex items-center gap-2 px-5 py-2.5 rounded-full border border-tertiary-container text-tertiary-container hover:bg-surface-container-highest transition-colors font-label-md text-[14px] font-medium shrink-0">
+          <a href={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/calendar/google/client/login`} className="flex items-center gap-2 px-5 py-2.5 rounded-full border border-tertiary-container text-tertiary-container hover:bg-surface-container-highest transition-colors font-label-md text-[14px] font-medium shrink-0">
             <span className="material-symbols-outlined text-[18px]">calendar_today</span>
             Connect Google Calendar
           </a>
@@ -186,9 +183,9 @@ export default function ClientDashboardPage() {
                 <span className="material-symbols-outlined text-[48px] text-on-surface-variant opacity-50 mb-4">calendar_add_on</span>
                 <h3 className="font-headline-sm text-[20px] text-primary mb-2">No upcoming sessions</h3>
                 <p className="text-on-surface-variant mb-6">Ready to continue your journey? Book a session with your counselor.</p>
-                <a href="/counselors" className="inline-block bg-primary text-on-primary font-label-md px-6 py-3 rounded-lg shadow-sm hover:opacity-90 transition-opacity">
+                <Link href="/counselors" className="inline-block bg-primary text-on-primary font-label-md px-6 py-3 rounded-lg shadow-sm hover:opacity-90 transition-opacity">
                   Find a Counselor
-                </a>
+                </Link>
               </div>
             )}
           </section>

@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.core.rate_limit import limiter
 from app.models.contact_message import ContactMessage
-from app.routers.auth import verify_captcha
+from app.services.auth_service import verify_captcha
 from app.schemas.contact import ContactMessageCreate
 
 logger = logging.getLogger(__name__)

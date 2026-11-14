@@ -1,4 +1,4 @@
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, ConfigDict, HttpUrl
 
 from app.schemas.user import UserResponse
 
@@ -27,8 +27,7 @@ class CounselorProfilePublicResponse(BaseModel):
     # We include user details like full_name to display the counselor's name
     user: UserResponse
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Profile data returned to the counselor themselves or admins (includes private fields)
@@ -38,5 +37,4 @@ class CounselorProfilePrivateResponse(CounselorProfilePublicResponse):
     credentials_url: str | None
     google_calendar_connected: bool
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

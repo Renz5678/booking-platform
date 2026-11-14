@@ -1,41 +1,55 @@
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
-from app.core.security import get_current_user, require_role
+from app.core.encryption import decrypt_token
 from app.core.rate_limit import limiter
+from app.core.security import get_current_user, require_role
 from app.db.session import get_db
 from app.models.booking import Booking, BookingStatus
 from app.models.counselor_profile import CounselorProfile
 from app.models.intake_form import IntakeForm
 from app.models.payment import Payment, PaymentStatus
 from app.models.user import User
-from app.routers.auth import verify_captcha
+from app.services.auth_service import verify_captcha
 from app.schemas.booking import (
     BookingCancelResponse,
     BookingCounselorResponse,
     BookingCreate,
+    BookingDetailResponse,
     BookingRescheduleRequest,
     BookingResponse,
     BookingStatusUpdateRequest,
 )
 from app.services.booking_service import check_counselor_availability
+from app.services.calendar_service import (
+    MANILA_TZ,
+    delete_calendar_event,
+    to_manila,
+    update_calendar_event,
+)
 from app.services.email_service import (
+    generate_ics_content,
+    send_admin_cancellation_alert,
     send_cancellation_email,
     send_counselor_cancellation_notification,
-    send_admin_cancellation_alert,
-    generate_ics_content,
 )
-from app.services.payment_service import create_paymongo_checkout, refund_payment
+from app.services.payment_service import refund_payment
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
+
+
+def _resolve_counselor_refresh_token(counselor: CounselorProfile | None) -> str | None:
+    if counselor and counselor.google_calendar_connected and counselor.google_refresh_token:
+        return decrypt_token(counselor.google_refresh_token)
+    return None
 
 
 @router.post("/", response_model=dict, status_code=status.HTTP_201_CREATED)
@@ -43,7 +57,6 @@ router = APIRouter(prefix="/bookings", tags=["bookings"])
 async def create_booking(
     request: Request,
     booking_data: BookingCreate,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -75,12 +88,15 @@ async def create_booking(
             "Please complete payment or wait for it to expire before booking again.",
         )
 
+    scheduled_start = to_manila(booking_data.scheduled_start)
+    scheduled_end = to_manila(booking_data.scheduled_end)
+
     # 3. Check counselor availability
     is_available = await check_counselor_availability(
         db,
         booking_data.counselor_id,
-        booking_data.scheduled_start,
-        booking_data.scheduled_end,
+        scheduled_start,
+        scheduled_end,
     )
     if not is_available:
         raise HTTPException(
@@ -92,8 +108,8 @@ async def create_booking(
     new_booking = Booking(
         client_id=current_user.id,
         counselor_id=booking_data.counselor_id,
-        scheduled_start=booking_data.scheduled_start,
-        scheduled_end=booking_data.scheduled_end,
+        scheduled_start=scheduled_start,
+        scheduled_end=scheduled_end,
         status=BookingStatus.pending_payment,
     )
     db.add(new_booking)
@@ -107,7 +123,7 @@ async def create_booking(
     )
     db.add(intake_form)
 
-    # 6. Create Payment record
+    # 6. Create manual Payment record (1-hour verification window)
     duration_hours = (
         new_booking.scheduled_end - new_booking.scheduled_start
     ).total_seconds() / 3600.0
@@ -116,22 +132,18 @@ async def create_booking(
         booking_id=new_booking.id,
         amount=amount,
         currency="PHP",
+        provider="manual",
         status=PaymentStatus.pending,
     )
     db.add(payment)
 
     await db.commit()
 
-    # 7. Call payment service to get checkout URL
-    checkout_url = await create_paymongo_checkout(amount, new_booking.id)
-
-    # 8. Start background task to expire booking in 15 minutes if unpaid
-    background_tasks.add_task(expire_booking_if_unpaid, new_booking.id, db, 15)
-
     return {
-        "msg": "Booking initiated. Please complete payment within 15 minutes.",
+        "msg": "Booking created. Please complete payment within 1 hour for counselor verification.",
         "booking_id": new_booking.id,
-        "checkout_url": checkout_url,
+        "amount": amount,
+        "payment_window_minutes": 60,
     }
 
 
@@ -169,13 +181,16 @@ async def get_counselor_bookings(
 
     result = await db.execute(
         select(Booking)
-        .options(selectinload(Booking.intake_form))
+        .options(
+            selectinload(Booking.intake_form),
+            selectinload(Booking.payment),
+        )
         .where(Booking.counselor_id == counselor.id)
     )
     return result.scalars().all()
 
 
-@router.get("/{booking_id}", response_model=BookingResponse)
+@router.get("/{booking_id}", response_model=BookingDetailResponse)
 async def get_booking_detail(
     booking_id: str,
     current_user: User = Depends(get_current_user),
@@ -190,6 +205,8 @@ async def get_booking_detail(
         .options(
             selectinload(Booking.counselor).selectinload(CounselorProfile.user),
             selectinload(Booking.client),
+            selectinload(Booking.intake_form),
+            selectinload(Booking.payment),
         )
         .where(Booking.id == booking_id)
     )
@@ -278,7 +295,10 @@ async def cancel_booking(
     """
     result = await db.execute(
         select(Booking)
-        .options(selectinload(Booking.client))
+        .options(
+            selectinload(Booking.client),
+            selectinload(Booking.counselor),
+        )
         .where(Booking.id == booking_id)
     )
     booking = result.scalar_one_or_none()
@@ -296,10 +316,8 @@ async def cancel_booking(
         )
 
     # Server-side 24-hour cutoff check — never trust the client timestamp
-    now = datetime.now(timezone.utc)
-    scheduled_start = booking.scheduled_start
-    if scheduled_start.tzinfo is None:
-        scheduled_start = scheduled_start.replace(tzinfo=timezone.utc)
+    now = datetime.now(MANILA_TZ)
+    scheduled_start = to_manila(booking.scheduled_start)
 
     hours_until_session = (scheduled_start - now).total_seconds() / 3600
     refund_issued = False
@@ -315,6 +333,13 @@ async def cancel_booking(
 
     booking.status = BookingStatus.cancelled
     await db.commit()
+
+    if booking.google_calendar_event_id:
+        try:
+            refresh_token = _resolve_counselor_refresh_token(booking.counselor)
+            await delete_calendar_event(refresh_token, booking.google_calendar_event_id)
+        except Exception as e:
+            logger.error("Failed to delete Google Calendar event for booking %s: %s", booking_id, e)
 
     # Send cancellation email
     client = booking.client
@@ -387,6 +412,13 @@ async def counselor_cancel_booking(
     booking.status = BookingStatus.cancelled
     await db.commit()
 
+    if booking.google_calendar_event_id:
+        try:
+            refresh_token = _resolve_counselor_refresh_token(counselor)
+            await delete_calendar_event(refresh_token, booking.google_calendar_event_id)
+        except Exception as e:
+            logger.error("Failed to delete Google Calendar event for booking %s: %s", booking_id, e)
+
     # Notify the client immediately
     client = booking.client
     if client:
@@ -458,10 +490,8 @@ async def update_booking_status(
         )
 
     # Ensure the session has ended before allowing status update
-    now = datetime.now(timezone.utc)
-    scheduled_end = booking.scheduled_end
-    if scheduled_end.tzinfo is None:
-        scheduled_end = scheduled_end.replace(tzinfo=timezone.utc)
+    now = datetime.now(MANILA_TZ)
+    scheduled_end = to_manila(booking.scheduled_end)
 
     if now < scheduled_end:
         raise HTTPException(
@@ -476,7 +506,6 @@ async def update_booking_status(
     )
     booking.status = new_status
     await db.commit()
-    await db.refresh(booking)
 
     return booking
 
@@ -519,11 +548,12 @@ async def reschedule_booking(
             detail="Cannot reschedule a completed or cancelled booking.",
         )
 
+    new_start = to_manila(reschedule_data.new_scheduled_start)
+    new_end = to_manila(reschedule_data.new_scheduled_end)
+
     # 2. Check duration match
-    old_duration = (booking.scheduled_end - booking.scheduled_start).total_seconds()
-    new_duration = (
-        reschedule_data.new_scheduled_end - reschedule_data.new_scheduled_start
-    ).total_seconds()
+    old_duration = (to_manila(booking.scheduled_end) - to_manila(booking.scheduled_start)).total_seconds()
+    new_duration = (new_end - new_start).total_seconds()
 
     if old_duration != new_duration:
         raise HTTPException(
@@ -535,8 +565,8 @@ async def reschedule_booking(
     is_available = await check_counselor_availability(
         db,
         booking.counselor_id,
-        reschedule_data.new_scheduled_start,
-        reschedule_data.new_scheduled_end,
+        new_start,
+        new_end,
         exclude_booking_id=booking.id,
     )
     if not is_available:
@@ -546,10 +576,18 @@ async def reschedule_booking(
         )
 
     # 4. Update the booking
-    booking.scheduled_start = reschedule_data.new_scheduled_start
-    booking.scheduled_end = reschedule_data.new_scheduled_end
+    booking.scheduled_start = new_start
+    booking.scheduled_end = new_end
 
     await db.commit()
-    await db.refresh(booking)
+
+    if booking.google_calendar_event_id:
+        try:
+            refresh_token = _resolve_counselor_refresh_token(booking.counselor)
+            await update_calendar_event(
+                refresh_token, booking.google_calendar_event_id, new_start, new_end
+            )
+        except Exception as e:
+            logger.error("Failed to update Google Calendar event for booking %s: %s", booking_id, e)
 
     return booking

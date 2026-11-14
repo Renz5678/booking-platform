@@ -7,21 +7,21 @@ import { useAuth } from "@/context/AuthContext";
 export default function TopNavBar() {
   const pathname = usePathname();
   const { user, isLoading, logout } = useAuth();
-  const isDashboard = pathname?.includes("/dashboard") || pathname?.includes("/counselor") || pathname?.includes("/admin") || pathname?.includes("/faq") || pathname?.includes("/contact") || pathname?.includes("/payment");
+  const isDashboard = pathname?.includes("/dashboard") || pathname?.includes("/counselor") || pathname?.includes("/admin") || pathname?.includes("/faq") || pathname?.includes("/contact") || pathname?.includes("/payment") || pathname?.startsWith("/account");
   const isAuth = pathname === "/login" || pathname === "/signup";
   
   if (isDashboard || isAuth) return null;
   return (
     <nav className="bg-surface docked full-width top-0 shadow-sm relative z-40">
       <div className="flex justify-between items-center px-margin-desktop py-4 max-w-container-max mx-auto">
-        <div className="font-headline-md text-headline-md font-bold text-primary">
+        <Link href="/" className="font-headline-md text-headline-md font-bold text-primary">
           Alaga
-        </div>
+        </Link>
         <div className="hidden md:flex space-x-6 items-center">
-          <a className="text-secondary border-b-2 border-secondary pb-1 font-label-md hover:opacity-80 transition-opacity" href="#">Home</a>
-          <a className="text-on-surface-variant hover:text-secondary font-label-md hover:opacity-80 transition-opacity" href="#">Find a Counselor</a>
-          <a className="text-on-surface-variant hover:text-secondary font-label-md hover:opacity-80 transition-opacity" href="#">FAQ</a>
-          <a className="text-on-surface-variant hover:text-secondary font-label-md hover:opacity-80 transition-opacity" href="#">Contact</a>
+          <Link className={pathname === "/" ? "text-secondary border-b-2 border-secondary pb-1 font-label-md hover:opacity-80 transition-opacity" : "text-on-surface-variant hover:text-secondary font-label-md hover:opacity-80 transition-opacity"} href="/">Home</Link>
+          <Link className={pathname?.startsWith("/counselors") ? "text-secondary border-b-2 border-secondary pb-1 font-label-md hover:opacity-80 transition-opacity" : "text-on-surface-variant hover:text-secondary font-label-md hover:opacity-80 transition-opacity"} href="/counselors">Find a Counselor</Link>
+          <Link className="text-on-surface-variant hover:text-secondary font-label-md hover:opacity-80 transition-opacity" href="/faq">FAQ</Link>
+          <Link className="text-on-surface-variant hover:text-secondary font-label-md hover:opacity-80 transition-opacity" href="/contact">Contact</Link>
         </div>
         <div className="hidden md:flex space-x-4 items-center">
           {isLoading ? (

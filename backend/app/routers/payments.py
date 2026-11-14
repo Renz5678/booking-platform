@@ -1,117 +1,147 @@
-import hashlib
-import hmac
+import base64
 import logging
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.core.security import require_role
 from app.db.session import get_db
-from app.models.payment import PaymentMethod
+from app.models.booking import Booking, BookingStatus
+from app.models.payment import PaymentMethod, PaymentStatus
+from app.models.user import User
+from app.schemas.payment import PaymentResponse
+from app.services.email_service import send_cancellation_email
 from app.services.payment_service import process_successful_payment
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
+ALLOWED_PROOF_TYPES = {"application/pdf", "image/jpeg", "image/jpg", "image/png"}
+MAX_PROOF_BYTES = 5 * 1024 * 1024
 
-@router.post("/webhook")
-async def paymongo_webhook(
-    request: Request,
-    paymongo_signature: str = Header(None),
+
+async def _load_booking_for_counselor(
+    booking_id: str, counselor_user_id: str, db: AsyncSession
+) -> Booking:
+    result = await db.execute(
+        select(Booking)
+        .options(
+            selectinload(Booking.counselor),
+            selectinload(Booking.client),
+            selectinload(Booking.payment),
+        )
+        .where(Booking.id == booking_id)
+    )
+    booking = result.scalar_one_or_none()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if not booking.counselor or booking.counselor.user_id != counselor_user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to manage this booking's payment")
+    if booking.status != BookingStatus.pending_payment:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot verify or reject payment for booking with status '{booking.status.value}'.",
+        )
+    return booking
+
+
+@router.post("/{booking_id}/proof", response_model=PaymentResponse)
+async def submit_payment_proof(
+    booking_id: str,
+    reference_number: str | None = Form(None),
+    payment_method: PaymentMethod | None = Form(None),
+    file: UploadFile | None = File(None),
+    current_user: User = Depends(require_role(["client"])),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Receives webhook events from PayMongo.
+    """Client submits optional payment reference number and/or receipt proof for counselor verification."""
+    cleaned_ref = reference_number.strip() if reference_number else None
+    if not cleaned_ref and not file:
+        raise HTTPException(
+            status_code=400,
+            detail="Please provide a reference number or upload a receipt.",
+        )
 
-    Validates the HMAC signature before processing any event.
-    Extracts the booking ID, PayMongo Payment ID, and payment method
-    from the event payload.
-    """
-    if not paymongo_signature:
-        raise HTTPException(status_code=400, detail="Missing signature header")
+    result = await db.execute(
+        select(Booking)
+        .options(selectinload(Booking.payment))
+        .where(Booking.id == booking_id)
+    )
+    booking = result.scalar_one_or_none()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking.client_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized for this booking")
+    if booking.status != BookingStatus.pending_payment:
+        raise HTTPException(status_code=400, detail="Booking is no longer awaiting payment")
+    if not booking.payment:
+        raise HTTPException(status_code=404, detail="Payment record not found")
 
-    sig_parts = {}
-    for part in paymongo_signature.split(","):
-        if "=" in part:
-            k, v = part.split("=", 1)
-            sig_parts[k] = v
-
-    raw_body = await request.body()
-    signature_payload = f"{sig_parts.get('t', '')}.{raw_body.decode('utf-8')}"
-
-    secret = settings.PAYMONGO_WEBHOOK_SECRET.encode("utf-8")
-    expected_signature = hmac.new(
-        secret, signature_payload.encode("utf-8"), hashlib.sha256
-    ).hexdigest()
-
-    if expected_signature != sig_parts.get("te") and expected_signature != sig_parts.get("li"):
-        raise HTTPException(status_code=400, detail="Invalid signature")
-
-    payload = await request.json()
-    event = payload.get("data", {})
-    event_type = event.get("attributes", {}).get("type")
-
-    if event_type == "checkout_session.payment.paid":
-        # Checkout session paid event
-        session_attrs = event.get("attributes", {})
-        payments_list = session_attrs.get("payments", [])
-
-        booking_id = None
-        provider_payment_id = None
-        payment_method = None
-
-        # Extract booking_id from reference_number or description metadata
-        reference_number = session_attrs.get("reference_number")
-        if reference_number:
-            booking_id = reference_number
-
-        # Extract Payment ID and method from the first payment in the list
-        if payments_list:
-            first_payment = payments_list[0]
-            provider_payment_id = first_payment.get("id")
-            raw_method = first_payment.get("attributes", {}).get("source", {}).get("type")
-            # Map PayMongo method names to our enum
-            method_map = {
-                "gcash": PaymentMethod.gcash,
-                "paymaya": PaymentMethod.maya,
-                "card": PaymentMethod.card,
-            }
-            payment_method = method_map.get(raw_method)
-
-        if not booking_id:
-            logger.warning("checkout_session.payment.paid: no booking_id found in event, ignoring.")
-            return {"msg": "No booking ID found, ignored."}
-
-        try:
-            await process_successful_payment(
-                booking_id, db, provider_payment_id=provider_payment_id, payment_method=payment_method
+    if file:
+        if file.content_type not in ALLOWED_PROOF_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail="Unsupported file type. Please upload PDF, JPG, or PNG.",
             )
-        except Exception as e:
-            logger.error("Error processing payment for booking %s: %s", booking_id, e)
-            raise HTTPException(status_code=500, detail="Failed to process payment")
+        content = await file.read()
+        if len(content) > MAX_PROOF_BYTES:
+            raise HTTPException(status_code=400, detail="File exceeds 5MB limit.")
+        encoded = base64.b64encode(content).decode("ascii")
+        booking.payment.proof_url = f"data:{file.content_type};base64,{encoded}"
 
-    elif event_type == "link.payment.paid":
-        # Legacy payment link event (kept for compatibility)
-        data_attr = event.get("attributes", {}).get("data", {}).get("attributes", {})
-        remarks = data_attr.get("remarks")
+    if cleaned_ref:
+        booking.payment.provider_payment_id = cleaned_ref
+    if payment_method:
+        booking.payment.payment_method = payment_method
 
-        if not remarks:
-            return {"msg": "No booking ID in remarks, ignored."}
+    await db.commit()
+    await db.refresh(booking.payment)
+    return booking.payment
 
-        # Extract payment ID from the parent payment object
-        provider_payment_id = event.get("id")
 
+@router.post("/{booking_id}/verify")
+async def verify_payment(
+    booking_id: str,
+    current_user: User = Depends(require_role(["counselor"])),
+    db: AsyncSession = Depends(get_db),
+):
+    """Counselor verifies a client's manual payment, confirming the booking and generating Google Meet."""
+    booking = await _load_booking_for_counselor(booking_id, current_user.id, db)
+    provider_ref = booking.payment.provider_payment_id if booking.payment else None
+    method = booking.payment.payment_method if booking.payment else None
+    msg = await process_successful_payment(
+        booking_id,
+        db,
+        provider_payment_id=provider_ref,
+        payment_method=method,
+    )
+    return {"msg": msg}
+
+
+@router.post("/{booking_id}/reject")
+async def reject_payment(
+    booking_id: str,
+    current_user: User = Depends(require_role(["counselor"])),
+    db: AsyncSession = Depends(get_db),
+):
+    """Counselor rejects an unverified payment, cancelling the booking and releasing the slot."""
+    booking = await _load_booking_for_counselor(booking_id, current_user.id, db)
+    booking.status = BookingStatus.cancelled
+    if booking.payment:
+        booking.payment.status = PaymentStatus.failed
+    await db.commit()
+
+    if booking.client:
         try:
-            await process_successful_payment(
-                remarks, db, provider_payment_id=provider_payment_id
-            )
+            await send_cancellation_email(booking.client.email, booking_id, refund_issued=False)
         except Exception as e:
-            logger.error("Error processing link payment for booking %s: %s", remarks, e)
-            raise HTTPException(status_code=500, detail="Failed to process payment")
+            logger.error("Failed to send rejection email for booking %s: %s", booking_id, e)
 
-    return {"msg": "Webhook received"}
+    return {"msg": "Payment rejected and booking cancelled."}
 
 
 @router.post("/simulate-success/{booking_id}")
@@ -127,7 +157,7 @@ async def simulate_success(
     if settings.ENVIRONMENT == "production":
         raise HTTPException(
             status_code=404,
-            detail="Not found",  # Return 404 (not 403) to avoid leaking endpoint existence
+            detail="Not found",
         )
     try:
         result_msg = await process_successful_payment(booking_id, db)

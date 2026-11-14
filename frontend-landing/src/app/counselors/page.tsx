@@ -1,7 +1,13 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import WeeklySlotGrid, {
+  WeeklySlotMap,
+  buildManilaSlotIso,
+  formatLocalDate,
+} from "@/components/dashboard/WeeklySlotGrid";
 import { api, ApiError } from "@/lib/api";
 
 interface CounselorProfile {
@@ -15,6 +21,7 @@ interface CounselorProfile {
 }
 
 export default function FindCounselorPage() {
+  const router = useRouter();
   const [counselors, setCounselors] = useState<CounselorProfile[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -34,8 +41,7 @@ export default function FindCounselorPage() {
     d.setDate(d.getDate() - day + 1);
     return d;
   });
-  const [availableWeeklySlots, setAvailableWeeklySlots] = useState<Record<string, { available: string[], occupied: string[] }>>({});
-  const [dragSelection, setDragSelection] = useState<{ dateStr: string, startHour: number, endHour: number } | null>(null);
+  const [availableWeeklySlots, setAvailableWeeklySlots] = useState<WeeklySlotMap>({});
   const [selectedTimeRange, setSelectedTimeRange] = useState<{ dateStr: string, startTime: string, endTime: string, slotsCount: number } | null>(null);
   const [loadingSlots, setLoadingSlots] = useState(false);
   // selectedTime removed in favor of selectedTimeRange
@@ -66,8 +72,8 @@ export default function FindCounselorPage() {
           const start = new Date(currentWeekStart);
           const end = new Date(currentWeekStart);
           end.setDate(end.getDate() + 6);
-          const startDateStr = start.toISOString().split('T')[0];
-          const endDateStr = end.toISOString().split('T')[0];
+          const startDateStr = formatLocalDate(start);
+          const endDateStr = formatLocalDate(end);
 
           const data = await api.get(`/availability/${selectedCounselor.id}/slots?start_date=${startDateStr}&end_date=${endDateStr}&duration=${duration}`);
           setAvailableWeeklySlots(data || {});
@@ -94,7 +100,6 @@ export default function FindCounselorPage() {
     
     setBookingStep(1);
     setSelectedTimeRange(null);
-    setDragSelection(null);
     setIsModalOpen(true);
   };
 
@@ -120,14 +125,8 @@ export default function FindCounselorPage() {
 
     try {
       const data = await api.post("/bookings/", payload);
-      
-      // Redirect to PayMongo checkout
-      if (data.checkout_url) {
-        window.location.href = data.checkout_url;
-      } else {
-        alert("Booking created successfully, but no checkout URL returned.");
-        setIsModalOpen(false);
-      }
+      setIsModalOpen(false);
+      router.push(`/dashboard/bookings/${data.booking_id}`);
     } catch (err: unknown) {
       console.error("Booking error:", err);
       if (err instanceof ApiError) {
@@ -231,181 +230,28 @@ export default function FindCounselorPage() {
                     </div>
                   </div>
 
-                  <div className="flex justify-between items-center bg-surface p-3 rounded-lg border border-outline-variant">
-                    <button 
-                      onClick={() => {
-                        const newDate = new Date(currentWeekStart);
-                        newDate.setDate(newDate.getDate() - 7);
-                        setCurrentWeekStart(newDate);
-                      }}
-                      className="text-on-surface-variant hover:text-primary transition-colors flex items-center gap-1 font-label-md"
-                    >
-                      <span className="material-symbols-outlined text-[20px]">chevron_left</span> Prev
-                    </button>
-                    <span className="font-label-lg text-primary font-medium">
-                      Week of {currentWeekStart.toLocaleDateString([], { month: 'short', day: 'numeric' })}
-                    </span>
-                    <button 
-                      onClick={() => {
-                        const newDate = new Date(currentWeekStart);
-                        newDate.setDate(newDate.getDate() + 7);
-                        setCurrentWeekStart(newDate);
-                      }}
-                      className="text-on-surface-variant hover:text-primary transition-colors flex items-center gap-1 font-label-md"
-                    >
-                      Next <span className="material-symbols-outlined text-[20px]">chevron_right</span>
-                    </button>
-                  </div>
-
-                  <div className="border border-outline-variant rounded-xl overflow-hidden bg-surface relative min-h-[300px]">
-                    {loadingSlots && (
-                      <div className="absolute inset-0 bg-surface/60 backdrop-blur-[2px] z-10 flex items-center justify-center">
-                        <span className="material-symbols-outlined animate-spin text-[32px] text-primary">progress_activity</span>
-                      </div>
-                    )}
-                    
-                    {/* Legend */}
-                    <div className="flex items-center justify-center gap-6 py-4 border-b border-surface-container bg-surface-container-lowest">
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 bg-secondary-container"></div>
-                        <span className="font-label-sm text-on-surface-variant">Available</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 bg-primary"></div>
-                        <span className="font-label-sm text-on-surface-variant">Selected</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 bg-error"></div>
-                        <span className="font-label-sm text-on-surface-variant">Occupied</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 bg-surface-container border border-dashed border-outline-variant/50"></div>
-                        <span className="font-label-sm text-on-surface-variant">Unavailable</span>
-                      </div>
-                    </div>
-
-                    <div className="overflow-x-auto">
-                      <div className="min-w-[700px] p-4">
-                        <div className="grid grid-cols-8 gap-2 mb-2 text-center border-b border-outline-variant pb-2">
-                          <div className="font-label-sm text-[12px] font-semibold text-on-surface-variant uppercase flex items-end justify-center">Time</div>
-                          {Array.from({length: 7}).map((_, i) => {
-                            const d = new Date(currentWeekStart);
-                            d.setDate(d.getDate() + i);
-                            const dayName = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][i];
-                            const isToday = d.toDateString() === new Date().toDateString();
-                            return (
-                              <div key={i} className={`flex flex-col items-center ${isToday ? 'text-secondary' : 'text-primary'}`}>
-                                <span className="font-label-sm uppercase opacity-70">{dayName}</span>
-                                <span className="font-label-lg font-bold">{d.getDate()}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        
-                        <div 
-                          className="grid grid-cols-8 gap-x-2 gap-y-0"
-                          onMouseUp={() => {
-                            if (dragSelection) {
-                              const minHour = Math.min(dragSelection.startHour, dragSelection.endHour);
-                              const maxHour = Math.max(dragSelection.startHour, dragSelection.endHour);
-                              
-                              const slotsForDay = availableWeeklySlots[dragSelection.dateStr]?.available || [];
-                              let allAvailable = true;
-                              for (let h = minHour; h <= maxHour; h++) {
-                                const hasSlot = slotsForDay.some(slotStr => new Date(slotStr).getUTCHours() === h);
-                                if (!hasSlot) { allAvailable = false; break; }
-                              }
-                              
-                              if (allAvailable) {
-                                const startD = new Date(`${dragSelection.dateStr}T${minHour.toString().padStart(2, '0')}:00:00Z`);
-                                const endD = new Date(`${dragSelection.dateStr}T${(maxHour + 1).toString().padStart(2, '0')}:00:00Z`);
-                                setSelectedTimeRange({
-                                  dateStr: dragSelection.dateStr,
-                                  startTime: startD.toISOString(),
-                                  endTime: endD.toISOString(),
-                                  slotsCount: (maxHour - minHour) + 1
-                                });
-                                setBookingStep(3);
-                              }
-                              setDragSelection(null);
-                            }
-                          }}
-                          onMouseLeave={() => setDragSelection(null)}
-                        >
-                          {["8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM", "5:00 PM"].map((time, timeIndex) => (
-                            <React.Fragment key={time}>
-                              <div className="font-label-sm text-[12px] font-semibold text-on-surface-variant text-right pr-2 py-1 flex items-center justify-end h-10">
-                                {time}
-                              </div>
-                              {Array.from({length: 7}).map((_, dayIndex) => {
-                                const d = new Date(currentWeekStart);
-                                d.setDate(d.getDate() + dayIndex);
-                                const dateStr = d.toISOString().split('T')[0];
-                                
-                                const startHour = 8 + timeIndex;
-                                const slotTimeIsoStr = `${dateStr}T${startHour.toString().padStart(2, '0')}:00:00Z`;
-                                
-                                const slotsForDay = availableWeeklySlots[dateStr] || { available: [], occupied: [] };
-                                
-                                const isAvailable = slotsForDay.available?.some(slotStr => new Date(slotStr).getUTCHours() === startHour);
-                                const isOccupied = slotsForDay.occupied?.some(slotStr => new Date(slotStr).getUTCHours() === startHour);
-                                
-                                const isPast = new Date(slotTimeIsoStr) < new Date();
-
-                                const isSelected = dragSelection && 
-                                  dragSelection.dateStr === dateStr && 
-                                  startHour >= Math.min(dragSelection.startHour, dragSelection.endHour) && 
-                                  startHour <= Math.max(dragSelection.startHour, dragSelection.endHour);
-
-                                if (isOccupied && !isPast) {
-                                  return (
-                                    <div
-                                      key={`${dayIndex}-${timeIndex}`}
-                                      className="h-10 bg-error flex items-center justify-center shadow-sm"
-                                    >
-                                    </div>
-                                  );
-                                } else if (isAvailable && !isPast) {
-                                  return (
-                                    <div
-                                      key={`${dayIndex}-${timeIndex}`}
-                                      onMouseDown={(e) => {
-                                        e.preventDefault();
-                                        setDragSelection({ dateStr, startHour, endHour: startHour });
-                                      }}
-                                      onMouseEnter={() => {
-                                        if (dragSelection && dragSelection.dateStr === dateStr) {
-                                          setDragSelection({ ...dragSelection, endHour: startHour });
-                                        }
-                                      }}
-                                      className={`h-10 transition-colors cursor-pointer text-[10px] font-bold flex items-center justify-center select-none shadow-sm ${isSelected ? 'bg-primary text-on-primary' : 'bg-secondary-container text-on-secondary-container hover:bg-[#65de7e]'}`}
-                                    >
-                                    </div>
-                                  );
-                                } else {
-                                  return (
-                                    <div
-                                      key={`${dayIndex}-${timeIndex}`}
-                                      className="h-10 bg-surface-container border-x border-dashed border-outline-variant/50 flex items-center justify-center opacity-50"
-                                    >
-                                    </div>
-                                  );
-                                }
-                              })}
-                            </React.Fragment>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  <WeeklySlotGrid
+                    currentWeekStart={currentWeekStart}
+                    onWeekChange={setCurrentWeekStart}
+                    availableWeeklySlots={availableWeeklySlots}
+                    loadingSlots={loadingSlots}
+                    onSelectRange={(dateStr, minHour, maxHour) => {
+                      setSelectedTimeRange({
+                        dateStr,
+                        startTime: buildManilaSlotIso(dateStr, minHour),
+                        endTime: buildManilaSlotIso(dateStr, maxHour + 1),
+                        slotsCount: maxHour - minHour + 1,
+                      });
+                      setBookingStep(3);
+                    }}
+                  />
                 </div>
               )}
 
               {bookingStep === 3 && (
                 <form onSubmit={handleBookSession} className="space-y-4 animate-fade-in">
                   <div className="flex items-center gap-2 mb-2 border-b border-surface-container pb-4">
-                    <button type="button" onClick={() => { setSelectedTimeRange(null);
-    setDragSelection(null); setBookingStep(1); }} className="text-on-surface-variant hover:text-primary transition-colors">
+                    <button type="button" onClick={() => { setSelectedTimeRange(null); setBookingStep(1); }} className="text-on-surface-variant hover:text-primary transition-colors">
                       <span className="material-symbols-outlined text-[20px]">arrow_back</span>
                     </button>
                     <h3 className="font-label-lg font-semibold text-primary">Step 2: Intake Details</h3>
@@ -468,8 +314,8 @@ export default function FindCounselorPage() {
                         </>
                       ) : (
                         <>
-                          <span className="material-symbols-outlined text-[20px]">lock</span>
-                          Proceed to Secure Payment
+                          <span className="material-symbols-outlined text-[20px]">event_available</span>
+                          Confirm Booking & View Payment Instructions
                         </>
                       )}
                     </button>

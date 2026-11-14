@@ -22,7 +22,7 @@ export default function AdminCounselorDetailPage({ params }: { params: Promise<{
       // The public endpoint gets profile data, wait we need admin access if not verified.
       // Assuming GET /counselors/{id} allows admin to view it regardless of verification status.
       // If it fails we catch it.
-      const data = await api.get(`/counselors/${resolvedParams.id}`);
+      const data = await api.get(`/admin/counselors/${resolvedParams.id}`);
       setCounselor(data);
     } catch (err) {
       console.error(err);
