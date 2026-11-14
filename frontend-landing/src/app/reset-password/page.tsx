@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useState } from "react";
 import { api, ApiError } from "@/lib/api";
+import { getCaptchaToken } from "@/lib/captcha";
 
 function ResetPasswordForm() {
   const router = useRouter();
@@ -43,11 +44,12 @@ function ResetPasswordForm() {
 
     setIsLoading(true);
     try {
+      const captchaToken = await getCaptchaToken("reset_password");
       await api.post("/auth/reset-password", {
         token,
         new_password: newPassword,
         website,
-        captcha_token: "mock_captcha_token",
+        captcha_token: captchaToken,
       });
       router.push("/login?reset=true");
     } catch (err) {

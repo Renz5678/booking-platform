@@ -59,10 +59,12 @@ export default function CounselorProfilePage() {
     const loadSlots = async () => {
       setLoadingSlots(true);
       try {
-        const res = await api.get<{ slots: string[] }>(
-          `/availability/${counselorId}/slots?target_date=${selectedDate}`
+        const res = await api.get<
+          Record<string, { available?: string[]; occupied?: string[] }>
+        >(
+          `/availability/${counselorId}/slots?start_date=${selectedDate}&end_date=${selectedDate}&duration=60`
         );
-        if (active) setSlots(res.slots || []);
+        if (active) setSlots(res?.[selectedDate]?.available || []);
       } catch {
         if (active) setSlots([]);
       } finally {

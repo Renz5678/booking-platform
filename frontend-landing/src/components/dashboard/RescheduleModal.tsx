@@ -54,39 +54,33 @@ export default function RescheduleModal({
     async (weekStart: Date) => {
       setLoadingSlots(true);
       try {
-        const days = Array.from({ length: 7 }, (_, i) => {
-          const d = new Date(weekStart);
-          d.setDate(d.getDate() + i);
-          return formatLocalDate(d);
-        });
+        const end = new Date(weekStart);
+        end.setDate(end.getDate() + 6);
+        const startStr = formatLocalDate(weekStart);
+        const endStr = formatLocalDate(end);
 
-        const results = await Promise.all(
-          days.map(async (dateStr) => {
-            try {
-              const res = await api.get<{ slots: string[] }>(
-                `/availability/${booking.counselor_id}/slots?target_date=${dateStr}`
-              );
-              const hours = new Set<number>();
-              (res.slots || []).forEach((iso) => {
-                hours.add(getManilaHour(iso));
-              });
-              return [dateStr, hours] as const;
-            } catch {
-              return [dateStr, new Set<number>()] as const;
-            }
-          })
+        const data = await api.get<
+          Record<string, { available?: string[]; occupied?: string[] }>
+        >(
+          `/availability/${booking.counselor_id}/slots?start_date=${startStr}&end_date=${endStr}&duration=60&exclude_booking_id=${encodeURIComponent(booking.id)}`
         );
 
         const map: WeeklySlotMap = {};
-        results.forEach(([dateStr, hours]) => {
+        Object.entries(data || {}).forEach(([dateStr, dayData]) => {
+          const hours = new Set<number>();
+          (dayData?.available || []).forEach((iso) => {
+            hours.add(getManilaHour(iso));
+          });
           map[dateStr] = hours;
         });
         setWeeklySlots(map);
+      } catch {
+        setWeeklySlots({});
       } finally {
         setLoadingSlots(false);
       }
     },
-    [booking.counselor_id]
+    [booking.counselor_id, booking.id]
   );
 
   useEffect(() => {

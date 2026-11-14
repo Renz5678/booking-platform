@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Newsreader, Plus_Jakarta_Sans } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import CrisisBanner from "@/components/layout/CrisisBanner";
 import TopNavBar from "@/components/layout/TopNavBar";
@@ -64,6 +65,12 @@ export default function RootLayout({
             <Footer />
           </ToastProvider>
         </AuthProvider>
+        {process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY && (
+          <Script
+            src={`https://www.google.com/recaptcha/api.js?render=${process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY}`}
+            strategy="afterInteractive"
+          />
+        )}
       </body>
     </html>
   );

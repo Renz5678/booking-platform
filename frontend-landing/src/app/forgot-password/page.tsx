@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { api, ApiError } from "@/lib/api";
+import { getCaptchaToken } from "@/lib/captcha";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -17,10 +18,11 @@ export default function ForgotPasswordPage() {
     setIsLoading(true);
 
     try {
+      const captchaToken = await getCaptchaToken("forgot_password");
       await api.post("/auth/forgot-password", {
         email: email.trim(),
         website,
-        captcha_token: "mock_captcha_token",
+        captcha_token: captchaToken,
       });
       setSubmitted(true);
     } catch (err) {

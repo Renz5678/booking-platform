@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useState } from "react";
 import { useToast } from "@/context/ToastContext";
 import { api, ApiError } from "@/lib/api";
+import { getCaptchaToken } from "@/lib/captcha";
 
 function SignupForm() {
   const router = useRouter();
@@ -37,11 +38,12 @@ function SignupForm() {
 
     setIsLoading(true);
     try {
+      const captchaToken = await getCaptchaToken("signup");
       await api.post("/auth/signup", {
         full_name: fullName.trim(),
         email: email.trim(),
         password,
-        captcha_token: "mock_captcha_token",
+        captcha_token: captchaToken,
       });
       toast.info("We sent a 6-digit verification code to your email.");
       setStep("verify");
@@ -64,7 +66,7 @@ function SignupForm() {
     try {
       await api.post("/auth/verify-otp", {
         email: email.trim(),
-        otp_code: otp.trim(),
+        otp: otp.trim(),
       });
       toast.success("Email verified! You can now sign in.");
       const loginUrl = safeRedirect

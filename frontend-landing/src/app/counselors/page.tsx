@@ -12,6 +12,7 @@ import WeeklySlotGrid, {
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 import { api, ApiError } from "@/lib/api";
+import { getCaptchaToken } from "@/lib/captcha";
 import { getInitials } from "@/lib/routes";
 import type { CounselorProfile } from "@/types";
 
@@ -131,34 +132,28 @@ function CounselorsContent() {
     async (counselorId: string, weekStart: Date) => {
       setLoadingSlots(true);
       try {
-        const days = Array.from({ length: 7 }, (_, i) => {
-          const d = new Date(weekStart);
-          d.setDate(d.getDate() + i);
-          return formatLocalDate(d);
-        });
+        const end = new Date(weekStart);
+        end.setDate(end.getDate() + 6);
+        const startStr = formatLocalDate(weekStart);
+        const endStr = formatLocalDate(end);
 
-        const results = await Promise.all(
-          days.map(async (dateStr) => {
-            try {
-              const res = await api.get<{ slots: string[] }>(
-                `/availability/${counselorId}/slots?target_date=${dateStr}`
-              );
-              const hours = new Set<number>();
-              (res.slots || []).forEach((iso) => {
-                hours.add(getManilaHour(iso));
-              });
-              return [dateStr, hours] as const;
-            } catch {
-              return [dateStr, new Set<number>()] as const;
-            }
-          })
+        const data = await api.get<
+          Record<string, { available?: string[]; occupied?: string[] }>
+        >(
+          `/availability/${counselorId}/slots?start_date=${startStr}&end_date=${endStr}&duration=60`
         );
 
         const map: WeeklySlotMap = {};
-        results.forEach(([dateStr, hours]) => {
+        Object.entries(data || {}).forEach(([dateStr, dayData]) => {
+          const hours = new Set<number>();
+          (dayData?.available || []).forEach((iso) => {
+            hours.add(getManilaHour(iso));
+          });
           map[dateStr] = hours;
         });
         setWeeklySlots(map);
+      } catch {
+        setWeeklySlots({});
       } finally {
         setLoadingSlots(false);
       }
@@ -305,6 +300,7 @@ function CounselorsContent() {
         .filter(Boolean)
         .join("\n");
 
+      const captchaToken = await getCaptchaToken("booking");
       const res = await api.post<{ id?: string; booking_id?: string }>(
         "/bookings/",
         {
@@ -313,7 +309,7 @@ function CounselorsContent() {
           scheduled_end: endIso,
           intake_concern_category: reason.trim(),
           intake_notes: notesCombined || undefined,
-          captcha_token: "mock_captcha_token",
+          captcha_token: captchaToken,
           honeypot: "",
         }
       );

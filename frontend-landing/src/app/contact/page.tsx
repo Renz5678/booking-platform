@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useToast } from "@/context/ToastContext";
 import { api, ApiError } from "@/lib/api";
+import { getCaptchaToken } from "@/lib/captcha";
 
 export default function ContactPage() {
   const { toast } = useToast();
@@ -23,11 +24,12 @@ export default function ContactPage() {
 
     setIsSubmitting(true);
     try {
+      const captchaToken = await getCaptchaToken("contact");
       await api.post("/contact/", {
         name: name.trim(),
         email: email.trim(),
         message: message.trim(),
-        captcha_token: "dummy_token",
+        captcha_token: captchaToken,
         honeypot: website,
       });
       setSubmitted(true);
