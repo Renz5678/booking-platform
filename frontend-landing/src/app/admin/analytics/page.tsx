@@ -19,7 +19,13 @@ import type { CounselorProfile } from "@/types";
 interface AnalyticsResponse {
   total_bookings?: number;
   total_revenue?: number;
+  status_breakdown?: Record<string, number>;
   bookings_by_status?: Record<string, number>;
+  counselor_load?: Array<{
+    counselor_id: string;
+    full_name?: string;
+    session_count: number;
+  }>;
   bookings_by_counselor?: Array<{
     counselor_id: string;
     counselor_name?: string;
@@ -76,7 +82,8 @@ export default function AdminAnalyticsPage() {
   }, [toast]);
 
   const statusChartData = useMemo(() => {
-    const byStatus = analytics?.bookings_by_status || {};
+    const byStatus =
+      analytics?.status_breakdown || analytics?.bookings_by_status || {};
     return Object.entries(byStatus).map(([status, count]) => ({
       status: status.replace("_", " "),
       count,
@@ -84,6 +91,15 @@ export default function AdminAnalyticsPage() {
   }, [analytics]);
 
   const counselorChartData = useMemo(() => {
+    if (analytics?.counselor_load) {
+      return analytics.counselor_load.map((item) => ({
+        name:
+          item.full_name ||
+          counselorNames[item.counselor_id] ||
+          `Counselor ${item.counselor_id.slice(0, 6)}`,
+        bookings: item.session_count,
+      }));
+    }
     return (analytics?.bookings_by_counselor || []).map((item) => ({
       name:
         item.counselor_name ||

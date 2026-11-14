@@ -185,7 +185,7 @@ export default function AdminCounselorDetailPage() {
                       </button>
                     </>
                   )}
-                  {counselor.is_verified && (
+                  {counselor.is_verified && counselor.is_active && (
                     <button
                       type="button"
                       disabled={busyAction !== null}
@@ -199,6 +199,23 @@ export default function AdminCounselorDetailPage() {
                         </>
                       ) : (
                         <span>Deactivate</span>
+                      )}
+                    </button>
+                  )}
+                  {counselor.is_verified && !counselor.is_active && (
+                    <button
+                      type="button"
+                      disabled={busyAction !== null}
+                      onClick={handleApprove}
+                      className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-50"
+                    >
+                      {busyAction === "approve" ? (
+                        <>
+                          <Spinner size="sm" />
+                          <span>Reactivating…</span>
+                        </>
+                      ) : (
+                        <span>Reactivate</span>
                       )}
                     </button>
                   )}

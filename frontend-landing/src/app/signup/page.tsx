@@ -6,6 +6,7 @@ import { FormEvent, Suspense, useState } from "react";
 import { useToast } from "@/context/ToastContext";
 import { api, ApiError } from "@/lib/api";
 import { getCaptchaToken } from "@/lib/captcha";
+import { validatePasswordStrength } from "@/lib/validation";
 
 function SignupForm() {
   const router = useRouter();
@@ -26,13 +27,15 @@ function SignupForm() {
   const [otp, setOtp] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [resendingOtp, setResendingOtp] = useState(false);
 
   const handleRegister = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters long.");
+    const passwordError = validatePasswordStrength(password);
+    if (passwordError) {
+      setError(passwordError);
       return;
     }
 
@@ -81,6 +84,23 @@ function SignupForm() {
       }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    setError(null);
+    setResendingOtp(true);
+    try {
+      await api.post("/auth/resend-otp", { email: email.trim() });
+      toast.info("A new 6-digit verification code has been sent to your email.");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message || "Unable to resend verification code.");
+      } else {
+        setError("Unable to resend verification code right now.");
+      }
+    } finally {
+      setResendingOtp(false);
     }
   };
 
@@ -266,16 +286,26 @@ function SignupForm() {
             )}
           </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              setStep("register");
-              setError(null);
-            }}
-            className="w-full text-center text-xs font-medium text-text-secondary hover:text-primary"
-          >
-            Use a different email address
-          </button>
+          <div className="flex items-center justify-between pt-1">
+            <button
+              type="button"
+              disabled={resendingOtp || isLoading}
+              onClick={handleResendOtp}
+              className="text-xs font-semibold text-primary hover:underline disabled:opacity-50"
+            >
+              {resendingOtp ? "Sending new code…" : "Resend Verification Code"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setStep("register");
+                setError(null);
+              }}
+              className="text-xs font-medium text-text-secondary hover:text-primary"
+            >
+              Use a different email
+            </button>
+          </div>
         </form>
       )}
 

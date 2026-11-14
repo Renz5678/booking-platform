@@ -141,8 +141,25 @@ export default function ClientDashboardPage() {
   };
 
   const firstName = user?.full_name?.split(" ")[0] || "there";
-  const apiBase =
-    process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+
+  const handleConnectCalendar = async () => {
+    try {
+      const res = await api.get<{ authorization_url?: string }>(
+        "/calendar/google/client/login"
+      );
+      if (res?.authorization_url) {
+        window.location.href = res.authorization_url;
+      } else {
+        toast.error("Unable to start Google Calendar connection.");
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError
+          ? err.message
+          : "Unable to connect Google Calendar right now."
+      );
+    }
+  };
 
   return (
     <ProtectedRoute allowedRoles={["client"]}>
@@ -436,12 +453,13 @@ export default function ClientDashboardPage() {
                   Connected
                 </span>
               ) : (
-                <a
-                  href={`${apiBase}/auth/google/login`}
+                <button
+                  type="button"
+                  onClick={handleConnectCalendar}
                   className="inline-flex shrink-0 items-center justify-center rounded-xl border border-border-subtle bg-background px-4 py-2 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
                   Connect Google Calendar
-                </a>
+                </button>
               )}
             </div>
           </section>

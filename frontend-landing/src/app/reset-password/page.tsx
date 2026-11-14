@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { getCaptchaToken } from "@/lib/captcha";
+import { validatePasswordStrength } from "@/lib/validation";
 
 function ResetPasswordForm() {
   const router = useRouter();
@@ -26,15 +27,9 @@ function ResetPasswordForm() {
       setError("Missing or invalid password reset token.");
       return;
     }
-    if (
-      newPassword.length < 8 ||
-      !/[A-Z]/.test(newPassword) ||
-      !/[a-z]/.test(newPassword) ||
-      !/\d/.test(newPassword)
-    ) {
-      setError(
-        "Password must be at least 8 characters and include uppercase, lowercase, and a number."
-      );
+    const pwErr = validatePasswordStrength(newPassword);
+    if (pwErr) {
+      setError(pwErr);
       return;
     }
     if (newPassword !== confirmPassword) {

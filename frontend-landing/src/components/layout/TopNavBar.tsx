@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import {
   getDashboardPathForRole,
@@ -10,157 +10,189 @@ import {
   isDashboardChromeRoute,
 } from "@/lib/routes";
 
+function useManilaTime() {
+  const [label, setLabel] = useState<string>("");
+
+  useEffect(() => {
+    const format = () => {
+      try {
+        const now = new Date();
+        const time = new Intl.DateTimeFormat("en-PH", {
+          timeZone: "Asia/Manila",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        }).format(now);
+        setLabel(`${time} PHT`);
+      } catch {
+        setLabel("UTC+8");
+      }
+    };
+    format();
+    const id = setInterval(format, 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  return label;
+}
+
+const NAV_LINKS = [
+  { href: "/", label: "Home", match: (p: string) => p === "/" },
+  {
+    href: "/counselors",
+    label: "Counselors",
+    match: (p: string) => p.startsWith("/counselors"),
+  },
+  { href: "/faq", label: "FAQ", match: (p: string) => p === "/faq" },
+  { href: "/contact", label: "Contact", match: (p: string) => p === "/contact" },
+];
+
 export default function TopNavBar() {
   const pathname = usePathname();
   const { user, isLoading, logout } = useAuth();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const manilaTime = useManilaTime();
+
+  useEffect(() => {
+    if (!isMobileOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsMobileOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isMobileOpen]);
 
   if (isAuthRoute(pathname) || isDashboardChromeRoute(pathname)) return null;
 
   const dashboardHref = getDashboardPathForRole(user?.role);
 
   return (
-    <nav className="bg-surface docked full-width top-0 shadow-sm relative z-40">
-      <div className="flex justify-between items-center px-4 md:px-margin-desktop py-4 max-w-container-max mx-auto">
-        <Link
-          href="/"
-          className="font-headline-md text-headline-md font-bold text-primary"
-        >
-          Alaga
-        </Link>
-
-        <div className="hidden md:flex space-x-6 items-center">
+    <header className="relative z-40 border-b border-outline-variant bg-background/95 backdrop-blur-sm">
+      <nav
+        aria-label="Primary"
+        className="mx-auto flex max-w-container-max items-center justify-between px-4 py-4 md:px-margin-desktop"
+      >
+        <div className="flex items-center gap-6">
           <Link
-            className={
-              pathname === "/"
-                ? "text-secondary border-b-2 border-secondary pb-1 font-label-md hover:opacity-80 transition-opacity"
-                : "text-on-surface-variant hover:text-secondary font-label-md hover:opacity-80 transition-opacity"
-            }
             href="/"
+            translate="no"
+            className="font-serif text-[26px] leading-none tracking-[-0.02em] text-primary transition-opacity hover:opacity-80"
           >
-            Home
+            Alaga
           </Link>
-          <Link
-            className={
-              pathname?.startsWith("/counselors")
-                ? "text-secondary border-b-2 border-secondary pb-1 font-label-md hover:opacity-80 transition-opacity"
-                : "text-on-surface-variant hover:text-secondary font-label-md hover:opacity-80 transition-opacity"
-            }
-            href="/counselors"
-          >
-            Find a Counselor
-          </Link>
-          <Link
-            className={
-              pathname === "/faq"
-                ? "text-secondary border-b-2 border-secondary pb-1 font-label-md hover:opacity-80 transition-opacity"
-                : "text-on-surface-variant hover:text-secondary font-label-md hover:opacity-80 transition-opacity"
-            }
-            href="/faq"
-          >
-            FAQ
-          </Link>
-          <Link
-            className={
-              pathname === "/contact"
-                ? "text-secondary border-b-2 border-secondary pb-1 font-label-md hover:opacity-80 transition-opacity"
-                : "text-on-surface-variant hover:text-secondary font-label-md hover:opacity-80 transition-opacity"
-            }
-            href="/contact"
-          >
-            Contact
-          </Link>
+          {manilaTime && (
+            <span
+              className="hidden lg:inline-flex items-center gap-1.5 border-l border-outline-variant pl-5 text-xs font-medium text-on-surface-variant tabular-nums"
+              title="All sessions are scheduled in Philippine Standard Time"
+            >
+              <span
+                aria-hidden="true"
+                className="h-1.5 w-1.5 rounded-full bg-secondary"
+              />
+              Manila {manilaTime}
+            </span>
+          )}
         </div>
 
-        <div className="hidden md:flex space-x-4 items-center">
+        <div className="hidden md:flex items-center gap-7">
+          {NAV_LINKS.map((item) => {
+            const active = item.match(pathname || "/");
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={active ? "page" : undefined}
+                className={`nav-draw py-1 text-sm font-medium ${
+                  active
+                    ? "text-primary"
+                    : "text-on-surface-variant hover:text-primary"
+                }`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+
+        <div className="hidden md:flex items-center gap-4">
           {isLoading ? (
-            <div className="h-6 w-24 bg-surface-variant animate-pulse rounded" />
+            <div className="h-9 w-28 animate-pulse rounded-full bg-surface-container-low" />
           ) : user ? (
             <>
               <Link
                 href={dashboardHref}
-                className="text-primary font-label-md hover:opacity-80 transition-opacity"
+                className="nav-draw py-1 text-sm font-medium text-primary"
               >
                 Dashboard
               </Link>
               <button
                 type="button"
                 onClick={logout}
-                className="bg-surface-variant text-on-surface-variant px-6 py-2 rounded-full font-label-md hover:opacity-90 transition-opacity"
+                className="rounded-full border border-outline-variant px-5 py-2 text-sm font-medium text-on-surface-variant transition-colors hover:border-primary hover:text-primary"
               >
-                Logout
+                Log out
               </button>
             </>
           ) : (
             <>
               <Link
                 href="/login"
-                className="text-primary font-label-md hover:opacity-80 transition-opacity"
+                className="nav-draw py-1 text-sm font-medium text-primary"
               >
-                Log In
+                Log in
               </Link>
               <Link
                 href="/signup"
-                className="bg-secondary text-on-secondary px-6 py-2 rounded-full font-label-md hover:opacity-90 transition-opacity shadow-sm"
+                data-fill
+                className="btn-fill rounded-full bg-primary px-6 py-2.5 text-sm font-semibold text-on-primary"
               >
-                Sign Up
+                <span className="btn__fill" aria-hidden="true" />
+                Begin care
               </Link>
             </>
           )}
         </div>
 
-        {/* Mobile Menu Toggle */}
         <button
           type="button"
           onClick={() => setIsMobileOpen((prev) => !prev)}
-          aria-label="Toggle navigation menu"
+          aria-label={isMobileOpen ? "Close menu" : "Open menu"}
           aria-expanded={isMobileOpen}
-          className="md:hidden inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-xl text-primary hover:bg-surface-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          className="md:hidden inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-primary hover:bg-surface-container-low transition-colors"
         >
           <span aria-hidden="true" className="material-symbols-outlined">
             {isMobileOpen ? "close" : "menu"}
           </span>
         </button>
-      </div>
+      </nav>
 
-      {/* Mobile Drawer */}
       {isMobileOpen && (
-        <div className="md:hidden border-t border-border-subtle bg-surface-elevated px-4 py-4 space-y-2 shadow-md">
-          <Link
-            href="/"
-            onClick={() => setIsMobileOpen(false)}
-            className="block rounded-xl px-3 py-2.5 text-sm font-medium text-text-primary hover:bg-surface-muted"
-          >
-            Home
-          </Link>
-          <Link
-            href="/counselors"
-            onClick={() => setIsMobileOpen(false)}
-            className="block rounded-xl px-3 py-2.5 text-sm font-medium text-text-primary hover:bg-surface-muted"
-          >
-            Find a Counselor
-          </Link>
-          <Link
-            href="/faq"
-            onClick={() => setIsMobileOpen(false)}
-            className="block rounded-xl px-3 py-2.5 text-sm font-medium text-text-primary hover:bg-surface-muted"
-          >
-            FAQ
-          </Link>
-          <Link
-            href="/contact"
-            onClick={() => setIsMobileOpen(false)}
-            className="block rounded-xl px-3 py-2.5 text-sm font-medium text-text-primary hover:bg-surface-muted"
-          >
-            Contact
-          </Link>
-          <div className="pt-2 border-t border-border-subtle flex flex-col gap-2">
+        <div className="md:hidden border-t border-outline-variant bg-surface-bright px-4 py-5 space-y-1 shadow-ambient">
+          {NAV_LINKS.map((item) => {
+            const active = item.match(pathname || "/");
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={active ? "page" : undefined}
+                onClick={() => setIsMobileOpen(false)}
+                className={`block rounded-lg px-3 py-3 text-base font-medium transition-colors ${
+                  active
+                    ? "bg-surface-container-low text-primary"
+                    : "text-on-surface-variant hover:bg-surface-container-low hover:text-primary"
+                }`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+          <div className="mt-3 pt-3 border-t border-outline-variant flex flex-col gap-2.5">
             {user ? (
               <>
                 <Link
                   href={dashboardHref}
                   onClick={() => setIsMobileOpen(false)}
-                  className="block text-center rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white"
+                  className="block rounded-full bg-primary px-5 py-3 text-center text-sm font-semibold text-on-primary"
                 >
                   Dashboard
                 </Link>
@@ -170,9 +202,9 @@ export default function TopNavBar() {
                     setIsMobileOpen(false);
                     logout();
                   }}
-                  className="w-full rounded-xl border border-border-subtle px-4 py-2.5 text-sm font-semibold text-text-secondary hover:bg-surface-muted"
+                  className="w-full rounded-full border border-outline-variant px-5 py-3 text-sm font-semibold text-on-surface-variant hover:bg-surface-container-low"
                 >
-                  Logout
+                  Log out
                 </button>
               </>
             ) : (
@@ -180,22 +212,22 @@ export default function TopNavBar() {
                 <Link
                   href="/login"
                   onClick={() => setIsMobileOpen(false)}
-                  className="block text-center rounded-xl border border-border-subtle px-4 py-2.5 text-sm font-semibold text-primary"
+                  className="block rounded-full border border-outline-variant px-5 py-3 text-center text-sm font-semibold text-primary"
                 >
-                  Log In
+                  Log in
                 </Link>
                 <Link
                   href="/signup"
                   onClick={() => setIsMobileOpen(false)}
-                  className="block text-center rounded-xl bg-secondary px-4 py-2.5 text-sm font-semibold text-white"
+                  className="block rounded-full bg-secondary px-5 py-3 text-center text-sm font-semibold text-on-secondary"
                 >
-                  Sign Up
+                  Begin care
                 </Link>
               </>
             )}
           </div>
         </div>
       )}
-    </nav>
+    </header>
   );
 }

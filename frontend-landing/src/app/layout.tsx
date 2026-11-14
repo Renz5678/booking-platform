@@ -1,29 +1,48 @@
 import type { Metadata } from "next";
-import { Newsreader, Plus_Jakarta_Sans } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import CrisisBanner from "@/components/layout/CrisisBanner";
 import TopNavBar from "@/components/layout/TopNavBar";
 import Footer from "@/components/layout/Footer";
+import { Motion } from "@/components/Motion";
 import { AuthProvider } from "@/context/AuthContext";
 import { ToastProvider } from "@/context/ToastContext";
-
-const plusJakartaSans = Plus_Jakarta_Sans({
-  variable: "--font-sans-face",
-  subsets: ["latin"],
-  display: "swap",
-});
-
-const newsreader = Newsreader({
-  variable: "--font-serif-face",
-  subsets: ["latin"],
-  display: "swap",
-});
+import { site } from "@/data/site";
+import { hostGrotesk, zodiak } from "./fonts";
 
 export const metadata: Metadata = {
-  title: "Alaga — Professional Online Counseling",
-  description:
-    "Accessible, confidential, and compassionate online therapy tailored for the Philippines.",
+  metadataBase: new URL(site.url),
+  title: {
+    default: "Alaga | Confidential Online Counseling in the Philippines",
+    template: "%s | Alaga",
+  },
+  description: site.description,
+  alternates: { canonical: "./" },
+  openGraph: {
+    type: "website",
+    siteName: site.name,
+    title: "Alaga | Confidential Online Counseling in the Philippines",
+    description: site.description,
+    images: ["/og.png"],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Alaga | Confidential Online Counseling in the Philippines",
+    description: site.description,
+    images: ["/og.png"],
+  },
+};
+
+const flagsScript = `document.documentElement.classList.add('js');if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElement.classList.add('motion');`;
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "MedicalBusiness",
+  name: site.name,
+  description: site.description,
+  url: site.url,
+  areaServed: "PH",
+  availableLanguage: ["English", "Filipino"],
 };
 
 export default function RootLayout({
@@ -34,9 +53,11 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${plusJakartaSans.variable} ${newsreader.variable} h-full antialiased`}
+      className={`${hostGrotesk.variable} ${zodiak.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
       <head>
+        <script dangerouslySetInnerHTML={{ __html: flagsScript }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
           rel="preconnect"
@@ -55,16 +76,30 @@ export default function RootLayout({
         >
           Skip to main content
         </a>
+
+        <div id="curtain" aria-hidden="true">
+          <div className="curtain__panel" />
+        </div>
+
         <AuthProvider>
           <ToastProvider>
             <CrisisBanner />
             <TopNavBar />
-            <div id="main-content" className="flex-grow flex flex-col">
+            <main id="main-content" tabIndex={-1} className="flex-grow flex flex-col">
               {children}
-            </div>
+            </main>
             <Footer />
           </ToastProvider>
         </AuthProvider>
+
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c"),
+          }}
+        />
+        <Motion />
+
         {process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY && (
           <Script
             src={`https://www.google.com/recaptcha/api.js?render=${process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY}`}

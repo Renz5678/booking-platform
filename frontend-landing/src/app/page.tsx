@@ -2,73 +2,26 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import QuietRoomCanvas from "@/components/QuietRoomCanvas";
+import {
+  careSteps,
+  defaultQuotes,
+  fallbackCounselors,
+  trustCommitments,
+  type FeaturedCounselor,
+  type QuoteItem,
+} from "@/data/site";
 import { api } from "@/lib/api";
 import { getInitials } from "@/lib/routes";
 import type { CounselorProfile } from "@/types";
 
-interface Quote {
-  text: string;
-  author: string;
-}
-
-const DEFAULT_QUOTES: Quote[] = [
-  {
-    text: "Healing is not linear, and you do not have to carry everything on your own. Taking the first step to talk is already an act of courage.",
-    author: "Alaga Clinical Team",
-  },
-  {
-    text: "A safe, confidential space allows you to slow down, untangle your thoughts, and rebuild clarity at your own pace.",
-    author: "Dr. Elena Santos, RPsy",
-  },
-  {
-    text: "Care that respects your culture, your story, and your privacy — accessible from wherever you feel most comfortable.",
-    author: "Alaga Counseling Care",
-  },
-];
-
-const FALLBACK_COUNSELORS: Array<{
-  id: string;
-  name: string;
-  title: string;
-  specializations: string[];
-  bio: string;
-  rate?: number;
-  photo_url?: string | null;
-  isLive?: boolean;
-}> = [
-  {
-    id: "featured-1",
-    name: "Dr. Elena Santos",
-    title: "Licensed Clinical Psychologist",
-    specializations: ["Anxiety", "Trauma", "Life Transitions"],
-    bio: "Specializing in evidence-based CBT and trauma-informed care for young adults and working professionals.",
-    isLive: false,
-  },
-  {
-    id: "featured-2",
-    name: "Marcus Reyes, RGC",
-    title: "Registered Guidance Counselor",
-    specializations: ["Stress & Burnout", "Career", "Relationships"],
-    bio: "Helping individuals navigate workplace burnout, family dynamics, and personal boundaries with practical tools.",
-    isLive: false,
-  },
-  {
-    id: "featured-3",
-    name: "Sofia Villanueva, RPsy",
-    title: "Licensed Psychologist",
-    specializations: ["Depression", "Grief", "Mindfulness"],
-    bio: "Compassionate, culturally grounded therapy focused on emotional resilience, self-compassion, and recovery.",
-    isLive: false,
-  },
-];
-
 export default function HomePage() {
-  const [quotes, setQuotes] = useState<Quote[]>(DEFAULT_QUOTES);
+  const [quotes, setQuotes] = useState<QuoteItem[]>(defaultQuotes);
   const [currentQuoteIndex, setCurrentQuoteIndex] = useState(0);
   const [isCarouselPaused, setIsCarouselPaused] = useState(false);
-  const [counselors, setCounselors] = useState<typeof FALLBACK_COUNSELORS>(
-    FALLBACK_COUNSELORS
-  );
+  const [counselors, setCounselors] =
+    useState<FeaturedCounselor[]>(fallbackCounselors);
+  const [activeIndex, setActiveIndex] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -93,10 +46,11 @@ export default function HomePage() {
         const list = await api.get<CounselorProfile[]>("/counselors/");
         if (active && Array.isArray(list) && list.length > 0) {
           setCounselors(
-            list.slice(0, 3).map((c) => ({
+            list.slice(0, 4).map((c) => ({
               id: c.id,
               name: c.user?.full_name || "Licensed Counselor",
               title: "Licensed Mental Health Professional",
+              credential: "PRC Verified",
               specializations:
                 c.specialization_tags && c.specialization_tags.length > 0
                   ? c.specialization_tags.slice(0, 3)
@@ -110,7 +64,7 @@ export default function HomePage() {
           );
         }
       } catch {
-        // Keep curated fallback cards
+        // Keep curated fallback practitioners
       }
     };
 
@@ -128,432 +82,485 @@ export default function HomePage() {
     return () => clearInterval(timer);
   }, [quotes.length, isCarouselPaused]);
 
-  const activeQuote = quotes[currentQuoteIndex] || DEFAULT_QUOTES[0];
+  const activeQuote = quotes[currentQuoteIndex] || defaultQuotes[0];
+  const activeCounselor = counselors[activeIndex] || counselors[0];
 
   return (
     <div className="flex flex-col">
-      {/* Hero Section */}
-      <section className="relative overflow-hidden bg-background pt-14 pb-20 sm:pt-20 sm:pb-28">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -top-24 right-0 h-96 w-96 rounded-full bg-primary/5 blur-3xl"
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -bottom-24 left-0 h-80 w-80 rounded-full bg-secondary-container/40 blur-3xl"
-        />
+      {/* 1. Asymmetric Quiet Room Hero */}
+      <section className="relative overflow-hidden border-b border-outline-variant bg-background">
+        <QuietRoomCanvas />
 
-        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-3xl text-center">
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border-subtle bg-surface-elevated px-4 py-1.5 text-xs font-medium text-primary shadow-sm">
-              <span
-                aria-hidden="true"
-                className="material-symbols-outlined text-[16px]"
+        <div className="relative z-10 mx-auto max-w-container-max px-4 pt-12 pb-16 sm:pt-20 sm:pb-24 md:px-margin-desktop">
+          <div className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-8">
+            {/* Left 8 cols: Display statement + actions */}
+            <div className="lg:col-span-8 flex flex-col justify-between">
+              <div>
+                <p
+                  data-reveal="fade"
+                  data-intro
+                  className="text-xs font-semibold uppercase tracking-[0.08em] text-secondary"
+                >
+                  Online Counseling &bull; Philippines
+                </p>
+
+                <h1
+                  data-split="lines"
+                  data-intro
+                  className="mt-5 font-serif text-[clamp(2.65rem,1.45rem+5.2vw,5.25rem)] leading-[0.98] tracking-[-0.03em] text-primary"
+                >
+                  A quiet room to talk with someone who truly listens.
+                </h1>
+
+                <p
+                  data-reveal="up"
+                  data-intro
+                  data-delay="0.12"
+                  className="mt-7 max-w-[48ch] text-body-lg text-on-surface-variant"
+                >
+                  Connect with vetted, PRC-licensed Filipino counselors and
+                  psychologists online. Read their clinical backgrounds, choose
+                  an hour in Manila Time, and meet one-on-one from home.
+                </p>
+              </div>
+
+              <div
+                data-reveal="up"
+                data-intro
+                data-delay="0.2"
+                className="mt-10 flex flex-wrap items-center gap-5"
               >
-                verified_user
-              </span>
-              <span>PRC-Licensed Professionals &bull; Confidential Care</span>
+                <Link
+                  href="/counselors"
+                  data-fill
+                  className="btn-fill inline-flex min-h-[48px] items-center justify-center gap-2.5 rounded-full bg-primary px-7 py-3.5 text-sm font-semibold text-on-primary"
+                >
+                  <span className="btn__fill" aria-hidden="true" />
+                  <span>Browse Counselors</span>
+                  <span
+                    aria-hidden="true"
+                    className="material-symbols-outlined text-[18px]"
+                  >
+                    arrow_forward
+                  </span>
+                </Link>
+
+                <a
+                  href="#how-it-works"
+                  className="inline-link inline-flex min-h-[44px] items-center py-2 text-sm font-semibold text-primary"
+                >
+                  How booking works
+                </a>
+              </div>
             </div>
 
-            <h1 className="font-serif text-headline-xl text-text-primary">
-              A calm, private space to talk with someone who{" "}
-              <span className="italic text-primary">truly listens.</span>
-            </h1>
+            {/* Right 4 cols: Architectural ledger */}
+            <aside
+              data-reveal="up"
+              data-intro
+              data-delay="0.16"
+              aria-label="Platform standards"
+              className="lg:col-span-4 lg:border-l lg:border-outline-variant lg:pl-8 flex flex-col justify-between gap-8 pt-6 border-t border-outline-variant lg:border-t-0 lg:pt-0"
+            >
+              <div>
+                <p className="font-serif italic text-xl text-primary">
+                  Pag-aalaga
+                </p>
+                <p className="mt-2 text-body-sm text-on-surface-variant leading-relaxed">
+                  In Tagalog, &ldquo;alaga&rdquo; means to tend to someone with
+                  steady attention and care. Everything here is built to feel
+                  like a calm room, never a noisy directory.
+                </p>
+              </div>
 
-            <p className="mx-auto mt-6 max-w-2xl text-body-lg text-text-secondary">
-              Connect with vetted, licensed Filipino counselors and psychologists
-              online. Browse verified profiles, schedule at your own pace, and
-              receive thoughtful support from the comfort of home.
-            </p>
-
-            <div className="mt-9 flex flex-col items-center justify-center gap-3.5 sm:flex-row">
-              <Link
-                href="/counselors"
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-7 py-3.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:w-auto"
-              >
-                <span>Browse Counselors</span>
-                <span
-                  aria-hidden="true"
-                  className="material-symbols-outlined text-[18px]"
-                >
-                  arrow_forward
-                </span>
-              </Link>
-              <a
-                href="#how-it-works"
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border-subtle bg-surface-elevated px-7 py-3.5 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:w-auto"
-              >
-                <span>How It Works</span>
-              </a>
-            </div>
-
-            {/* Trust Strip */}
-            <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs font-medium text-text-muted">
-              <span className="inline-flex items-center gap-1.5">
-                <span
-                  aria-hidden="true"
-                  className="material-symbols-outlined text-[16px] text-primary"
-                >
-                  lock
-                </span>
-                RA 10173 Data Privacy Compliant
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span
-                  aria-hidden="true"
-                  className="material-symbols-outlined text-[16px] text-primary"
-                >
-                  calendar_month
-                </span>
-                Manila Time (UTC+8) Scheduling
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span
-                  aria-hidden="true"
-                  className="material-symbols-outlined text-[16px] text-primary"
-                >
-                  videocam
-                </span>
-                Private 1-on-1 Online Sessions
-              </span>
-            </div>
+              <dl className="divide-y divide-outline-variant border-y border-outline-variant text-sm">
+                <div className="flex items-center justify-between py-3">
+                  <dt className="text-on-surface-variant">Practitioners</dt>
+                  <dd className="font-semibold text-primary">PRC-Licensed</dd>
+                </div>
+                <div className="flex items-center justify-between py-3">
+                  <dt className="text-on-surface-variant">Scheduling</dt>
+                  <dd className="font-semibold text-primary tabular-nums">
+                    Manila (UTC+8)
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between py-3">
+                  <dt className="text-on-surface-variant">Privacy</dt>
+                  <dd className="font-semibold text-primary tabular-nums">
+                    RA 10173
+                  </dd>
+                </div>
+              </dl>
+            </aside>
           </div>
         </div>
       </section>
 
-      {/* Quote Carousel Section */}
+      {/* 2. Reflections Chapter (Full-bleed Ink Band) */}
       <section
         aria-label="Reflections on mental wellness"
-        className="border-y border-border-subtle bg-surface-elevated py-14"
+        className="bg-primary text-on-primary py-16 sm:py-24"
       >
         <div
-          className="mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8"
+          className="mx-auto max-w-container-max px-4 md:px-margin-desktop"
           onMouseEnter={() => setIsCarouselPaused(true)}
           onMouseLeave={() => setIsCarouselPaused(false)}
           onFocus={() => setIsCarouselPaused(true)}
           onBlur={() => setIsCarouselPaused(false)}
         >
-          <span
-            aria-hidden="true"
-            className="material-symbols-outlined mb-3 text-3xl text-primary/40"
-          >
-            format_quote
-          </span>
-          <blockquote aria-live="polite" className="min-h-[5.5rem]">
-            <p className="font-serif text-xl leading-relaxed text-text-primary sm:text-2xl">
-              &ldquo;{activeQuote.text}&rdquo;
-            </p>
-            <footer className="mt-4 text-sm font-medium text-text-secondary">
-              &mdash; {activeQuote.author}
-            </footer>
-          </blockquote>
-
-          {quotes.length > 1 && (
-            <div className="mt-6 flex items-center justify-center gap-2">
-              <button
-                type="button"
-                aria-label="Previous quote"
-                onClick={() =>
-                  setCurrentQuoteIndex(
-                    (prev) => (prev - 1 + quotes.length) % quotes.length
-                  )
-                }
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-surface-muted hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              >
-                <span
-                  aria-hidden="true"
-                  className="material-symbols-outlined text-[18px]"
-                >
-                  chevron_left
-                </span>
-              </button>
-
-              <div className="flex items-center gap-1.5">
-                {quotes.map((q, idx) => (
-                  <button
-                    key={`${q.author}-${idx}`}
-                    type="button"
-                    aria-label={`Show quote ${idx + 1} of ${quotes.length}`}
-                    aria-pressed={idx === currentQuoteIndex}
-                    onClick={() => setCurrentQuoteIndex(idx)}
-                    className={`h-2 rounded-full transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-                      idx === currentQuoteIndex
-                        ? "w-6 bg-primary"
-                        : "w-2 bg-border-strong hover:bg-text-muted"
-                    }`}
-                  />
-                ))}
-              </div>
-
-              <button
-                type="button"
-                aria-label="Next quote"
-                onClick={() =>
-                  setCurrentQuoteIndex((prev) => (prev + 1) % quotes.length)
-                }
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-surface-muted hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              >
-                <span
-                  aria-hidden="true"
-                  className="material-symbols-outlined text-[18px]"
-                >
-                  chevron_right
-                </span>
-              </button>
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* How It Works */}
-      <section
-        id="how-it-works"
-        className="scroll-mt-20 bg-background py-20 sm:py-24"
-      >
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-2xl text-center">
-            <span className="text-label-md uppercase tracking-wider text-primary">
-              Simple &amp; Guided
-            </span>
-            <h2 className="mt-2 font-serif text-headline-lg text-text-primary">
-              How booking with Alaga works
-            </h2>
-            <p className="mt-3 text-body-md text-text-secondary">
-              Designed to remove friction so you can focus on getting the
-              support you deserve.
-            </p>
-          </div>
-
-          <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
-            {[
-              {
-                step: "01",
-                icon: "person_search",
-                title: "Explore Verified Counselors",
-                desc: "Filter by specialization, read clinical backgrounds, and find a licensed professional whose approach fits your needs.",
-              },
-              {
-                step: "02",
-                icon: "event_available",
-                title: "Sign In & Pick a Time",
-                desc: "Create a free account to view live weekly availability in Philippine Time and share brief intake notes securely.",
-              },
-              {
-                step: "03",
-                icon: "verified",
-                title: "Confirm & Meet Online",
-                desc: "Upload your payment proof, receive confirmation from your counselor, and join your private session link on schedule.",
-              },
-            ].map((item) => (
-              <div
-                key={item.step}
-                className="rounded-2xl border border-border-subtle bg-surface-elevated p-7 shadow-ambient transition-shadow hover:shadow-ambient-hover"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-light text-primary">
-                    <span
-                      aria-hidden="true"
-                      className="material-symbols-outlined text-[22px]"
-                    >
-                      {item.icon}
-                    </span>
-                  </div>
-                  <span className="font-serif text-2xl font-medium text-border-strong tabular-nums">
-                    {item.step}
-                  </span>
-                </div>
-                <h3 className="mt-5 font-headline-sm text-text-primary">
-                  {item.title}
-                </h3>
-                <p className="mt-2 text-body-md text-text-secondary">
-                  {item.desc}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Featured Professionals */}
-      <section className="border-t border-border-subtle bg-surface-elevated py-20 sm:py-24">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-            <div>
-              <span className="text-label-md uppercase tracking-wider text-primary">
-                Our Care Team
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 lg:items-end">
+            <div className="lg:col-span-2">
+              <span className="text-xs font-semibold uppercase tracking-[0.08em] text-primary-fixed-dim">
+                Reflections
               </span>
-              <h2 className="mt-2 font-serif text-headline-lg text-text-primary">
-                Meet our licensed professionals
-              </h2>
-              <p className="mt-2 max-w-xl text-body-md text-text-secondary">
-                Every practitioner on Alaga is vetted for active PRC
-                credentials and clinical experience.
+              <p className="mt-2 font-serif text-lg tabular-nums text-primary-fixed">
+                {String(currentQuoteIndex + 1).padStart(2, "0")} /{" "}
+                {String(quotes.length).padStart(2, "0")}
               </p>
             </div>
+
+            <div className="lg:col-span-8">
+              <blockquote aria-live="polite" className="min-h-[6.5rem]">
+                <p className="font-serif italic text-[clamp(1.45rem,1.1rem+1.4vw,2.25rem)] leading-[1.3] text-on-primary">
+                  &ldquo;{activeQuote.text}&rdquo;
+                </p>
+                <footer className="mt-5 text-sm font-medium text-primary-fixed-dim">
+                  {activeQuote.author}
+                </footer>
+              </blockquote>
+            </div>
+
+            {quotes.length > 1 && (
+              <div className="lg:col-span-2 flex items-center justify-start lg:justify-end gap-2">
+                <button
+                  type="button"
+                  aria-label="Previous quote"
+                  onClick={() =>
+                    setCurrentQuoteIndex(
+                      (prev) => (prev - 1 + quotes.length) % quotes.length
+                    )
+                  }
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/20 text-on-primary transition-colors hover:bg-white/10"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="material-symbols-outlined text-[18px]"
+                  >
+                    arrow_back
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  aria-label="Next quote"
+                  onClick={() =>
+                    setCurrentQuoteIndex((prev) => (prev + 1) % quotes.length)
+                  }
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/20 text-on-primary transition-colors hover:bg-white/10"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="material-symbols-outlined text-[18px]"
+                  >
+                    arrow_forward
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* 3. Interactive Counselor Index (Signature Moment) */}
+      <section className="border-b border-outline-variant bg-background py-20 sm:py-28">
+        <div className="mx-auto max-w-container-max px-4 md:px-margin-desktop">
+          <div className="flex flex-col justify-between gap-4 pb-10 border-b border-outline-variant sm:flex-row sm:items-end">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-secondary">
+                Our Care Team
+              </p>
+              <h2
+                data-split="lines"
+                className="mt-2 font-serif text-headline-xl text-primary"
+              >
+                Meet our licensed practitioners
+              </h2>
+            </div>
+
             <Link
               href="/counselors"
-              className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary transition-colors hover:text-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-lg px-2 py-1"
+              className="inline-link inline-flex w-fit items-center gap-1.5 py-1 text-sm font-semibold text-primary"
             >
-              <span>View all counselors</span>
+              <span>View full directory</span>
               <span
                 aria-hidden="true"
-                className="material-symbols-outlined text-[18px]"
+                className="material-symbols-outlined text-[17px]"
               >
                 arrow_forward
               </span>
             </Link>
           </div>
 
-          <div className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-3">
-            {counselors.map((c) => {
-              const targetHref = c.isLive
-                ? `/counselors/${c.id}`
-                : "/counselors";
-              return (
-                <Link
-                  key={c.id}
-                  href={targetHref}
-                  className="group flex flex-col justify-between rounded-2xl border border-border-subtle bg-background p-6 shadow-ambient transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-ambient-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                >
-                  <div>
+          <div className="mt-10 grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-12">
+            {/* Left 7 cols: Tactile index rows */}
+            <div className="lg:col-span-7 divide-y divide-outline-variant border-b border-outline-variant">
+              {counselors.map((c, idx) => {
+                const isSelected = idx === activeIndex;
+                const targetHref = c.isLive
+                  ? `/counselors/${c.id}`
+                  : "/counselors";
+
+                return (
+                  <div
+                    key={c.id}
+                    onMouseEnter={() => setActiveIndex(idx)}
+                    onFocus={() => setActiveIndex(idx)}
+                    className={`group transition-colors duration-300 ${
+                      isSelected ? "bg-surface-container-low/70" : ""
+                    }`}
+                  >
+                    <Link
+                      href={targetHref}
+                      className="flex flex-col gap-4 py-6 px-3 sm:px-4 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="flex items-start gap-4 sm:items-center">
+                        <span className="mt-1 sm:mt-0 font-mono text-xs text-on-surface-variant tabular-nums">
+                          {String(idx + 1).padStart(2, "0")}
+                        </span>
+                        <div>
+                          <div className="flex flex-wrap items-baseline gap-2.5">
+                            <h3 className="font-serif text-2xl text-primary transition-transform duration-300 group-hover:translate-x-1">
+                              {c.name}
+                            </h3>
+                            <span className="text-xs font-medium text-secondary">
+                              {c.credential}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-sm text-on-surface-variant">
+                            {c.title} &bull; {c.specializations.join(", ")}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-4 pl-8 sm:pl-0">
+                        {typeof c.rate === "number" && (
+                          <span className="text-sm font-semibold text-primary tabular-nums">
+                            &#8369;{c.rate.toLocaleString()}
+                            <span className="font-normal text-on-surface-variant">
+                              /hr
+                            </span>
+                          </span>
+                        )}
+                        <span
+                          aria-hidden="true"
+                          className="material-symbols-outlined text-[20px] text-primary transition-transform duration-300 group-hover:translate-x-1.5"
+                        >
+                          arrow_forward
+                        </span>
+                      </div>
+                    </Link>
+
+                    {/* Mobile inline summary so touch devices see full detail */}
+                    <div className="px-3 pb-5 pl-11 text-sm text-on-surface-variant lg:hidden">
+                      <p className="line-clamp-2">{c.bio}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Right 5 cols (Desktop): Poised preview frame */}
+            <div className="hidden lg:block lg:col-span-5">
+              {activeCounselor && (
+                <div className="sticky top-8 border border-outline-variant bg-surface-bright p-8 shadow-ambient">
+                  <div className="flex items-center justify-between border-b border-outline-variant pb-5">
                     <div className="flex items-center gap-4">
-                      {c.photo_url ? (
+                      {activeCounselor.photo_url ? (
                         <img
-                          src={c.photo_url}
-                          alt={c.name}
-                          className="h-14 w-14 rounded-full object-cover border border-border-subtle"
+                          src={activeCounselor.photo_url}
+                          alt={activeCounselor.name}
+                          className="h-16 w-16 rounded-full object-cover border border-outline-variant"
                         />
                       ) : (
-                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary-light font-serif text-lg font-semibold text-primary">
-                          {getInitials(c.name)}
+                        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-secondary-container font-serif text-2xl text-secondary">
+                          {getInitials(activeCounselor.name)}
                         </div>
                       )}
-                      <div className="min-w-0">
-                        <h3 className="truncate text-base font-semibold text-text-primary group-hover:text-primary transition-colors">
-                          {c.name}
-                        </h3>
-                        <p className="truncate text-xs text-text-muted">
-                          {c.title}
+                      <div>
+                        <p className="font-serif text-2xl text-primary">
+                          {activeCounselor.name}
+                        </p>
+                        <p className="text-xs font-medium text-on-surface-variant">
+                          {activeCounselor.title}
                         </p>
                       </div>
                     </div>
+                  </div>
 
-                    <div className="mt-4 flex flex-wrap gap-1.5">
-                      {c.specializations.map((spec) => (
-                        <span
-                          key={spec}
-                          className="rounded-full bg-surface-muted px-2.5 py-0.5 text-xs font-medium text-text-secondary"
-                        >
-                          {spec}
-                        </span>
-                      ))}
+                  <p className="mt-6 text-body-md text-on-surface-variant leading-relaxed">
+                    {activeCounselor.bio}
+                  </p>
+
+                  <div className="mt-6 flex flex-wrap gap-2">
+                    {activeCounselor.specializations.map((spec) => (
+                      <span
+                        key={spec}
+                        className="rounded-full border border-outline-variant bg-background px-3 py-1 text-xs font-medium text-primary"
+                      >
+                        {spec}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="mt-8 flex items-center justify-between border-t border-outline-variant pt-5">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-on-surface-variant">
+                        Session Rate
+                      </p>
+                      <p className="mt-0.5 font-serif text-xl text-primary tabular-nums">
+                        {typeof activeCounselor.rate === "number"
+                          ? `₱${activeCounselor.rate.toLocaleString()} / hour`
+                          : "Verified Practitioner"}
+                      </p>
                     </div>
 
-                    <p className="mt-4 line-clamp-3 text-body-sm text-text-secondary">
-                      {c.bio}
-                    </p>
-                  </div>
-
-                  <div className="mt-6 flex items-center justify-between border-t border-border-subtle pt-4 text-sm">
-                    {typeof c.rate === "number" ? (
-                      <span className="font-semibold text-text-primary tabular-nums">
-                        &#8369;{c.rate.toLocaleString()}{" "}
-                        <span className="font-normal text-text-muted">
-                          / hr
-                        </span>
-                      </span>
-                    ) : (
-                      <span className="text-xs font-medium text-text-muted">
-                        Verified Practitioner
-                      </span>
-                    )}
-                    <span className="inline-flex items-center gap-1 font-medium text-primary">
+                    <Link
+                      href={
+                        activeCounselor.isLive
+                          ? `/counselors/${activeCounselor.id}`
+                          : "/counselors"
+                      }
+                      data-fill
+                      className="btn-fill inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-on-primary"
+                    >
+                      <span className="btn__fill" aria-hidden="true" />
                       <span>View profile</span>
-                      <span
-                        aria-hidden="true"
-                        className="material-symbols-outlined text-[16px] transition-transform group-hover:translate-x-0.5"
-                      >
-                        arrow_forward
-                      </span>
-                    </span>
+                    </Link>
                   </div>
-                </Link>
-              );
-            })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </section>
 
-      {/* About Section */}
-      <section id="about" className="scroll-mt-20 bg-background py-20 sm:py-24">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 items-center gap-10 rounded-3xl border border-border-subtle bg-secondary-container/35 p-8 sm:p-12 lg:grid-cols-12">
-            <div className="lg:col-span-7">
-              <span className="text-label-md uppercase tracking-wider text-primary">
+      {/* 4. How Care Unfolds (Asymmetric Sticky Ledger) */}
+      <section
+        id="how-it-works"
+        className="scroll-mt-20 border-b border-outline-variant bg-surface-container-low py-20 sm:py-28"
+      >
+        <div className="mx-auto max-w-container-max px-4 md:px-margin-desktop">
+          <div className="grid grid-cols-1 gap-12 lg:grid-cols-12">
+            <div className="lg:col-span-4">
+              <div className="lg:sticky lg:top-10">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-secondary">
+                  Simple &amp; Guided
+                </p>
+                <h2
+                  data-split="lines"
+                  className="mt-3 font-serif text-headline-xl text-primary"
+                >
+                  Three unhurried steps to your first hour.
+                </h2>
+                <p className="mt-4 text-body-md text-on-surface-variant">
+                  Booking support should not feel like navigating a clinic
+                  waiting room. Everything from discovery to confirmation is
+                  direct and transparent.
+                </p>
+                <div className="mt-8">
+                  <Link
+                    href="/counselors"
+                    data-fill
+                    className="btn-fill inline-flex min-h-[44px] items-center gap-2 rounded-full border border-primary px-6 py-3 text-sm font-semibold text-primary"
+                  >
+                    <span className="btn__fill" aria-hidden="true" />
+                    <span>Explore open hours</span>
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            <div className="lg:col-span-7 lg:col-start-6 divide-y divide-outline-variant border-t border-b border-outline-variant">
+              {careSteps.map((item) => (
+                <div
+                  key={item.index}
+                  data-reveal="up"
+                  className="py-8 sm:py-10 grid grid-cols-1 gap-4 sm:grid-cols-12"
+                >
+                  <div className="sm:col-span-3">
+                    <span className="font-serif text-3xl text-secondary tabular-nums">
+                      {item.index}
+                    </span>
+                    <p className="mt-1 text-xs font-medium text-on-surface-variant">
+                      {item.detail}
+                    </p>
+                  </div>
+                  <div className="sm:col-span-9">
+                    <h3 className="font-serif text-2xl text-primary">
+                      {item.title}
+                    </h3>
+                    <p className="mt-2.5 text-body-md text-on-surface-variant leading-relaxed">
+                      {item.body}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 5. About / Sanctuary Manifesto (Split Frame) */}
+      <section id="about" className="scroll-mt-20 bg-background py-20 sm:py-28">
+        <div className="mx-auto max-w-container-max px-4 md:px-margin-desktop">
+          <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 lg:items-start">
+            <div className="lg:col-span-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-secondary">
                 About Alaga
-              </span>
-              <h2 className="mt-2 font-serif text-headline-lg text-text-primary">
+              </p>
+              <h2
+                data-split="lines"
+                className="mt-3 font-serif text-headline-xl text-primary"
+              >
                 Thoughtful mental healthcare, built with warmth and privacy.
               </h2>
-              <p className="mt-4 text-body-md text-text-secondary">
-                &ldquo;Alaga&rdquo; means care. We built this platform so
-                individuals across the Philippines can find trustworthy,
-                licensed mental health professionals without overwhelming
+              <p className="mt-5 max-w-[50ch] text-body-lg text-on-surface-variant">
+                We built Alaga so individuals across the Philippines can find
+                trustworthy, PRC-licensed professionals without overwhelming
                 directories, hidden steps, or clinical coldness.
               </p>
-              <div className="mt-7 flex flex-wrap gap-3">
+
+              <div className="mt-9 flex flex-wrap items-center gap-5">
                 <Link
                   href="/signup"
-                  className="inline-flex items-center justify-center rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  data-fill
+                  className="btn-fill inline-flex min-h-[48px] items-center justify-center rounded-full bg-primary px-7 py-3.5 text-sm font-semibold text-on-primary"
                 >
-                  Create Free Account
+                  <span className="btn__fill" aria-hidden="true" />
+                  <span>Create Free Account</span>
                 </Link>
                 <Link
                   href="/faq"
-                  className="inline-flex items-center justify-center rounded-xl border border-border-subtle bg-surface-elevated px-6 py-3 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  className="inline-link inline-flex min-h-[44px] items-center py-2 text-sm font-semibold text-primary"
                 >
-                  Read Common Questions
+                  Read common questions
                 </Link>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:col-span-5">
-              {[
-                {
-                  icon: "shield_lock",
-                  title: "Strict Privacy",
-                  body: "Intake notes and session details remain strictly between you and your counselor.",
-                },
-                {
-                  icon: "schedule",
-                  title: "Flexible Rescheduling",
-                  body: "Life happens. Reschedule directly from your client dashboard when plans shift.",
-                },
-                {
-                  icon: "badge",
-                  title: "Verified Licenses",
-                  body: "Every counselor submits PRC documentation reviewed by our clinical team.",
-                },
-                {
-                  icon: "support_agent",
-                  title: "Human Support",
-                  body: "Need help finding a match or confirming payment? Reach us anytime.",
-                },
-              ].map((card) => (
+            <div className="lg:col-span-6 grid grid-cols-1 sm:grid-cols-2 border-t border-l border-outline-variant">
+              {trustCommitments.map((card) => (
                 <div
                   key={card.title}
-                  className="rounded-2xl border border-border-subtle bg-surface-elevated p-5"
+                  data-reveal="up"
+                  className="border-r border-b border-outline-variant bg-surface-bright p-6 sm:p-7"
                 >
-                  <span
-                    aria-hidden="true"
-                    className="material-symbols-outlined text-primary text-[22px]"
-                  >
-                    {card.icon}
-                  </span>
-                  <h3 className="mt-2.5 text-sm font-semibold text-text-primary">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-secondary">
+                    {card.label}
+                  </p>
+                  <h3 className="mt-2 font-serif text-xl text-primary">
                     {card.title}
                   </h3>
-                  <p className="mt-1 text-xs leading-relaxed text-text-secondary">
+                  <p className="mt-2 text-body-sm text-on-surface-variant leading-relaxed">
                     {card.body}
                   </p>
                 </div>

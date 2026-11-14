@@ -1,74 +1,102 @@
 @import "tailwindcss";
 
+:root {
+  /* Engine & Art Direction Tokens (Capiz, Molave Ink & Pandan) */
+  --c-bg: #f3f1ec;
+  --c-surface: #eae7e0;
+  --c-elevated: #ffffff;
+  --c-fg: #111a22;
+  --c-muted: #4e5962;
+  --c-line: rgba(17, 26, 34, 0.14);
+  --c-accent: #175946;
+  --c-curtain: #111a22;
+
+  /* Fluid Type Scale */
+  --t-mega: clamp(3.15rem, 1.45rem + 7vw, 7rem);
+  --t-xl: clamp(2.2rem, 1.35rem + 3.2vw, 3.85rem);
+  --t-l: clamp(1.6rem, 1.25rem + 1.35vw, 2.35rem);
+  --t-m: clamp(1.1875rem, 1.05rem + 0.45vw, 1.4375rem);
+  --t-body: clamp(1rem, 0.96rem + 0.18vw, 1.125rem);
+  --t-s: 0.875rem;
+  --t-xs: 0.75rem;
+
+  --u: clamp(0.5rem, 0.35rem + 0.6vw, 1rem);
+  --gutter: clamp(1rem, 0.65rem + 1.6vw, 2.5rem);
+  --z-content: 1;
+  --z-header: 50;
+  --z-cursor: 80;
+  --z-curtain: 90;
+}
+
 @theme {
-  /* Core Alaga Sanctuary Palette (WCAG AA verified) */
-  --color-background: #f8f7f4;
-  --color-surface: #f8f7f4;
+  /* Core Alaga Sanctuary Palette mapped to Tailwind utilities (WCAG AA+ verified) */
+  --color-background: #f3f1ec;
+  --color-surface: #f3f1ec;
   --color-surface-bright: #ffffff;
   --color-surface-container-lowest: #ffffff;
-  --color-surface-container-low: #f1efea;
-  --color-surface-container: #e6e4dd;
-  --color-surface-container-high: #dcd9d0;
-  --color-surface-container-highest: #d0ccc2;
-  --color-surface-variant: #e6e4dd;
-  --color-surface-dim: #dad7ce;
+  --color-surface-container-low: #eae7e0;
+  --color-surface-container: #e2dfd6;
+  --color-surface-container-high: #d8d4ca;
+  --color-surface-container-highest: #ccc7bc;
+  --color-surface-variant: #e2dfd6;
+  --color-surface-dim: #d6d2c8;
 
-  --color-on-background: #1a1d20;
-  --color-on-surface: #1a1d20;
-  --color-on-surface-variant: #4a525a;
+  --color-on-background: #111a22;
+  --color-on-surface: #111a22;
+  --color-on-surface-variant: #4e5962;
 
-  /* Primary: Deep Slate Navy (15.1:1 on #f8f7f4) */
-  --color-primary: #142534;
+  /* Primary: Deep Molave Slate Ink (15.8:1 on #f3f1ec) */
+  --color-primary: #111a22;
   --color-on-primary: #ffffff;
-  --color-primary-container: #243b50;
-  --color-on-primary-container: #dbe4ee;
-  --color-primary-fixed: #dce6f2;
-  --color-primary-fixed-dim: #b6c8df;
-  --color-on-primary-fixed: #142534;
-  --color-on-primary-fixed-variant: #2c4156;
-  --color-inverse-primary: #b6c8df;
+  --color-primary-container: #1f2e3c;
+  --color-on-primary-container: #e2e8ee;
+  --color-primary-fixed: #dce4ec;
+  --color-primary-fixed-dim: #b4c4d4;
+  --color-on-primary-fixed: #111a22;
+  --color-on-primary-fixed-variant: #253646;
+  --color-inverse-primary: #b4c4d4;
 
-  /* Secondary: Sage Eucalyptus (7.5:1 on #ffffff) */
-  --color-secondary: #1e5e4a;
+  /* Secondary: Deep Pandan Botanical (7.6:1 on #f3f1ec) */
+  --color-secondary: #175946;
   --color-on-secondary: #ffffff;
-  --color-secondary-container: #ddf0e8;
-  --color-on-secondary-container: #0d3b2b;
-  --color-secondary-fixed: #c5e6d8;
-  --color-secondary-fixed-dim: #9cd4bd;
-  --color-on-secondary-fixed: #0d3b2b;
-  --color-on-secondary-fixed-variant: #154d3b;
+  --color-secondary-container: #d9ece4;
+  --color-on-secondary-container: #0c3629;
+  --color-secondary-fixed: #c1e3d5;
+  --color-secondary-fixed-dim: #97ceb9;
+  --color-on-secondary-fixed: #0c3629;
+  --color-on-secondary-fixed-variant: #134a3a;
 
-  /* Tertiary: Deep Botanical Teal (7.9:1 on #f8f7f4) */
-  --color-tertiary: #0f3a31;
+  /* Tertiary: Deep Botanical Teal */
+  --color-tertiary: #0e382e;
   --color-on-tertiary: #ffffff;
-  --color-tertiary-container: #17493e;
-  --color-on-tertiary-container: #a0f0df;
-  --color-tertiary-fixed: #d3eee6;
-  --color-tertiary-fixed-dim: #9fd8c8;
-  --color-on-tertiary-fixed: #0f3a31;
-  --color-on-tertiary-fixed-variant: #154e43;
+  --color-tertiary-container: #14463b;
+  --color-on-tertiary-container: #a8ebdc;
+  --color-tertiary-fixed: #d1ede5;
+  --color-tertiary-fixed-dim: #9cd4c5;
+  --color-on-tertiary-fixed: #0e382e;
+  --color-on-tertiary-fixed-variant: #144b3f;
 
-  --color-outline: #687078;
-  --color-outline-variant: #d5d3cb;
-  --color-surface-tint: #4a5e72;
-  --color-inverse-surface: #252b31;
-  --color-inverse-on-surface: #f4f2ed;
+  --color-outline: #5d6770;
+  --color-outline-variant: rgba(17, 26, 34, 0.14);
+  --color-surface-tint: #435668;
+  --color-inverse-surface: #1c252d;
+  --color-inverse-on-surface: #f3f1ec;
 
   --color-error: #b42318;
   --color-on-error: #ffffff;
   --color-error-container: #fee4e2;
   --color-on-error-container: #7a271a;
 
-  /* Semantic UI Aliases (mapped to Sanctuary palette, WCAG AA+) */
+  /* Semantic UI Aliases */
   --color-surface-elevated: #ffffff;
-  --color-surface-muted: #f2f4f5;
-  --color-text-primary: #191c1d;
-  --color-text-secondary: #41474d;
-  --color-text-muted: #656d74;
-  --color-border-subtle: #dde3e6;
-  --color-border-strong: #c1c7ce;
-  --color-primary-hover: #213749;
-  --color-primary-light: #d3e4f8;
+  --color-surface-muted: #eae7e0;
+  --color-text-primary: #111a22;
+  --color-text-secondary: #3f4952;
+  --color-text-muted: #58636c;
+  --color-border-subtle: rgba(17, 26, 34, 0.14);
+  --color-border-strong: rgba(17, 26, 34, 0.28);
+  --color-primary-hover: #1e2d3b;
+  --color-primary-light: #dce5ee;
   --color-status-success: #14532d;
   --color-status-success-bg: #dcfce7;
   --color-status-warning: #7c2d12;
@@ -81,12 +109,12 @@
   --spacing-margin-desktop: 40px;
   --spacing-unit: 8px;
   --spacing-margin-mobile: 16px;
-  --spacing-container-max: 1200px;
+  --spacing-container-max: 1280px;
   --spacing-gutter: 24px;
 
-  /* Typography Families (injected by next/font in layout.tsx) */
-  --font-sans: var(--font-sans-face), "Plus Jakarta Sans", "Inter", system-ui, -apple-system, sans-serif;
-  --font-serif: var(--font-serif-face), "Newsreader", Georgia, serif;
+  /* Typography Families */
+  --font-sans: var(--font-sans-face), "Host Grotesk", system-ui, -apple-system, sans-serif;
+  --font-serif: var(--font-serif-face), "Zodiak", Georgia, serif;
   --font-inter: var(--font-sans);
   --font-headline-xl: var(--font-serif);
   --font-headline-lg: var(--font-serif);
@@ -100,60 +128,59 @@
 
 @layer utilities {
   .shadow-ambient {
-    box-shadow: 0 4px 20px rgba(20, 37, 52, 0.05), 0 1px 3px rgba(20, 37, 52, 0.04);
+    box-shadow: 0 4px 20px rgba(17, 26, 34, 0.045), 0 1px 3px rgba(17, 26, 34, 0.035);
   }
   .shadow-ambient-hover:hover {
-    box-shadow: 0 12px 30px rgba(20, 37, 52, 0.09), 0 2px 6px rgba(20, 37, 52, 0.05);
+    box-shadow: 0 12px 30px rgba(17, 26, 34, 0.08), 0 2px 6px rgba(17, 26, 34, 0.045);
   }
   .custom-shadow {
-    box-shadow: 0 4px 20px rgba(20, 37, 52, 0.05), 0 1px 3px rgba(20, 37, 52, 0.04);
+    box-shadow: 0 4px 20px rgba(17, 26, 34, 0.045), 0 1px 3px rgba(17, 26, 34, 0.035);
   }
   .custom-hover-shadow:hover {
-    box-shadow: 0 10px 26px rgba(20, 37, 52, 0.09), 0 2px 6px rgba(20, 37, 52, 0.05);
+    box-shadow: 0 10px 26px rgba(17, 26, 34, 0.08), 0 2px 6px rgba(17, 26, 34, 0.045);
   }
   .tabular-nums {
     font-variant-numeric: tabular-nums;
   }
 
-  /* Complete Typography Scale */
   .font-display-sm,
   .text-display-sm {
     font-family: var(--font-serif);
     font-size: 36px;
     line-height: 44px;
     letter-spacing: -0.02em;
-    font-weight: 600;
+    font-weight: 400;
   }
   .text-headline-xl,
   .font-headline-xl {
     font-family: var(--font-serif);
-    font-size: 40px;
-    line-height: 48px;
-    letter-spacing: -0.02em;
-    font-weight: 600;
+    font-size: var(--t-xl);
+    line-height: 1.04;
+    letter-spacing: -0.025em;
+    font-weight: 400;
   }
   .text-headline-lg,
   .font-headline-lg {
     font-family: var(--font-serif);
-    font-size: 30px;
-    line-height: 38px;
-    letter-spacing: -0.015em;
-    font-weight: 600;
+    font-size: var(--t-l);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    font-weight: 400;
   }
   .text-headline-lg-mobile,
   .font-headline-lg-mobile {
     font-family: var(--font-serif);
     font-size: 26px;
     line-height: 34px;
-    letter-spacing: -0.01em;
-    font-weight: 600;
+    letter-spacing: -0.015em;
+    font-weight: 400;
   }
   .text-headline-md,
   .font-headline-md {
     font-family: var(--font-sans);
     font-size: 20px;
     line-height: 28px;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.015em;
     font-weight: 600;
   }
   .font-headline-sm,
@@ -166,8 +193,8 @@
   .text-body-lg,
   .font-body-lg {
     font-family: var(--font-sans);
-    font-size: 17px;
-    line-height: 27px;
+    font-size: var(--t-body);
+    line-height: 1.58;
     font-weight: 400;
   }
   .text-body-md,
@@ -203,11 +230,162 @@
     font-family: var(--font-sans);
     font-size: 12px;
     line-height: 16px;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.03em;
     font-weight: 600;
   }
 }
 
+/* Base foundation */
+html {
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
+  background: var(--c-bg);
+  color: var(--c-fg);
+}
+
+body {
+  background-color: var(--c-bg);
+  color: var(--c-fg);
+  font-family: var(--font-sans);
+  overflow-x: clip;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  -webkit-tap-highlight-color: rgba(23, 89, 70, 0.14);
+}
+
+::selection {
+  background: var(--c-fg);
+  color: var(--c-bg);
+}
+
+:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+button,
+a,
+[role="button"] {
+  touch-action: manipulation;
+}
+
+@media (pointer: fine) {
+  html {
+    overscroll-behavior: none;
+  }
+}
+
+/* Lenis smooth scroll */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis:not(.lenis-autoToggle).lenis-stopped {
+  overflow: clip;
+}
+.lenis [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+.lenis.lenis-smooth iframe {
+  pointer-events: none;
+}
+
+/* Hidden-until-revealed (gated on html.motion, so reduced-motion & no-JS stay visible) */
+.motion [data-split],
+.motion [data-reveal] {
+  visibility: hidden;
+}
+.split-line {
+  padding-bottom: 0.08em;
+  margin-bottom: -0.08em;
+}
+[data-split] > *,
+[data-split] > * > * {
+  text-indent: 0;
+}
+[data-split] > :first-child,
+[data-split] > :first-child > :first-child {
+  text-indent: inherit;
+}
+
+/* Page transition curtain */
+#curtain {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-curtain);
+  pointer-events: none;
+  visibility: hidden;
+  overflow: hidden;
+}
+.curtain__panel {
+  position: absolute;
+  inset: 0;
+  background: var(--c-curtain);
+}
+
+/* Micro-interactions: one treatment per role */
+/* 1. Nav links: underline draw */
+.nav-draw {
+  background: linear-gradient(currentColor 0 0) left bottom / 0% 1px no-repeat;
+  transition: background-size 0.4s cubic-bezier(0.165, 0.84, 0.44, 1), color 0.25s ease;
+}
+@media (hover: hover) {
+  .nav-draw:hover {
+    background-size: 100% 1px;
+  }
+}
+.nav-draw:focus-visible,
+.nav-draw[aria-current="page"] {
+  background-size: 100% 1px;
+}
+
+/* 2. Primary CTA buttons: circular fill flood from pointer entry */
+.btn-fill {
+  position: relative;
+  isolation: isolate;
+  overflow: clip;
+  transition: color 0.3s ease, border-color 0.3s ease, transform 0.2s ease;
+}
+.btn-fill .btn__fill {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--c-accent);
+  clip-path: circle(0% at 50% 50%);
+}
+.btn-fill--dark .btn__fill {
+  background: var(--c-fg);
+}
+.btn-fill.is-filled,
+.btn-fill:active {
+  color: #ffffff;
+  border-color: transparent;
+}
+.btn-fill:active {
+  transform: scale(0.985);
+}
+.btn-fill:active .btn__fill {
+  clip-path: circle(150% at 50% 50%);
+}
+
+/* 3. Inline text links: underline at rest that rises on hover */
+.inline-link {
+  text-decoration: none;
+  background: linear-gradient(rgba(23, 89, 70, 0.28) 0 0) left bottom / 100% 1px no-repeat;
+  transition: background-size 0.35s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+@media (hover: hover) {
+  .inline-link:hover {
+    background-size: 100% 0.35em;
+  }
+}
+.inline-link:focus-visible {
+  background-size: 100% 0.35em;
+}
+
+/* Legacy keyframes preserved for dashboard/modal transitions */
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -216,7 +394,6 @@
     opacity: 1;
   }
 }
-
 @keyframes slideUp {
   from {
     opacity: 0;
@@ -227,7 +404,6 @@
     transform: translateY(0);
   }
 }
-
 @keyframes scaleIn {
   from {
     opacity: 0;
@@ -238,40 +414,14 @@
     transform: scale(1);
   }
 }
-
 .animate-fade-in {
   animation: fadeIn 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-
 .animate-slide-up {
   animation: slideUp 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-
 .animate-scale-in {
   animation: scaleIn 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@media (pointer: fine) {
-  html {
-    overscroll-behavior: none;
-  }
-}
-
-html {
-  scroll-behavior: smooth;
-}
-
-body {
-  background-color: var(--color-background);
-  color: var(--color-on-background);
-  font-family: var(--font-sans);
-  -webkit-tap-highlight-color: rgba(30, 94, 74, 0.14);
-}
-
-button,
-a,
-[role="button"] {
-  touch-action: manipulation;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -282,5 +432,19 @@ a,
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+  .btn-fill:focus-visible {
+    color: #ffffff;
+  }
+  .btn-fill:focus-visible .btn__fill {
+    clip-path: none;
+  }
+  @media (hover: hover) {
+    .btn-fill:hover {
+      color: #ffffff;
+    }
+    .btn-fill:hover .btn__fill {
+      clip-path: none;
+    }
   }
 }

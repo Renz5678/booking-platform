@@ -12,6 +12,7 @@ interface AnalyticsSummary {
   total_bookings?: number;
   confirmed_bookings?: number;
   total_revenue?: number;
+  status_breakdown?: Record<string, number>;
   bookings_by_status?: Record<string, number>;
 }
 
@@ -76,6 +77,7 @@ export default function AdminDashboardPage() {
   const totalBookings = analytics?.total_bookings ?? recentBookings.length;
   const confirmedBookings =
     analytics?.confirmed_bookings ??
+    analytics?.status_breakdown?.confirmed ??
     analytics?.bookings_by_status?.confirmed ??
     0;
   const totalRevenue = analytics?.total_revenue ?? 0;

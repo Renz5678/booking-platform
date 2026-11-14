@@ -287,6 +287,17 @@ export default function AdminCounselorsPage() {
                         Deactivate
                       </button>
                     )}
+
+                    {tab === "deactivated" && (
+                      <button
+                        type="button"
+                        disabled={busyId === c.id}
+                        onClick={() => handleApprove(c)}
+                        className="rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-50"
+                      >
+                        Reactivate
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

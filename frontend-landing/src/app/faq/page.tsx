@@ -54,14 +54,36 @@ export default function FaqPage() {
     let active = true;
     const loadFaqs = async () => {
       try {
-        const res = await api.get<{
-          items?: Array<{ key: string; value: string }>;
-        }>("/admin/content");
-        const faqItem = res?.items?.find((i) => i.key === "faq_entries");
+        const res = await api.get<
+          | Array<{ key: string; value: string }>
+          | { items?: Array<{ key: string; value: string }> }
+        >("/admin/content");
+        const items = Array.isArray(res) ? res : res?.items || [];
+        const faqItem =
+          items.find((i) => i.key === "faq") ||
+          items.find((i) => i.key === "faq_entries");
         if (faqItem && active) {
           const parsed = JSON.parse(faqItem.value);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            setFaqs(parsed);
+            const normalized = parsed
+              .map(
+                (f: {
+                  q?: string;
+                  a?: string;
+                  question?: string;
+                  answer?: string;
+                  category?: string;
+                }) => ({
+                  question: f.q || f.question || "",
+                  answer: f.a || f.answer || "",
+                })
+              )
+              .filter(
+                (f) => f.question.trim().length > 0 && f.answer.trim().length > 0
+              );
+            if (normalized.length > 0) {
+              setFaqs(normalized);
+            }
           }
         }
       } catch {

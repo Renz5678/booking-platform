@@ -31,34 +31,64 @@ export default function AdminContentPage() {
 
   const loadContent = useCallback(async () => {
     try {
-      const res = await api.get<{
-        items?: Array<{ key: string; value: string }>;
-      }>("/admin/content");
-      const items = res?.items || [];
+      const res = await api.get<
+        | Array<{ key: string; value: string }>
+        | { items?: Array<{ key: string; value: string }> }
+      >("/admin/content");
+      const items = Array.isArray(res) ? res : res?.items || [];
 
-      const qBlock = items.find((i) => i.key === "homepage_quotes");
+      const qBlock =
+        items.find((i) => i.key === "quotes") ||
+        items.find((i) => i.key === "homepage_quotes");
       if (qBlock) {
         setRawQuotes(qBlock.value);
         try {
           const parsed = JSON.parse(qBlock.value);
-          if (Array.isArray(parsed)) setQuotes(parsed);
+          if (Array.isArray(parsed)) {
+            setQuotes(
+              parsed.map(
+                (q: { quote?: string; text?: string; author?: string }) => ({
+                  text: q.text || q.quote || "",
+                  author: q.author || "",
+                })
+              )
+            );
+          }
         } catch {
           // keep empty
         }
       }
 
-      const fBlock = items.find((i) => i.key === "faq_entries");
+      const fBlock =
+        items.find((i) => i.key === "faq") ||
+        items.find((i) => i.key === "faq_entries");
       if (fBlock) {
         setRawFaqs(fBlock.value);
         try {
           const parsed = JSON.parse(fBlock.value);
-          if (Array.isArray(parsed)) setFaqs(parsed);
+          if (Array.isArray(parsed)) {
+            setFaqs(
+              parsed.map(
+                (f: {
+                  q?: string;
+                  a?: string;
+                  question?: string;
+                  answer?: string;
+                }) => ({
+                  question: f.question || f.q || "",
+                  answer: f.answer || f.a || "",
+                })
+              )
+            );
+          }
         } catch {
           // keep empty
         }
       }
 
-      const cBlock = items.find((i) => i.key === "crisis_banner_text");
+      const cBlock =
+        items.find((i) => i.key === "crisis_banner") ||
+        items.find((i) => i.key === "crisis_banner_text");
       if (cBlock) setCrisisText(cBlock.value);
     } catch {
       toast.error("Unable to load site content.");
@@ -135,13 +165,13 @@ export default function AdminContentPage() {
                   </h2>
                   <button
                     type="button"
-                    disabled={savingKey === "crisis_banner_text"}
+                    disabled={savingKey === "crisis_banner"}
                     onClick={() =>
-                      saveContentKey("crisis_banner_text", crisisText)
+                      saveContentKey("crisis_banner", crisisText)
                     }
                     className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-50"
                   >
-                    {savingKey === "crisis_banner_text" ? "Saving…" : "Save"}
+                    {savingKey === "crisis_banner" ? "Saving…" : "Save"}
                   </button>
                 </div>
                 <textarea
@@ -176,16 +206,23 @@ export default function AdminContentPage() {
                     )}
                     <button
                       type="button"
-                      disabled={savingKey === "homepage_quotes"}
+                      disabled={savingKey === "quotes"}
                       onClick={() =>
                         saveContentKey(
-                          "homepage_quotes",
-                          rawMode ? rawQuotes : JSON.stringify(quotes)
+                          "quotes",
+                          rawMode
+                            ? rawQuotes
+                            : JSON.stringify(
+                                quotes.map((q) => ({
+                                  quote: q.text,
+                                  author: q.author,
+                                }))
+                              )
                         )
                       }
                       className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-50"
                     >
-                      {savingKey === "homepage_quotes" ? "Saving…" : "Save"}
+                      {savingKey === "quotes" ? "Saving…" : "Save"}
                     </button>
                   </div>
                 </div>
@@ -284,16 +321,23 @@ export default function AdminContentPage() {
                     )}
                     <button
                       type="button"
-                      disabled={savingKey === "faq_entries"}
+                      disabled={savingKey === "faq"}
                       onClick={() =>
                         saveContentKey(
-                          "faq_entries",
-                          rawMode ? rawFaqs : JSON.stringify(faqs)
+                          "faq",
+                          rawMode
+                            ? rawFaqs
+                            : JSON.stringify(
+                                faqs.map((f) => ({
+                                  q: f.question,
+                                  a: f.answer,
+                                }))
+                              )
                         )
                       }
                       className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-50"
                     >
-                      {savingKey === "faq_entries" ? "Saving…" : "Save"}
+                      {savingKey === "faq" ? "Saving…" : "Save"}
                     </button>
                   </div>
                 </div>

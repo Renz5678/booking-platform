@@ -8,7 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 import { api } from "@/lib/api";
 import { getTimeBasedGreeting } from "@/lib/routes";
-import type { Booking } from "@/types";
+import type { Booking, CounselorProfile } from "@/types";
 
 function formatManilaDateTime(iso: string): string {
   return new Date(iso).toLocaleString("en-US", {
@@ -25,15 +25,24 @@ export default function CounselorDashboardPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [profile, setProfile] = useState<CounselorProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
     const loadBookings = async () => {
       try {
-        const data = await api.get<Booking[]>("/bookings/counselor/me");
+        const [data, myProfile] = await Promise.all([
+          api.get<Booking[]>("/bookings/counselor/me"),
+          api
+            .get<CounselorProfile>("/counselors/me/profile")
+            .catch(() => null),
+        ]);
         if (active && Array.isArray(data)) {
           setBookings(data);
+        }
+        if (active && myProfile) {
+          setProfile(myProfile);
         }
       } catch {
         if (active) toast.error("Unable to load your counselor schedule.");
@@ -101,11 +110,12 @@ export default function CounselorDashboardPage() {
             </div>
           </div>
 
-          {/* Pending Account Notice if inactive */}
-          {user && user.is_active === false && (
+          {/* Pending or Deactivated Account Notice */}
+          {profile && (!profile.is_active || !profile.is_verified) && (
             <div className="rounded-2xl border border-status-warning/30 bg-status-warning-bg p-4 text-sm text-status-warning">
-              Your counselor profile is currently pending admin verification.
-              Make sure your PRC credentials and bio are complete in{" "}
+              {!profile.is_verified
+                ? "Your counselor profile is currently pending admin verification. Make sure your PRC credentials and bio are complete in "
+                : "Your counselor profile is currently deactivated and hidden from the public directory. Contact an admin or update "}
               <Link href="/counselor/profile" className="font-semibold underline">
                 Profile Setup
               </Link>

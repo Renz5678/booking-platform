@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useState } from "react";
 import { useToast } from "@/context/ToastContext";
 import { api, ApiError } from "@/lib/api";
+import { validatePasswordStrength } from "@/lib/validation";
 
 function CounselorSetupForm() {
   const router = useRouter();
@@ -29,8 +30,9 @@ function CounselorSetupForm() {
       setError("Invalid or missing invitation token.");
       return;
     }
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters long.");
+    const pwErr = validatePasswordStrength(password);
+    if (pwErr) {
+      setError(pwErr);
       return;
     }
     if (password !== confirmPassword) {

@@ -5,6 +5,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { api, ApiError } from "@/lib/api";
 import { useAuth, type User } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
+import { validatePasswordStrength } from "@/lib/validation";
 
 export default function AccountSettingsPage() {
   const { user, checkAuth } = useAuth();
@@ -61,8 +62,9 @@ export default function AccountSettingsPage() {
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError("");
-    if (newPassword.length < 8) {
-      setPasswordError("New password must be at least 8 characters long.");
+    const pwErr = validatePasswordStrength(newPassword);
+    if (pwErr) {
+      setPasswordError(pwErr);
       return;
     }
     if (newPassword !== confirmPassword) {
