@@ -1,4 +1,5 @@
 "use client";
+import { captchaToken } from "@/lib/captcha";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -14,14 +15,43 @@ export default function SignupPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [otp, setOtp] = useState("");
   const [otpError, setOtpError] = useState("");
-  const [verifying, setVerifying] = useState(false);
+  const [resendingOtp, setResendingOtp] = useState(false);
+  const [resendStatus, setResendStatus] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [honeypot, setHoneypot] = useState("");
   const { executeRecaptcha } = useGoogleReCaptcha();
+
+  const handleResendOtp = async () => {
+    setResendingOtp(true);
+    setResendStatus(null);
+    setOtpError("");
+    try {
+      const token = await captchaToken(executeRecaptcha, "recovery");
+      await api.post("/auth/resend-otp", {
+        email,
+        captcha_token: token,
+      });
+      setResendStatus({
+        message: "A new verification code has been sent to your email.",
+        type: "success",
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof ApiError ? err.message : (err as Error).message;
+      setResendStatus({
+        message: msg || "Failed to resend code. Please try again.",
+        type: "error",
+      });
+    } finally {
+      setResendingOtp(false);
+    }
+  };
 
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setOtpError("");
+    setResendingOtp(false);
     setVerifying(true);
 
     try {
@@ -40,21 +70,19 @@ export default function SignupPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (honeypot) return;
     setError("");
     setLoading(true);
 
     try {
-      if (!executeRecaptcha) {
-        throw new Error("reCAPTCHA not loaded yet. Please try again in a moment.");
-      }
-
-      const captchaToken = await executeRecaptcha("signup");
+      const token = await captchaToken(executeRecaptcha, "signup");
 
       await api.post("/auth/signup", {
         full_name: fullName, 
         email, 
         password,
-        captcha_token: captchaToken
+        captcha_token: token,
+        website: honeypot
       });
 
       setSuccess(true);
@@ -113,8 +141,20 @@ export default function SignupPage() {
               <p className="text-on-surface-variant mb-6">We've sent a 6-digit code to <strong>{email}</strong>. Please enter it below.</p>
               
               <form onSubmit={handleVerifyOtp} className="space-y-5 text-left">
+                {resendStatus && (
+                  <div
+                    role={resendStatus.type === "error" ? "alert" : "status"}
+                    className={`p-3 rounded-lg text-sm text-center ${
+                      resendStatus.type === "error"
+                        ? "bg-error-container text-on-error-container"
+                        : "bg-secondary-container text-on-secondary-container"
+                    }`}
+                  >
+                    {resendStatus.message}
+                  </div>
+                )}
                 {otpError && (
-                  <div className="bg-error-container text-on-error-container p-3 rounded-lg text-sm text-center">
+                  <div role="alert" className="bg-error-container text-on-error-container p-3 rounded-lg text-sm text-center">
                     {otpError}
                   </div>
                 )}
@@ -130,6 +170,17 @@ export default function SignupPage() {
                     placeholder="------" 
                     required 
                   />
+                </div>
+
+                <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={handleResendOtp}
+                    disabled={resendingOtp || verifying}
+                    className="text-primary hover:underline text-sm font-medium disabled:opacity-50"
+                  >
+                    {resendingOtp ? "Resending code..." : "Resend verification code"}
+                  </button>
                 </div>
                 <button
                   type="submit"
@@ -155,6 +206,16 @@ export default function SignupPage() {
                   {error}
                 </div>
               )}
+
+              <input
+                type="text"
+                name="website"
+                value={honeypot}
+                onChange={(e) => setHoneypot(e.target.value)}
+                style={{ display: "none" }}
+                tabIndex={-1}
+                autoComplete="off"
+              />
               
               <div>
                 <label className="block text-[12px] font-semibold tracking-wider text-on-surface-variant mb-1 ml-1" htmlFor="fullName">Full Name</label>

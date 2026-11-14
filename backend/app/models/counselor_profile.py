@@ -14,6 +14,7 @@ class CounselorProfile(Base):
     bio = Column(String, nullable=True)
     photo_url = Column(String, nullable=True)
     specialization_tags = Column(JSON, default=list)
+    credential_object = Column(JSON, nullable=True)
     credentials_url = Column(String, nullable=True)
     is_verified = Column(Boolean, default=False)
     is_active = Column(Boolean, default=False)
@@ -24,3 +25,7 @@ class CounselorProfile(Base):
     user = relationship("User", back_populates="counselor_profile")
     availabilities = relationship("Availability", back_populates="counselor")
     bookings = relationship("Booking", back_populates="counselor")
+
+    @property
+    def has_credentials(self):
+        return bool(self.credential_object)

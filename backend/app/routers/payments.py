@@ -2,7 +2,7 @@ import hashlib
 import hmac
 import logging
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -29,6 +29,12 @@ async def paymongo_webhook(
     Extracts the booking ID, PayMongo Payment ID, and payment method
     from the event payload.
     """
+    if not settings.PAYMONGO_WEBHOOK_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="PayMongo webhooks are not configured",
+        )
+
     if not paymongo_signature:
         raise HTTPException(status_code=400, detail="Missing signature header")
 

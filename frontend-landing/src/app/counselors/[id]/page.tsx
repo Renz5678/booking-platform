@@ -5,6 +5,13 @@ import { api } from "@/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+function formatLocalDate(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export default function PublicCounselorProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const router = useRouter();
@@ -13,8 +20,7 @@ export default function PublicCounselorProfilePage({ params }: { params: Promise
   const [loading, setLoading] = useState(true);
   
   const [selectedDate, setSelectedDate] = useState(() => {
-    const d = new Date();
-    return d.toISOString().split("T")[0]; // YYYY-MM-DD
+    return formatLocalDate(new Date());
   });
   const [slots, setSlots] = useState<{start: string, end: string}[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
@@ -38,8 +44,11 @@ export default function PublicCounselorProfilePage({ params }: { params: Promise
     const fetchSlots = async () => {
       setSlotsLoading(true);
       try {
-        const data = await api.get(`/availability/${counselor.id}/slots?date=${selectedDate}`);
-        setSlots(data || []);
+        const data = await api.get(
+          `/availability/${counselor.id}/slots?start_date=${selectedDate}&end_date=${selectedDate}&duration=60`
+        );
+        const daySlots = data?.[selectedDate]?.available || [];
+        setSlots(daySlots);
       } catch (err) {
         console.error(err);
         setSlots([]);
@@ -50,12 +59,8 @@ export default function PublicCounselorProfilePage({ params }: { params: Promise
     fetchSlots();
   }, [counselor, selectedDate]);
 
-  const handleBook = (slotStart: string) => {
-    // Instead of a full modal here, we can redirect to a booking flow or 
-    // open a simplified modal. Given instructions, we'll redirect to a 
-    // hypothetical generic booking flow or simulate it. 
-    // Usually there's a Bookings modal in the list page.
-    alert(`Initiating booking for ${new Date(slotStart).toLocaleTimeString()}... Please use the main counselors list to complete bookings or implement the modal here.`);
+  const handleBook = () => {
+    router.push(`/counselors?book=${counselor.id}`);
   };
 
   if (loading) {

@@ -11,6 +11,9 @@ from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy import func
+from app.routers.recovery import digest
+from app.services.account_limits import account_limit
 
 from app.config import settings
 from app.core.encryption import encrypt_token
@@ -56,7 +59,7 @@ async def signup(
         raise HTTPException(status_code=400, detail="Invalid CAPTCHA")
 
     # Check if user already exists
-    result = await db.execute(select(User).where(User.email == user_data.email))
+    result = await db.execute(select(User).where(func.lower(User.email) == str(user_data.email).strip().lower()))
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already registered")
 
@@ -65,15 +68,18 @@ async def signup(
     otp = "".join(secrets.choice("0123456789") for _ in range(6))
     
     new_user = User(
-        email=user_data.email,
+        email=str(user_data.email).strip().lower(),
         password_hash=hashed_password,
         full_name=user_data.full_name,
         role=RoleEnum.client,
         is_verified=False,
-        verification_otp=otp,
+        verification_otp=digest(otp),
         verification_otp_expires_at=datetime.now(timezone.utc) + timedelta(minutes=15)
     )
     db.add(new_user)
+    await db.flush()
+    from app.services.outbox import enqueue
+    await enqueue(db, "signup:" + new_user.id, "otp_email", {"user_id": new_user.id, "encrypted_secret": encrypt_token(otp)})
 
     try:
         await db.commit()
@@ -83,7 +89,7 @@ async def signup(
         raise HTTPException(status_code=400, detail="Email already registered")
 
     # Send the verification email asynchronously
-    asyncio.create_task(send_verification_email(new_user.email, otp))
+    # Delivery is persisted in the outbox transaction.
 
     return {"msg": "Signup successful. Please check your email for the OTP."}
 
@@ -92,7 +98,7 @@ async def signup(
 @limiter.limit("10/15minute")
 async def verify_otp(request: Request, data: OTPVerify, db: AsyncSession = Depends(get_db)):
     """Verify a user's email address using the 6-digit OTP."""
-    result = await db.execute(select(User).where(User.email == data.email))
+    result = await db.execute(select(User).where(func.lower(User.email) == str(data.email).strip().lower()))
     user = result.scalar_one_or_none()
 
     if not user:
@@ -101,7 +107,8 @@ async def verify_otp(request: Request, data: OTPVerify, db: AsyncSession = Depen
     if user.is_verified:
         return {"msg": "Email already verified"}
 
-    if user.verification_otp != data.otp:
+    await account_limit("verify_otp", str(data.email), 5, 900)
+    if not secrets.compare_digest(user.verification_otp or "", digest(data.otp)):
         raise HTTPException(status_code=400, detail="Invalid OTP")
         
     # Compare timezone-aware datetimes
@@ -126,7 +133,7 @@ async def verify_otp(request: Request, data: OTPVerify, db: AsyncSession = Depen
 @limiter.limit("10/hour")
 async def accept_invite(request: Request, data: AcceptInviteRequest, db: AsyncSession = Depends(get_db)):
     """Accept counselor invite and set password."""
-    result = await db.execute(select(User).where(User.email == data.email))
+    result = await db.execute(select(User).where(func.lower(User.email) == str(data.email).strip().lower()))
     user = result.scalar_one_or_none()
     
     if not user or user.invite_token != data.token:
@@ -158,7 +165,7 @@ async def login(
     db: AsyncSession = Depends(get_db),
 ):
     """Login and set a JWT cookie."""
-    result = await db.execute(select(User).where(User.email == login_data.email))
+    result = await db.execute(select(User).where(func.lower(User.email) == str(login_data.email).strip().lower()))
     user = result.scalar_one_or_none()
 
     if user:
@@ -190,17 +197,20 @@ async def login(
     user.locked_until = None
     await db.commit()
 
-    if not user.is_verified:
+    if not user.is_verified or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Please verify your email before logging in",
         )
 
     # Issue token
-    access_token = create_access_token(data={"sub": str(user.id)})
-    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    from app.services.sessions import issue_session
+    access_token, refresh_token = await issue_session(db, user.id, staff=user.role != RoleEnum.client)
 
-    is_production = getattr(settings, "FRONTEND_URL", "").startswith("https")
+    samesite = getattr(settings, "COOKIE_SAMESITE", "lax").lower()
+    is_production = getattr(settings, "FRONTEND_URL", "").startswith("https") or settings.ENVIRONMENT == "production"
+    if samesite == "none":
+        is_production = True
 
     # Set httpOnly cookie
     response.set_cookie(
@@ -208,8 +218,9 @@ async def login(
         value=access_token,
         httponly=True,
         secure=is_production,
-        samesite="lax",
+        samesite=samesite,
         max_age=30 * 60,  # 30 minutes
+        path="/",
     )
     
     response.set_cookie(
@@ -217,18 +228,35 @@ async def login(
         value=refresh_token,
         httponly=True,
         secure=is_production,
-        samesite="lax",
+        samesite=samesite,
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        path="/",
     )
 
-    return {"msg": "Login successful"}
+    return {"msg": "Login successful", "mfa_required": user.role != RoleEnum.client,
+            "mfa_enrollment_required": user.role != RoleEnum.client and not user.mfa_enabled}
 
 
 @router.post("/logout")
-async def logout(response: Response):
-    """Logout by clearing the JWT cookie."""
-    response.delete_cookie("access_token")
-    response.delete_cookie("refresh_token")
+async def logout(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
+    import jwt
+    from jwt import InvalidTokenError as JWTError
+    from app.services.sessions import load_session
+    try:
+        claims = jwt.decode(request.cookies.get("refresh_token", ""), settings.JWT_SECRET, algorithms=["HS256"], issuer="alaga-api", audience="alaga-web", options={"require": ["exp", "sub", "iss", "aud"]})
+        session = await load_session(db, claims.get("sid", ""))
+        session.revoked = True
+        await db.commit()
+    except (JWTError, HTTPException):
+        pass
+    """Logout by clearing the JWT cookies."""
+    samesite = getattr(settings, "COOKIE_SAMESITE", "lax").lower()
+    is_production = getattr(settings, "FRONTEND_URL", "").startswith("https") or settings.ENVIRONMENT == "production"
+    if samesite == "none":
+        is_production = True
+
+    response.delete_cookie(key="access_token", httponly=True, secure=is_production, samesite=samesite, path="/")
+    response.delete_cookie(key="refresh_token", httponly=True, secure=is_production, samesite=samesite, path="/")
     return {"msg": "Logout successful"}
 
 
@@ -244,29 +272,41 @@ async def refresh_token(request: Request, response: Response, db: AsyncSession =
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token")
 
     try:
-        user_id = int(user_id_str)
-    except ValueError:
+        import uuid
+        user_uuid = uuid.UUID(str(user_id_str))
+    except (ValueError, AttributeError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token subject")
 
-    result = await db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(select(User).where(User.id == str(user_uuid)))
     user = result.scalar_one_or_none()
 
-    if not user or not user.is_verified:
+    if not user or not user.is_verified or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
 
     # Issue new tokens
-    new_access_token = create_access_token(data={"sub": str(user.id)})
-    new_refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    import jwt
+    from app.services.sessions import load_session, issue_session, token_hash
+    claims = jwt.decode(refresh_token, settings.JWT_SECRET, algorithms=["HS256"], issuer="alaga-api", audience="alaga-web", options={"require": ["exp", "sub", "iss", "aud"]})
+    session = await load_session(db, claims.get("sid", ""))
+    if session.user_id != str(user.id) or not secrets.compare_digest(session.refresh_hash, token_hash(refresh_token)):
+        session.revoked = True
+        await db.commit()
+        raise HTTPException(status_code=401, detail="Refresh token reuse detected")
+    new_access_token, new_refresh_token = await issue_session(db, user.id, session)
 
-    is_production = getattr(settings, "FRONTEND_URL", "").startswith("https")
+    samesite = getattr(settings, "COOKIE_SAMESITE", "lax").lower()
+    is_production = getattr(settings, "FRONTEND_URL", "").startswith("https") or settings.ENVIRONMENT == "production"
+    if samesite == "none":
+        is_production = True
 
     response.set_cookie(
         key="access_token",
         value=new_access_token,
         httponly=True,
         secure=is_production,
-        samesite="lax",
+        samesite=samesite,
         max_age=30 * 60,
+        path="/",
     )
     
     response.set_cookie(
@@ -274,8 +314,9 @@ async def refresh_token(request: Request, response: Response, db: AsyncSession =
         value=new_refresh_token,
         httponly=True,
         secure=is_production,
-        samesite="lax",
+        samesite=samesite,
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        path="/",
     )
 
     return {"msg": "Tokens refreshed"}
@@ -314,6 +355,8 @@ async def change_password(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is incorrect",
         )
+    from app.services.sessions import revoke_all
+    await revoke_all(db, current_user.id)
     current_user.password_hash = get_password_hash(data.new_password)
     await db.commit()
     logger.info("Password changed for user %s", current_user.id)

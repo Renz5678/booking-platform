@@ -50,6 +50,6 @@ class AuditLoggingMiddleware(BaseHTTPMiddleware):
                     request.url.path,
                     client_ip,
                     process_time,
-                    str(e),
+                    type(e).__name__,
                 )
             raise

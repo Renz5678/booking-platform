@@ -1,27 +1,28 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import ProtectedRoute, { clearAuthCache } from "../auth/ProtectedRoute";
-import { api } from "@/lib/api";
+import { usePathname } from "next/navigation";
+import ProtectedRoute from "../auth/ProtectedRoute";
+import { useAuth, RoleEnum } from "@/context/AuthContext";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
-  allowedRoles: ("client" | "counselor" | "admin")[];
-  role: "client" | "counselor" | "admin";
+  allowedRoles?: RoleEnum[];
+  role?: RoleEnum;
 }
 
-export default function DashboardLayout({ children, allowedRoles, role }: DashboardLayoutProps) {
+export default function DashboardLayout({ children, allowedRoles, role: initialRole }: DashboardLayoutProps) {
   const pathname = usePathname();
-  const router = useRouter();
+  const { user, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const role = initialRole || user?.role || "client";
+  const effectiveAllowedRoles = allowedRoles || [role];
 
   const handleLogout = async () => {
     try {
-      await api.post("/auth/logout", {});
-      clearAuthCache();
-      router.push("/");
+      await logout();
     } catch (err) {
       console.error("Failed to log out", err);
     }
@@ -48,6 +49,9 @@ export default function DashboardLayout({ children, allowedRoles, role }: Dashbo
       { name: "Dashboard", path: "/admin/dashboard" },
       { name: "Counselors", path: "/admin/counselors" },
       { name: "Bookings", path: "/admin/bookings" },
+      { name: "Payments", path: "/admin/payments" },
+      { name: "Reconciliation", path: "/admin/reconciliation" },
+      { name: "Operations", path: "/admin/operations" },
       { name: "Analytics", path: "/admin/analytics" },
       { name: "Content", path: "/admin/content" },
     ];
@@ -55,7 +59,7 @@ export default function DashboardLayout({ children, allowedRoles, role }: Dashbo
 
   if (role === "admin") {
     return (
-      <ProtectedRoute allowedRoles={allowedRoles}>
+      <ProtectedRoute allowedRoles={effectiveAllowedRoles}>
         <div className="font-sans text-on-surface antialiased flex bg-surface min-h-screen">
           {/* SideNavBar */}
           <nav className="bg-surface-container-low border-r border-outline-variant shadow-sm h-full w-64 fixed left-0 top-0 flex flex-col p-4 gap-2 z-50">
@@ -74,7 +78,23 @@ export default function DashboardLayout({ children, allowedRoles, role }: Dashbo
                       : "text-on-surface-variant hover:bg-surface-container-high"
                   }`}
                 >
-                  <span className="material-symbols-outlined">{item.name === "Dashboard" ? "dashboard" : item.name === "Counselors" ? "groups" : item.name === "Bookings" ? "event_note" : item.name === "Analytics" ? "analytics" : "article"}</span>
+                  <span className="material-symbols-outlined">
+                    {item.name === "Dashboard"
+                      ? "dashboard"
+                      : item.name === "Counselors"
+                      ? "groups"
+                      : item.name === "Bookings"
+                      ? "event_note"
+                      : item.name === "Payments"
+                      ? "payments"
+                      : item.name === "Reconciliation"
+                      ? "account_balance"
+                      : item.name === "Operations"
+                      ? "settings_suggest"
+                      : item.name === "Analytics"
+                      ? "analytics"
+                      : "article"}
+                  </span>
                   <span className="font-label-md text-[14px] font-medium">{item.name}</span>
                 </Link>
               ))}
@@ -98,7 +118,7 @@ export default function DashboardLayout({ children, allowedRoles, role }: Dashbo
                 <span className="material-symbols-outlined">shield_person</span>
               </div>
               <div>
-                <p className="font-label-md text-[14px] font-bold text-primary">Admin User</p>
+                <p className="font-label-md text-[14px] font-bold text-primary">{user?.full_name || "Admin User"}</p>
                 <p className="font-label-sm text-[12px] text-on-surface-variant">Admin</p>
               </div>
             </div>
@@ -116,7 +136,7 @@ export default function DashboardLayout({ children, allowedRoles, role }: Dashbo
   }
 
   return (
-    <ProtectedRoute allowedRoles={allowedRoles}>
+    <ProtectedRoute allowedRoles={effectiveAllowedRoles}>
       <div className="text-on-background font-body-md antialiased min-h-screen flex flex-col bg-[#E1F4F1]">
         {/* Navigation */}
         <nav className="bg-surface docked full-width shadow-sm z-40 relative">

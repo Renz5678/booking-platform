@@ -1,69 +1,38 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
-import { api } from "@/lib/api";
-
-interface User {
-  id: string;
-  email: string;
-  full_name: string;
-  role: "client" | "counselor" | "admin";
-}
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth, RoleEnum } from "@/context/AuthContext";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  allowedRoles?: ("client" | "counselor" | "admin")[];
+  allowedRoles?: RoleEnum[];
 }
 
-let cachedUser: User | null = null;
-
 export const clearAuthCache = () => {
-  cachedUser = null;
+  // Maintained for backwards compatibility
 };
 
 export default function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
   const router = useRouter();
-  const pathname = usePathname();
-  const [user, setUser] = useState<User | null>(cachedUser);
-  const [loading, setLoading] = useState(!cachedUser);
+  const { user, isLoading } = useAuth();
 
   useEffect(() => {
-    if (cachedUser) {
-      if (allowedRoles && !allowedRoles.includes(cachedUser.role)) {
-        if (cachedUser.role === "client") router.push("/dashboard");
-        else if (cachedUser.role === "counselor") router.push("/counselor/dashboard");
-        else if (cachedUser.role === "admin") router.push("/admin/dashboard");
-      }
-      return;
-    }
-
-    const verifyAuth = async () => {
-      try {
-        const data: User = await api.get("/auth/me");
-        cachedUser = data;
-        setUser(data);
-
-        // Check role authorization
-        if (allowedRoles && !allowedRoles.includes(data.role)) {
-          // Route them to their respective dashboards
-          if (data.role === "client") router.push("/dashboard");
-          else if (data.role === "counselor") router.push("/counselor/dashboard");
-          else if (data.role === "admin") router.push("/admin/dashboard");
-          return;
-        }
-
-        setLoading(false);
-      } catch (_err) {
-        // Not authenticated or error
+    if (!isLoading) {
+      if (!user) {
         router.push("/login");
+        return;
       }
-    };
 
-    verifyAuth();
-  }, [router, pathname, allowedRoles]);
+      if (allowedRoles && !allowedRoles.includes(user.role)) {
+        if (user.role === "client") router.push("/dashboard");
+        else if (user.role === "counselor") router.push("/counselor/dashboard");
+        else if (user.role === "admin") router.push("/admin/dashboard");
+      }
+    }
+  }, [user, isLoading, allowedRoles, router]);
 
-  if (loading) {
+  if (isLoading || !user || (allowedRoles && !allowedRoles.includes(user.role))) {
     return (
       <div className="min-h-screen flex flex-col bg-[#E1F4F1] animate-pulse">
         <div className="h-16 bg-surface shadow-sm full-width w-full mb-12"></div>

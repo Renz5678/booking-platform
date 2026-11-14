@@ -19,8 +19,13 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column('users', sa.Column('invite_token', sa.String(), nullable=True))
-    op.add_column('users', sa.Column('invite_token_expires_at', sa.DateTime(timezone=True), nullable=True))
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    columns = [c['name'] for c in inspector.get_columns('users')]
+    if 'invite_token' not in columns:
+        op.add_column('users', sa.Column('invite_token', sa.String(), nullable=True))
+    if 'invite_token_expires_at' not in columns:
+        op.add_column('users', sa.Column('invite_token_expires_at', sa.DateTime(timezone=True), nullable=True))
 
 
 def downgrade() -> None:

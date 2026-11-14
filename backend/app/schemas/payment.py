@@ -24,5 +24,10 @@ class PaymentResponse(PaymentBase):
     status: PaymentStatus
     created_at: datetime
     paid_at: datetime | None = None
+    transaction_reference: str | None = None
+    review_deadline: datetime | None = None
+    review_reason: str | None = None
+    refund_reference: str | None = None
+    refunded_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)

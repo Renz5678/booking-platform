@@ -22,7 +22,11 @@ async def test_signup_verify_login_flow(async_client: AsyncClient, db: AsyncSess
 
     result = await db.execute(select(User).where(User.email == signup_data["email"]))
     user = result.scalar_one_or_none()
-    otp = user.verification_otp
+    from app.models.operations import OutboxJob
+    from app.core.encryption import decrypt_token
+    job = (await db.execute(select(OutboxJob).where(OutboxJob.operation_key == "signup:" + user.id))).scalar_one()
+    otp = decrypt_token(job.payload["encrypted_secret"])
+    assert otp != user.verification_otp
 
     # 2. Login rejected before verification
     login_data = {

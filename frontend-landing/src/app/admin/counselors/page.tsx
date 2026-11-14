@@ -132,11 +132,11 @@ export default function AdminCounselorsPage() {
     e.preventDefault();
     setInviteLoading(true);
     try {
-      await api.post("/admin/counselors/invite", { email: inviteEmail, name: inviteName });
+      await api.post("/admin/counselors/invite", { email: inviteEmail, full_name: inviteName });
       setShowInviteModal(false);
       setInviteEmail("");
       setInviteName("");
-      alert("Invitation sent!");
+      alert("Invitation sent successfully!");
     } catch (err) {
       console.error(err);
       alert("Failed to send invite");

@@ -25,10 +25,10 @@ async def submit_contact_form(
     Public endpoint to submit a contact form message.
     Stores the message in the database for admins to review.
     """
-    if data.honeypot:
+    if data.honeypot or data.website:
         raise HTTPException(status_code=400, detail="Bot detected")
 
-    if not await verify_captcha(data.captcha_token):
+    if not await verify_captcha(data.captcha_token, "contact"):
         raise HTTPException(status_code=400, detail="Invalid CAPTCHA token")
 
     new_message = ContactMessage(

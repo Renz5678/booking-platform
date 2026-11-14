@@ -19,7 +19,11 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column('counselor_profiles', sa.Column('photo_url', sa.String(), nullable=True))
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    columns = [c['name'] for c in inspector.get_columns('counselor_profiles')]
+    if 'photo_url' not in columns:
+        op.add_column('counselor_profiles', sa.Column('photo_url', sa.String(), nullable=True))
 
 
 def downgrade() -> None:

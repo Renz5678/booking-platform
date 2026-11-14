@@ -1,10 +1,13 @@
 "use client";
+import { useGoogleReCaptcha } from "react-google-recaptcha-v3";
+import { captchaToken } from "@/lib/captcha";
 
 import { useState } from "react";
 import { api } from "@/lib/api";
 import Link from "next/link";
 
 export default function ContactPage() {
+  const { executeRecaptcha } = useGoogleReCaptcha();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
@@ -23,7 +26,7 @@ export default function ContactPage() {
         name,
         email,
         message,
-        captcha_token: "dummy_token", // Replace with real reCAPTCHA/hCaptcha integration if needed
+        captcha_token: await captchaToken(executeRecaptcha, "contact"),
         website
       });
       setStatusMsg({ text: "Your message has been sent successfully. We will get back to you soon.", type: "success" });

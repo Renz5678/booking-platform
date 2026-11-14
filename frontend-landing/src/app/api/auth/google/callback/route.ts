@@ -8,7 +8,7 @@ export async function GET(request: Request) {
   if (code && state) {
     // Forward to backend which handles the token exchange and db save
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-    return NextResponse.redirect(`${apiUrl}/auth/google/callback?code=${code}&state=${state}`);
+    return NextResponse.redirect(`${apiUrl}/calendar/google/callback?${new URLSearchParams({ code, state }).toString()}`);
   }
   
   // Fallback if missing params

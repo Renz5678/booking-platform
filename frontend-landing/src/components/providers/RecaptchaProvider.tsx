@@ -3,7 +3,7 @@
 import { GoogleReCaptchaProvider } from "react-google-recaptcha-v3";
 import { ReactNode } from "react";
 
-export default function RecaptchaProvider({ children }: { children: ReactNode }) {
+export default function RecaptchaProvider({ children, nonce }: { children: ReactNode; nonce?: string }) {
   const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
   
   if (!siteKey) {
@@ -11,7 +11,7 @@ export default function RecaptchaProvider({ children }: { children: ReactNode })
   }
 
   return (
-    <GoogleReCaptchaProvider reCaptchaKey={siteKey}>
+    <GoogleReCaptchaProvider reCaptchaKey={siteKey} scriptProps={{ nonce }}>
       {children}
     </GoogleReCaptchaProvider>
   );

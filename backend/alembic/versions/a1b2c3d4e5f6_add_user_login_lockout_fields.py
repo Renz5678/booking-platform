@@ -19,8 +19,13 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column('users', sa.Column('failed_login_attempts', sa.Integer(), nullable=False, server_default='0'))
-    op.add_column('users', sa.Column('locked_until', sa.DateTime(timezone=True), nullable=True))
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    columns = [c['name'] for c in inspector.get_columns('users')]
+    if 'failed_login_attempts' not in columns:
+        op.add_column('users', sa.Column('failed_login_attempts', sa.Integer(), nullable=False, server_default='0'))
+    if 'locked_until' not in columns:
+        op.add_column('users', sa.Column('locked_until', sa.DateTime(timezone=True), nullable=True))
 
 
 def downgrade() -> None:

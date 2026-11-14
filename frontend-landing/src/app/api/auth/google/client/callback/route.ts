@@ -8,7 +8,7 @@ export async function GET(request: Request) {
   if (code && state) {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     return NextResponse.redirect(
-      `${apiUrl}/auth/google/client/callback?code=${code}&state=${state}`
+      `${apiUrl}/calendar/google/client/callback?${new URLSearchParams({ code, state }).toString()}`
     );
   }
 

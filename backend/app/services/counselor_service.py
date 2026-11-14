@@ -50,9 +50,6 @@ async def create_counselor_profile(
         user_id=user_id,
         bio=profile_data.bio,
         specialization_tags=profile_data.specialization_tags,
-        credentials_url=(
-            str(profile_data.credentials_url) if profile_data.credentials_url else None
-        ),
         is_verified=False,  # Must be verified by admin
         is_active=False,
     )
@@ -78,9 +75,11 @@ async def update_counselor_profile(
         profile.bio = update_data.bio
     if update_data.specialization_tags is not None:
         profile.specialization_tags = update_data.specialization_tags
-    if update_data.credentials_url is not None:
-        profile.credentials_url = str(update_data.credentials_url)
-
     await db.commit()
-    await db.refresh(profile)
-    return profile
+    stmt = (
+        select(CounselorProfile)
+        .where(CounselorProfile.id == profile.id)
+        .options(selectinload(CounselorProfile.user))
+    )
+    result = await db.execute(stmt)
+    return result.scalar_one()

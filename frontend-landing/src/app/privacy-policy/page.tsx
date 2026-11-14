@@ -98,6 +98,13 @@ export default function PrivacyPolicyPage() {
               <p><strong>Address:</strong> Manila, Philippines</p>
             </div>
           </section>
+
+          <section id="terms" className="pt-6 border-t border-outline-variant">
+            <h2 className="font-headline-md text-primary mb-3">7. Terms of Service &amp; Cancellation Policy</h2>
+            <p className="text-on-surface-variant italic">
+              Terms of service and payment/cancellation policies are pending owner approval. For questions regarding active bookings or manual payment verification, please contact support.
+            </p>
+          </section>
         </div>
       </div>
     </div>

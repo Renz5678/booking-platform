@@ -3,3 +3,9 @@ stitch_alaga_counseling_platform_ui/
 prompts/
 .pytest_cache
 .env
+.env
+.env.*
+!.env.example
+
+# Local coding-agent implementation handoff
+/REMAINING_IMPLEMENTATION_HANDOFF.md

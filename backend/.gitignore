@@ -5,6 +5,9 @@ __pycache__/
 .pytest_cache/
 .coverage
 htmlcov/
-alembic.ini
 *.db
 scratch_*.py
+
+.venv/
+
+/data/*.local.json

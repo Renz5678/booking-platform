@@ -1,0 +1,51 @@
+# Create a separate Blueprint instance for staging and production.
+services:
+  - type: web
+    name: alaga-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements-lock.txt
+    preDeployCommand: alembic upgrade head
+    # Retain --no-proxy-headers so Uvicorn does not rewrite client IP using the spoofable
+    # leftmost X-Forwarded-For hop. Application rate limiting (rate_limit.py get_client_ip)
+    # securely extracts the trusted rightmost hop appended by Render's reverse proxy.
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --no-proxy-headers
+    healthCheckPath: /health/ready
+    envVars:
+      - fromGroup: alaga-secrets
+      - key: PUBLIC_LAUNCH_ENABLED
+        value: "false"
+      - key: PYTHON_VERSION
+        value: 3.12.12
+  - type: worker
+    name: alaga-worker
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements-lock.txt
+    startCommand: celery -A app.celery_app.celery_app worker --loglevel=INFO
+    envVars:
+      - fromGroup: alaga-secrets
+      - key: PYTHON_VERSION
+        value: 3.12.12
+  - type: worker
+    name: alaga-scheduler
+    runtime: python
+    rootDir: backend
+    numInstances: 1
+    buildCommand: pip install -r requirements-lock.txt
+    startCommand: celery -A app.celery_app.celery_app beat --loglevel=INFO --schedule=/tmp/alaga-beat
+    envVars:
+      - fromGroup: alaga-secrets
+      - key: PYTHON_VERSION
+        value: 3.12.12
+  - type: keyvalue
+    name: alaga-security-cache
+    plan: starter
+    ipAllowList: []
+    maxmemoryPolicy: noeviction
+databases:
+  - name: alaga-db
+    databaseName: alaga
+    user: alaga
+    plan: basic-256mb
+    ipAllowList: []

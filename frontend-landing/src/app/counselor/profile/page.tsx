@@ -4,15 +4,13 @@ import { useEffect, useState, useRef } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { api } from "@/lib/api";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
 interface CounselorProfile {
   id: string;
   bio: string;
   specialization_tags: string[];
   is_verified: boolean;
   is_active: boolean;
-  credentials_url?: string;
+  has_credentials?: boolean;
   photo_url?: string;
 }
 
@@ -38,6 +36,31 @@ export default function CounselorProfilePage() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoMessage, setPhotoMessage] = useState({ text: "", type: "" });
   const photoInputRef = useRef<HTMLInputElement>(null);
+
+  // Credential download UX state
+  const [downloadingCreds, setDownloadingCreds] = useState(false);
+  const [popupBlockedUrl, setPopupBlockedUrl] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  const handleDownloadCredentials = async () => {
+    setDownloadingCreds(true);
+    setPopupBlockedUrl(null);
+    setDownloadError(null);
+    try {
+      if (!profile?.id) return;
+      const result = await api.get<{ url: string }>(`/counselors/${profile.id}/credentials/download`);
+      const newWin = window.open(result.url, "_blank", "noopener,noreferrer");
+      if (!newWin || newWin.closed || typeof newWin.closed === "undefined") {
+        setPopupBlockedUrl(result.url);
+        // Clear signed URL from state after 60s
+        setTimeout(() => setPopupBlockedUrl(null), 60000);
+      }
+    } catch (err: unknown) {
+      setDownloadError((err as Error).message || "Failed to retrieve credential document.");
+    } finally {
+      setDownloadingCreds(false);
+    }
+  };
 
   useEffect(() => {
     fetchProfile();
@@ -97,16 +120,8 @@ export default function CounselorProfilePage() {
       const formData = new FormData();
       formData.append("file", selectedFile);
       
-      const res = await fetch(`${API_URL}/counselors/me/credentials`, {
-        method: 'POST',
-        credentials: 'include',
-        body: formData
-      });
-      
-      if (!res.ok) throw new Error("Upload failed");
-      
-      const data = await res.json();
-      setProfile(prev => prev ? { ...prev, credentials_url: data.credentials_url } : null);
+      const data = await api.post("/counselors/me/credentials", formData);
+      setProfile(prev => prev ? { ...prev, has_credentials: data.has_credentials } : null);
       setSelectedFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       setUploadMessage({ text: "Credentials uploaded successfully!", type: "success" });
@@ -141,15 +156,7 @@ export default function CounselorProfilePage() {
       const formData = new FormData();
       formData.append("file", selectedPhoto);
       
-      const res = await fetch(`${API_URL}/counselors/me/photo`, {
-        method: 'POST',
-        credentials: 'include',
-        body: formData
-      });
-      
-      if (!res.ok) throw new Error("Upload failed");
-      
-      const data = await res.json();
+      const data = await api.post("/counselors/me/photo", formData);
       setProfile(prev => prev ? { ...prev, photo_url: data.photo_url } : null);
       setSelectedPhoto(null);
       if (photoInputRef.current) photoInputRef.current.value = "";
@@ -330,17 +337,48 @@ export default function CounselorProfilePage() {
               
               <h2 className="font-headline-md text-primary mb-4 border-b border-surface-variant pb-2">Credentials</h2>
               
-              {profile.credentials_url && (
-                <div className="mb-6">
+              {profile.has_credentials && (
+                <div className="mb-6 space-y-2">
                   <p className="font-label-md text-on-surface-variant mb-2">Current Credentials</p>
-                  <a 
-                    href={profile.credentials_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 bg-secondary-container text-on-secondary-container px-4 py-2 rounded-lg font-label-md hover:opacity-90"
-                  >
-                    <span className="material-symbols-outlined">description</span> View Credentials
-                  </a>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleDownloadCredentials}
+                      disabled={downloadingCreds}
+                      className="inline-flex items-center gap-2 bg-secondary-container text-on-secondary-container px-4 py-2 rounded-lg font-label-md hover:opacity-90 disabled:opacity-50"
+                    >
+                      <span className="material-symbols-outlined">description</span>
+                      {downloadingCreds ? "Preparing download..." : "View Credentials"}
+                    </button>
+                    {downloadError && (
+                      <button
+                        type="button"
+                        onClick={handleDownloadCredentials}
+                        className="text-primary hover:underline text-sm font-medium"
+                      >
+                        Retry
+                      </button>
+                    )}
+                  </div>
+                  {popupBlockedUrl && (
+                    <div role="status" className="bg-secondary-container text-on-secondary-container p-3 rounded-lg text-sm flex items-center justify-between">
+                      <span>Popup blocked. Open credentials document directly:</span>
+                      <a
+                        href={popupBlockedUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => setPopupBlockedUrl(null)}
+                        className="font-bold underline ml-2"
+                      >
+                        Open Document
+                      </a>
+                    </div>
+                  )}
+                  {downloadError && (
+                    <div role="alert" className="bg-error-container text-on-error-container p-3 rounded-lg text-sm">
+                      {downloadError}
+                    </div>
+                  )}
                 </div>
               )}
               

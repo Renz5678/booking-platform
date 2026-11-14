@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, String
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, String, Integer
 from sqlalchemy.orm import relationship
 
 from app.db.base import Base
@@ -37,6 +37,9 @@ class Booking(Base):
         nullable=False,
     )
 
+    schedule_version = Column(Integer, nullable=False, default=1)
+    provisioning_status = Column(String, nullable=False, default="pending")
+    client_calendar_event_id = Column(String, nullable=True)
     meeting_link = Column(String, nullable=True)
     google_calendar_event_id = Column(String, nullable=True)
     created_at = Column(
@@ -50,8 +53,23 @@ class Booking(Base):
 
     @property
     def client_name(self) -> str | None:
-        return self.client.full_name if self.client else None
+        if "client" in self.__dict__ and self.client:
+            return self.client.full_name
+        return None
 
     @property
     def counselor_name(self) -> str | None:
-        return self.counselor.user.full_name if self.counselor and self.counselor.user else None
+        if "counselor" in self.__dict__ and self.counselor:
+            if "user" in self.counselor.__dict__ and self.counselor.user:
+                return self.counselor.user.full_name
+        return None
+
+    @property
+    def gcash_number(self) -> str | None:
+        from app.config import settings
+        return getattr(settings, "GCASH_NUMBER", "")
+
+    @property
+    def gcash_name(self) -> str | None:
+        from app.config import settings
+        return getattr(settings, "GCASH_NAME", "")

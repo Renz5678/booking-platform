@@ -1,0 +1,9 @@
+[
+  {
+    "email": "counselor@example.com",
+    "full_name": "Replace with counselor full name",
+    "bio": "Replace with approved professional biography",
+    "specialization_tags": ["Anxiety", "Stress"],
+    "initial_password_env": "ALAGA_COUNSELOR_1_PASSWORD"
+  }
+]

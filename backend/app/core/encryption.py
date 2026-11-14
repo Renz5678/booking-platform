@@ -27,8 +27,15 @@ def encrypt_token(token: str) -> str:
     return f.encrypt(token.encode('utf-8')).decode('utf-8')
 
 def decrypt_token(encrypted_token: str) -> str:
-    """Decrypts a stored encrypted token."""
+    """Decrypts a stored encrypted token, falling back gracefully if not encrypted."""
     if not encrypted_token:
         return encrypted_token
-    f = _get_fernet()
-    return f.decrypt(encrypted_token.encode('utf-8')).decode('utf-8')
+    from cryptography.fernet import InvalidToken
+    keys = [settings.ENCRYPTION_KEY, *filter(None, settings.LEGACY_ENCRYPTION_KEYS.split(","))]
+    for key in keys:
+        fernet = Fernet(base64.urlsafe_b64encode(hashlib.sha256(key.encode()).digest()))
+        try:
+            return fernet.decrypt(encrypted_token.encode()).decode()
+        except InvalidToken:
+            continue
+    raise ValueError("Encrypted value could not be authenticated; migration or key recovery required")

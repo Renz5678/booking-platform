@@ -13,7 +13,7 @@ from app.models.counselor_profile import CounselorProfile
 from app.models.payment import Payment, PaymentStatus
 from app.models.user import User
 from app.models.content import SiteContent
-from app.schemas.booking import BookingResponse
+from app.schemas.booking import AdminBookingResponse
 from app.schemas.content import ContentResponse, ContentUpdate
 from app.schemas.counselor import CounselorProfilePrivateResponse
 from app.schemas.user import CounselorInviteRequest
@@ -54,6 +54,24 @@ async def list_all_counselors(
         .order_by(CounselorProfile.is_verified.asc(), CounselorProfile.is_active.desc())
     )
     return result.scalars().all()
+
+
+@router.get("/counselors/{counselor_id}", response_model=CounselorProfilePrivateResponse)
+async def get_counselor_admin_detail(
+    counselor_id: str,
+    current_user: User = Depends(require_role(["admin"])),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: Get full details of a specific counselor profile (including pending/deactivated)."""
+    result = await db.execute(
+        select(CounselorProfile)
+        .options(selectinload(CounselorProfile.user))
+        .where(CounselorProfile.id == counselor_id)
+    )
+    counselor = result.scalar_one_or_none()
+    if not counselor:
+        raise HTTPException(status_code=404, detail="Counselor not found")
+    return counselor
 
 
 @router.post("/counselors/invite", response_model=dict)
@@ -221,7 +239,7 @@ async def reactivate_counselor(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/bookings", response_model=list[BookingResponse])
+@router.get("/bookings", response_model=list[AdminBookingResponse])
 async def get_all_bookings(
     current_user: User = Depends(require_role(["admin"])),
     db: AsyncSession = Depends(get_db),
@@ -244,6 +262,8 @@ async def get_all_bookings(
         .options(
             selectinload(Booking.client),
             selectinload(Booking.counselor).selectinload(CounselorProfile.user),
+            selectinload(Booking.payment),
+            selectinload(Booking.intake_form),
         )
         .order_by(Booking.scheduled_start.desc())
     )
@@ -255,7 +275,9 @@ async def get_all_bookings(
     if date_from is not None:
         query = query.where(Booking.scheduled_start >= date_from)
     if date_to is not None:
-        query = query.where(Booking.scheduled_start <= date_to)
+        from datetime import datetime, time, timezone
+        end_of_day = datetime.combine(date_to, time.max).replace(tzinfo=timezone.utc)
+        query = query.where(Booking.scheduled_start <= end_of_day)
 
     result = await db.execute(query)
     return result.scalars().all()
@@ -274,14 +296,14 @@ async def get_analytics(
     """
     Admin: Platform analytics with totals, status breakdown, and per-counselor stats.
     """
-    from sqlalchemy import func
+    from sqlalchemy import case, func
 
     # --- Overall totals ---
     bookings_res = await db.execute(select(func.count(Booking.id)))
     total_bookings = bookings_res.scalar_one_or_none() or 0
 
     revenue_res = await db.execute(
-        select(func.sum(Payment.amount)).where(Payment.status == PaymentStatus.paid)
+        select(func.sum(Payment.amount)).where(Payment.status.in_([PaymentStatus.paid, PaymentStatus.refund_pending]))
     )
     total_revenue = float(revenue_res.scalar_one_or_none() or 0.0)
 
@@ -295,18 +317,24 @@ async def get_analytics(
     counselor_res = await db.execute(
         select(
             CounselorProfile.id,
-            func.count(Booking.id).label("total_sessions"),
-            func.sum(Payment.amount).label("total_revenue"),
+            User.full_name.label("counselor_name"),
+            func.count(func.distinct(Booking.id)).label("total_sessions"),
+            func.coalesce(
+                func.sum(case((Payment.status.in_([PaymentStatus.paid, PaymentStatus.refund_pending]), Payment.amount), else_=0.0)),
+                0.0,
+            ).label("total_revenue"),
         )
+        .join(User, User.id == CounselorProfile.user_id)
         .outerjoin(Booking, Booking.counselor_id == CounselorProfile.id)
         .outerjoin(Payment, Payment.booking_id == Booking.id)
-        .group_by(CounselorProfile.id)
+        .group_by(CounselorProfile.id, User.full_name)
     )
     per_counselor = [
         {
             "counselor_id": row[0],
-            "total_sessions": row[1] or 0,
-            "total_revenue": float(row[2] or 0.0),
+            "counselor_name": row[1] or "Counselor",
+            "total_sessions": row[2] or 0,
+            "total_revenue": float(row[3] or 0.0),
         }
         for row in counselor_res.all()
     ]

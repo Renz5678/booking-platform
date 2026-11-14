@@ -1,8 +1,10 @@
+from html import escape
 import asyncio
 import base64
 import logging
 from datetime import datetime, timezone
 from email.message import EmailMessage
+from typing import Any
 
 from google.auth.exceptions import GoogleAuthError
 from google.oauth2.credentials import Credentials
@@ -108,7 +110,8 @@ async def send_verification_email(user_email: str, otp: str) -> None:
     </html>
     """
     # Run the blocking Gmail API call in a thread pool to avoid blocking the event loop.
-    await asyncio.to_thread(_send_email_sync, user_email, subject, html_body)
+    if not await asyncio.to_thread(_send_email_sync, user_email, subject, html_body):
+        raise RuntimeError("Email delivery failed")
 
 
 async def send_booking_confirmation(
@@ -137,7 +140,7 @@ async def send_booking_confirmation(
 
     # Generate an 'Add to Google Calendar' deep link
     gcal_link = generate_google_calendar_link(
-        title=f"Counseling Session with {counselor_name}",
+        title=f"Counseling Session with {escape(counselor_name)}",
         start=session_start,
         end=session_end,
         location=meeting_link or "Online",
@@ -152,7 +155,7 @@ async def send_booking_confirmation(
       <body style="font-family: sans-serif; color: #333;">
         <h2>Booking Confirmed ✅</h2>
         <p>Great news! Your counseling session has been paid and confirmed.</p>
-        <p><strong>Counselor:</strong> {counselor_name}</p>
+        <p><strong>Counselor:</strong> {escape(counselor_name)}</p>
         <p><strong>Session Time:</strong> {start_str}</p>
         <p><strong>Meeting Link:</strong> <a href="{meeting_link}">{meeting_link}</a></p>
         <p><strong>Booking ID:</strong> {booking_id}</p>
@@ -166,11 +169,16 @@ async def send_booking_confirmation(
     </html>
     """
     # Run the blocking Gmail API call in a thread pool to avoid blocking the event loop.
-    await asyncio.to_thread(_send_email_sync, user_email, subject, html_body)
+    if not await asyncio.to_thread(_send_email_sync, user_email, subject, html_body):
+        raise RuntimeError("Email delivery failed")
 
 
 async def send_cancellation_email(
-    user_email: str, booking_id: str, refund_issued: bool
+    user_email: str,
+    booking_id: str,
+    refund_pending: bool = False,
+    was_paid: bool = False,
+    **kwargs: Any,
 ) -> None:
     """
     Sends a booking cancellation confirmation email to the client.
@@ -178,14 +186,19 @@ async def send_cancellation_email(
     Args:
         user_email: The client's email address.
         booking_id: The unique ID of the cancelled booking.
-        refund_issued: Whether a refund was issued for this cancellation.
+        refund_pending: Whether a refund is pending/issued for this cancellation.
+        was_paid: Whether the booking was confirmed/paid before cancellation.
     """
+    if "refund_issued" in kwargs and kwargs["refund_issued"] is not None:
+        refund_pending = kwargs["refund_issued"]
+
     subject = "Your Booking Has Been Cancelled"
-    refund_note = (
-        "<p>A full refund has been processed and will appear in your account within 3–7 business days.</p>"
-        if refund_issued
-        else "<p>As per our cancellation policy, no refund will be issued for cancellations made less than 24 hours before the session.</p>"
-    )
+    if refund_pending:
+        refund_note = "<p>A full refund is being processed and will appear in your GCash account within 5–10 business days.</p>"
+    elif was_paid:
+        refund_note = "<p>As per our cancellation policy, no refund will be issued for cancellations made less than 24 hours before the session.</p>"
+    else:
+        refund_note = ""
 
     html_body = f"""
     <html>
@@ -198,7 +211,8 @@ async def send_cancellation_email(
       </body>
     </html>
     """
-    await asyncio.to_thread(_send_email_sync, user_email, subject, html_body)
+    if not await asyncio.to_thread(_send_email_sync, user_email, subject, html_body):
+        raise RuntimeError("Email delivery failed")
 
 
 async def send_counselor_cancellation_notification(
@@ -226,7 +240,8 @@ async def send_counselor_cancellation_notification(
       </body>
     </html>
     """
-    await asyncio.to_thread(_send_email_sync, client_email, subject, html_body)
+    if not await asyncio.to_thread(_send_email_sync, client_email, subject, html_body):
+        raise RuntimeError("Email delivery failed")
 
 
 async def send_admin_cancellation_alert(
@@ -244,12 +259,13 @@ async def send_admin_cancellation_alert(
     <html>
       <body style="font-family: sans-serif; color: #333;">
         <h2>Counselor Cancellation Alert</h2>
-        <p>Counselor <strong>{counselor_name}</strong> has cancelled a session with client <strong>{client_name}</strong>.</p>
+        <p>Counselor <strong>{escape(counselor_name)}</strong> has cancelled a session with client <strong>{escape(client_name)}</strong>.</p>
         <p><strong>Booking ID:</strong> {booking_id}</p>
       </body>
     </html>
     """
-    await asyncio.to_thread(_send_email_sync, settings.ADMIN_EMAIL, subject, html_body)
+    if not await asyncio.to_thread(_send_email_sync, settings.ADMIN_EMAIL, subject, html_body):
+        raise RuntimeError("Email delivery failed")
 
 
 async def send_session_reminder(
@@ -285,7 +301,8 @@ async def send_session_reminder(
       </body>
     </html>
     """
-    await asyncio.to_thread(_send_email_sync, user_email, subject, html_body)
+    if not await asyncio.to_thread(_send_email_sync, user_email, subject, html_body):
+        raise RuntimeError("Email delivery failed")
 
 
 def generate_ics_content(title: str, start: datetime, end: datetime, location: str, description: str) -> str:
@@ -333,7 +350,8 @@ async def send_counselor_invite_email(email: str, invite_token: str) -> None:
       </body>
     </html>
     """
-    await asyncio.to_thread(_send_email_sync, email, subject, html_body)
+    if not await asyncio.to_thread(_send_email_sync, email, subject, html_body):
+        raise RuntimeError("Email delivery failed")
 
 
 async def send_counselor_rejection_email(email: str, reason: str = "") -> None:
@@ -362,7 +380,8 @@ async def send_counselor_rejection_email(email: str, reason: str = "") -> None:
       </body>
     </html>
     """
-    await asyncio.to_thread(_send_email_sync, email, subject, html_body)
+    if not await asyncio.to_thread(_send_email_sync, email, subject, html_body):
+        raise RuntimeError("Email delivery failed")
 
 
 async def send_payment_pending_email(
@@ -422,5 +441,6 @@ async def send_payment_pending_email(
       </body>
     </html>
     """
-    await asyncio.to_thread(_send_email_sync, user_email, subject, html_body)
+    if not await asyncio.to_thread(_send_email_sync, user_email, subject, html_body):
+        raise RuntimeError("Email delivery failed")
 

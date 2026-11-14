@@ -77,25 +77,10 @@
   }
 }
 
-@layer utilities {
-  /* Override shadows to use borders instead for a more structured, non-SaaS look */
-  .shadow-ambient { 
-    box-shadow: none !important; 
-    border: 1px solid var(--color-outline-variant); 
-    border-radius: 0px !important;
+  /* Subtle ambient shadow */
+  .shadow-ambient {
+    box-shadow: 0 4px 20px -2px rgba(27, 40, 56, 0.06), 0 2px 6px -1px rgba(27, 40, 56, 0.04);
   }
-  .shadow-sm {
-    box-shadow: none !important;
-    border: 1px solid var(--color-outline-variant);
-    border-radius: 0px !important;
-  }
-  .rounded-xl, .rounded-2xl, .rounded-lg, .rounded-full {
-    /* Removing border-radius for structural components, keeping them square/sharp */
-    border-radius: 0px !important;
-  }
-  /* Buttons can keep slightly rounded or pill shape if needed, but the brief says "zero border-radius" is a trope too! 
-     Wait, the brief says "zero border radius and dense newspaper columns" is an AI tell! 
-     So I should NOT force border-radius: 0px. */
 
   .text-headline-xl { font-size: 56px; line-height: 1.1; letter-spacing: -0.02em; font-weight: 500; font-feature-settings: "ss01", "ss02"; }
   .text-headline-lg { font-size: 40px; line-height: 1.2; letter-spacing: -0.01em; font-weight: 500; }
@@ -114,9 +99,10 @@
   .animation-delay-200 { animation-delay: 200ms; }
   .animation-delay-400 { animation-delay: 400ms; }
   .animation-delay-600 { animation-delay: 600ms; }
-}
 
 body {
   background-color: var(--color-background);
   color: var(--color-on-background);
 }
+
+:root { --font-fraunces: Georgia, serif; --font-dm-sans: Arial, sans-serif; }

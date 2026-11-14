@@ -20,7 +20,11 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await api.post("/auth/login", { email, password });
+      const result = await api.post("/auth/login", { email, password });
+      if (result.mfa_required) {
+        router.push(result.mfa_enrollment_required ? "/mfa?enroll=1" : "/mfa");
+        return;
+      }
       
       // Update global auth state
       await checkAuth();
@@ -123,7 +127,7 @@ export default function LoginPage() {
             </div>
 
             <div className="text-right">
-              <a href="#" className="text-[12px] font-semibold text-on-tertiary-container hover:text-tertiary-container transition-colors">Forgot password?</a>
+              <a href="/forgot-password" className="text-[12px] font-semibold text-on-tertiary-container hover:text-tertiary-container transition-colors">Forgot password?</a>
             </div>
 
             <button

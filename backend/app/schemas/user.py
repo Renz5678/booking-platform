@@ -1,13 +1,22 @@
 import logging
 import re
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 # Use the module-level logger so validation errors can be traced if needed.
 logger = logging.getLogger(__name__)
 
 
-class UserCreate(BaseModel):
+class PasswordInput(BaseModel):
+    @field_validator("password", "new_password", "current_password", check_fields=False)
+    @classmethod
+    def password_bytes(cls, value):
+        if len(value.encode("utf-8")) > 72:
+            raise ValueError("Password must not exceed 72 UTF-8 bytes")
+        return value
+
+
+class UserCreate(PasswordInput):
     """
     Schema for creating a new user account.
 
@@ -68,14 +77,13 @@ class UserResponse(BaseModel):
     is_active: bool = True
     google_calendar_connected: bool = False
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class CounselorInviteRequest(BaseModel):
     email: EmailStr
     full_name: str
 
-class AcceptInviteRequest(BaseModel):
+class AcceptInviteRequest(PasswordInput):
     token: str
     email: EmailStr
     password: str = Field(..., min_length=8)
@@ -100,7 +108,7 @@ class UserUpdateRequest(BaseModel):
     full_name: str = Field(..., min_length=2, max_length=100)
 
 
-class ChangePasswordRequest(BaseModel):
+class ChangePasswordRequest(PasswordInput):
     """Schema for changing a user's password after verifying the current one."""
 
     current_password: str

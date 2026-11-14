@@ -2,7 +2,8 @@ import logging
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import APIKeyCookie
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError as JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -41,9 +42,9 @@ async def get_current_user(
 
     try:
         # Decode and verify the JWT signature and expiry using our secret key.
-        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[ALGORITHM], issuer="alaga-api", audience="alaga-web", options={"require": ["exp", "sub", "iss", "aud"]})
         user_id: str = payload.get("sub")
-        if user_id is None:
+        if payload.get("type") != "access" or not isinstance(user_id, str):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Could not validate credentials",
@@ -64,6 +65,25 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
         )
+    from app.services.sessions import load_session
+    session = await load_session(db, payload.get("sid", ""))
+    if session.user_id != str(user.id) or not user.is_verified or not user.is_active:
+        raise HTTPException(status_code=401, detail="Account unavailable")
+    request.state.auth_session = session
+    if user.role.value != "client" and not session.mfa_verified:
+        from datetime import datetime, timezone
+        deadline = session.mfa_deadline
+        if deadline and deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=timezone.utc)
+        if not deadline or deadline <= datetime.now(timezone.utc):
+            raise HTTPException(status_code=401, detail="MFA challenge expired; sign in again")
+        if request.url.path not in {"/auth/mfa/enroll", "/auth/mfa/verify"}:
+            raise HTTPException(status_code=403, detail="Staff MFA verification required")
+    if user.role.value == "counselor" and not request.url.path.startswith(("/counselors/me", "/calendar/", "/auth/")):
+        from app.models.counselor_profile import CounselorProfile
+        profile = (await db.execute(select(CounselorProfile).where(CounselorProfile.user_id == user.id))).scalar_one_or_none()
+        if not profile or not profile.is_active or not profile.is_verified:
+            raise HTTPException(status_code=403, detail="Counselor is not active")
     return user
 
 

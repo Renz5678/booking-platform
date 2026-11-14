@@ -84,12 +84,28 @@ async def refund_payment(booking_id: str, db: AsyncSession) -> bool:
         )
         return False
 
-    if not payment.provider_payment_id:
-        logger.error(
-            "refund_payment: No provider_payment_id stored for booking %s. "
-            "Cannot issue refund without the PayMongo Payment Intent ID.",
-            booking_id,
-        )
+    if payment.provider == "gcash_manual" or not payment.provider_payment_id:
+        payment.status = PaymentStatus.refund_pending
+        from app.models.operations import VerifiedTransfer
+        transfer = (await db.execute(select(VerifiedTransfer).where(VerifiedTransfer.booking_id == booking_id))).scalar_one_or_none()
+        if not transfer and payment.transaction_reference:
+            transfer = (await db.execute(select(VerifiedTransfer).where(VerifiedTransfer.reference == payment.transaction_reference))).scalar_one_or_none()
+        if transfer:
+            transfer.status = "refund_pending"
+            transfer.booking_id = booking_id
+        else:
+            ref = payment.transaction_reference or f"MANUAL-{booking_id}"
+            transfer = VerifiedTransfer(
+                reference=ref,
+                claim_id=booking_id,
+                booking_id=booking_id,
+                amount=payment.amount,
+                status="refund_pending",
+                verified_by="system",
+            )
+            db.add(transfer)
+        await db.flush()
+        logger.warning("Manual refund requires an actual transfer and administrator reconciliation: %s", booking_id)
         return False
 
     amount_cents = int(payment.amount * 100)
@@ -145,132 +161,21 @@ async def process_successful_payment(
         provider_payment_id: The PayMongo Payment ID from the webhook event, used for future refunds.
         payment_method: The payment method used (gcash, maya, card), extracted from the webhook.
     """
-    # Find the booking and payment
-    booking_result = await db.execute(select(Booking).where(Booking.id == booking_id))
-    booking = booking_result.scalar_one_or_none()
-
-    payment_result = await db.execute(
-        select(Payment).where(Payment.booking_id == booking_id)
-    )
-    payment = payment_result.scalar_one_or_none()
-
+    booking = (await db.execute(select(Booking).where(Booking.id == booking_id).with_for_update())).scalar_one_or_none()
+    payment = (await db.execute(select(Payment).where(Payment.booking_id == booking_id).with_for_update())).scalar_one_or_none()
     if not booking or not payment:
         raise ValueError("Booking or Payment not found")
-
     if payment.status == PaymentStatus.paid:
         return "Already paid"
-
-    # Mark as paid and store provider details for future refunds
     payment.status = PaymentStatus.paid
     payment.paid_at = datetime.now(timezone.utc)
     if provider_payment_id:
         payment.provider_payment_id = provider_payment_id
     if payment_method:
         payment.payment_method = payment_method
-
-    # Confirm booking
     booking.status = BookingStatus.confirmed
-
-    # Fetch counselor profile for refresh token and name
-    profile_result = await db.execute(
-        select(CounselorProfile)
-        .options(selectinload(CounselorProfile.user))
-        .where(CounselorProfile.id == booking.counselor_id)
-    )
-    profile = profile_result.scalar_one_or_none()
-
-    refresh_token = None
-    if profile and profile.google_calendar_connected and profile.google_refresh_token:
-        try:
-            refresh_token = decrypt_token(profile.google_refresh_token)
-        except Exception as e:
-            logger.error("Failed to decrypt counselor refresh token for booking %s: %s", booking_id, e)
-
-    # Generate Google Meet link (on counselor's calendar) and store event ID
-    try:
-        meet_link, calendar_event_id = await create_google_meet_event(
-            summary="Counseling Session",
-            start_time=booking.scheduled_start,
-            end_time=booking.scheduled_end,
-            booking_id=booking.id,
-            refresh_token=refresh_token,
-        )
-        booking.meeting_link = meet_link
-        if calendar_event_id:
-            booking.google_calendar_event_id = calendar_event_id
-    except Exception as e:
-        logger.error("Failed to create calendar event for booking %s: %s", booking_id, e)
-
-    # Commit so meeting_link and google_calendar_event_id are saved
+    booking.provisioning_status = "pending"
+    from app.services.outbox import booking_job
+    await booking_job(db, booking, "calendar")
     await db.commit()
-
-    # Also add event to client's Google Calendar if they have connected it
-    client_result = await db.execute(select(User).where(User.id == booking.client_id))
-    client = client_result.scalar_one_or_none()
-
-    if client and client.google_calendar_connected and client.google_refresh_token:
-        try:
-            client_refresh_token = decrypt_token(client.google_refresh_token)
-            await add_event_to_calendar(
-                summary="Counseling Session",
-                start_time=booking.scheduled_start,
-                end_time=booking.scheduled_end,
-                booking_id=booking.id,
-                meet_link=booking.meeting_link,
-                refresh_token=client_refresh_token,
-            )
-        except Exception as e:
-            logger.error("Failed to add event to client calendar for booking %s: %s", booking_id, e)
-
-    # Send confirmation email to the actual client email
-    if client:
-        counselor_name = "Your Counselor"
-        if profile and profile.user:
-            counselor_name = profile.user.full_name
-            
-        await send_booking_confirmation(
-            client.email, 
-            booking.id,
-            counselor_name,
-            booking.scheduled_start,
-            booking.scheduled_end,
-            booking.meeting_link or ""
-        )
-        
-        # Schedule reminder emails
-        from datetime import timedelta
-        from app.tasks.reminders import send_session_reminder_task
-        
-        # Only schedule if the session is still in the future
-        now = datetime.now(timezone.utc)
-        start_time = booking.scheduled_start
-        if start_time.tzinfo is None:
-            start_time = start_time.replace(tzinfo=timezone.utc)
-            
-        time_until_session = start_time - now
-        
-        if time_until_session > timedelta(hours=24):
-            # Schedule 24h reminder
-            reminder_time_24 = start_time - timedelta(hours=24)
-            try:
-                send_session_reminder_task.apply_async(
-                    args=[client.email, booking.id, 24],
-                    eta=reminder_time_24
-                )
-            except Exception as e:
-                logger.error("Failed to schedule 24h reminder for booking %s: %s", booking.id, e)
-            
-        if time_until_session > timedelta(hours=1):
-            # Schedule 1h reminder
-            reminder_time_1 = start_time - timedelta(hours=1)
-            try:
-                send_session_reminder_task.apply_async(
-                    args=[client.email, booking.id, 1],
-                    eta=reminder_time_1
-                )
-            except Exception as e:
-                logger.error("Failed to schedule 1h reminder for booking %s: %s", booking.id, e)
-    else:
-        logger.warning("Could not send confirmation email: client not found for booking %s", booking_id)
-
-    return "Payment successful and booking confirmed"
+    return "Payment recorded; meeting provisioning queued"

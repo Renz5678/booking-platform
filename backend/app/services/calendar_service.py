@@ -23,7 +23,7 @@ async def get_google_access_token(refresh_token: str | None = None) -> str:
         "grant_type": "refresh_token"
     }
     
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.post(url, data=payload)
         if response.status_code != 200:
             raise HTTPException(status_code=500, detail="Failed to get Google Access Token")
@@ -36,7 +36,7 @@ async def check_google_calendar_busy(refresh_token: str, start_time: datetime, e
     Returns True if busy, False if available.
     """
     if not refresh_token:
-        return False
+        raise HTTPException(503, "Calendar availability unavailable")
         
     access_token = await get_google_access_token(refresh_token)
     url = "https://www.googleapis.com/calendar/v3/freeBusy"
@@ -58,17 +58,66 @@ async def check_google_calendar_busy(refresh_token: str, start_time: datetime, e
         "items": [{"id": "primary"}]
     }
     
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.post(url, json=payload, headers=headers)
         if response.status_code != 200:
-            return False
+            raise HTTPException(503, "Calendar availability unavailable")
             
         data = response.json()
         calendars = data.get("calendars", {})
         primary_cal = calendars.get("primary", {})
+        if primary_cal.get("errors") or not isinstance(primary_cal.get("busy"), list):
+            raise HTTPException(503, "Calendar availability unavailable")
         busy_slots = primary_cal.get("busy", [])
         
         return len(busy_slots) > 0
+
+
+async def get_google_calendar_busy_intervals(refresh_token: str, start_time: datetime, end_time: datetime) -> list[tuple[datetime, datetime]]:
+    """Returns a list of (start, end) datetime tuples representing busy periods from Google Calendar."""
+    if not refresh_token:
+        raise HTTPException(503, "Calendar availability unavailable")
+    try:
+        access_token = await get_google_access_token(refresh_token)
+    except Exception as e:
+        logger.warning("Could not fetch Google Calendar access token: %s", e)
+        raise HTTPException(503, "Calendar availability unavailable")
+
+    from datetime import timezone
+    if start_time.tzinfo is None:
+        start_time = start_time.replace(tzinfo=timezone.utc)
+    if end_time.tzinfo is None:
+        end_time = end_time.replace(tzinfo=timezone.utc)
+
+    url = "https://www.googleapis.com/calendar/v3/freeBusy"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "timeMin": start_time.isoformat(),
+        "timeMax": end_time.isoformat(),
+        "items": [{"id": "primary"}]
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+            if resp.status_code != 200:
+                raise HTTPException(503, "Calendar availability unavailable")
+            data = resp.json()
+            primary = data.get("calendars", {}).get("primary", {})
+            if primary.get("errors") or not isinstance(primary.get("busy"), list):
+                raise HTTPException(503, "Calendar availability unavailable")
+            busy_list = primary["busy"]
+            intervals = []
+            for b in busy_list:
+                s = datetime.fromisoformat(b["start"].replace("Z", "+00:00"))
+                e = datetime.fromisoformat(b["end"].replace("Z", "+00:00"))
+                intervals.append((s, e))
+            return intervals
+    except Exception as e:
+        logger.warning("Failed to query Google Calendar freeBusy: %s", e)
+        raise HTTPException(503, "Calendar availability unavailable")
 
 
 async def create_google_meet_event(summary: str, start_time: datetime, end_time: datetime, booking_id: str, refresh_token: str | None = None) -> tuple[str, str | None]:
@@ -80,7 +129,7 @@ async def create_google_meet_event(summary: str, start_time: datetime, end_time:
     token_to_use = refresh_token or settings.GOOGLE_REFRESH_TOKEN
     if not token_to_use:
         # Fallback if no refresh token is provided
-        return "https://meet.google.com/mock-link", None
+        raise RuntimeError("Counselor calendar connection is required")
 
     access_token = await get_google_access_token(token_to_use)
     
@@ -94,17 +143,26 @@ async def create_google_meet_event(summary: str, start_time: datetime, end_time:
     from datetime import timezone
     if start_time.tzinfo is None:
         start_time = start_time.replace(tzinfo=timezone.utc)
+    else:
+        start_time = start_time.astimezone(timezone.utc)
     if end_time.tzinfo is None:
         end_time = end_time.replace(tzinfo=timezone.utc)
+    else:
+        end_time = end_time.astimezone(timezone.utc)
 
+    import hashlib
+    deterministic_id = hashlib.sha256(("alaga:" + booking_id).encode()).hexdigest()
     event_data = {
+        "id": deterministic_id,
         "summary": summary,
         "description": f"Booking ID: {booking_id}",
         "start": {
-            "dateTime": start_time.isoformat()
+            "dateTime": start_time.isoformat(),
+            "timeZone": "Asia/Manila",
         },
         "end": {
-            "dateTime": end_time.isoformat()
+            "dateTime": end_time.isoformat(),
+            "timeZone": "Asia/Manila",
         },
         "conferenceData": {
             "createRequest": {
@@ -116,13 +174,17 @@ async def create_google_meet_event(summary: str, start_time: datetime, end_time:
         }
     }
     
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.post(url, json=event_data, headers=headers)
-        if response.status_code != 200:
-            raise HTTPException(status_code=500, detail=f"Failed to create Google Calendar event: {response.text}")
+        if response.status_code == 409:
+            response = await client.get("https://www.googleapis.com/calendar/v3/calendars/primary/events/" + deterministic_id, headers=headers)
+        if response.status_code not in (200, 201):
+            raise HTTPException(status_code=503, detail="Calendar provisioning unavailable")
         
         data = response.json()
-        hangout_link = data.get("hangoutLink", "https://meet.google.com/mock-link")
+        hangout_link = data.get("hangoutLink")
+        if not hangout_link:
+            raise RuntimeError("Google Meet provisioning is incomplete")
         event_id = data.get("id")  # Store the event ID for future updates/deletes
         return hangout_link, event_id
 
@@ -143,8 +205,12 @@ async def add_event_to_calendar(
     from datetime import timezone
     if start_time.tzinfo is None:
         start_time = start_time.replace(tzinfo=timezone.utc)
+    else:
+        start_time = start_time.astimezone(timezone.utc)
     if end_time.tzinfo is None:
         end_time = end_time.replace(tzinfo=timezone.utc)
+    else:
+        end_time = end_time.astimezone(timezone.utc)
 
     access_token = await get_google_access_token(refresh_token)
     url = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
@@ -153,14 +219,19 @@ async def add_event_to_calendar(
         "Content-Type": "application/json"
     }
 
+    import hashlib
+    deterministic_id = hashlib.sha256(("alaga-client:" + booking_id).encode()).hexdigest()
     event_data = {
+        "id": deterministic_id,
         "summary": summary,
         "description": f"Booking ID: {booking_id}\nJoin here: {meet_link or ''}",
         "start": {
-            "dateTime": start_time.isoformat()
+            "dateTime": start_time.isoformat(),
+            "timeZone": "Asia/Manila",
         },
         "end": {
-            "dateTime": end_time.isoformat()
+            "dateTime": end_time.isoformat(),
+            "timeZone": "Asia/Manila",
         },
     }
 
@@ -168,17 +239,20 @@ async def add_event_to_calendar(
     if meet_link:
         event_data["hangoutLink"] = meet_link
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.post(url, json=event_data, headers=headers)
+        if response.status_code == 409:
+            response = await client.get(url + "/" + deterministic_id, headers=headers)
         if response.status_code not in (200, 201):
-            logger.error("Failed to add event to user calendar: %s", response.text)
+            raise RuntimeError("Client calendar provisioning failed")
+        return deterministic_id
 
 
 async def delete_calendar_event(refresh_token: str, event_id: str) -> None:
     access_token = await get_google_access_token(refresh_token)
     url = f"https://www.googleapis.com/calendar/v3/calendars/primary/events/{event_id}"
     headers = {"Authorization": f"Bearer {access_token}"}
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.delete(url, headers=headers)
         if response.status_code not in (204, 404):
             logger.error("Failed to delete Google Calendar event %s: %s", event_id, response.text)
@@ -193,14 +267,24 @@ async def update_calendar_event(refresh_token: str, event_id: str, new_start: da
     from datetime import timezone
     if new_start.tzinfo is None:
         new_start = new_start.replace(tzinfo=timezone.utc)
+    else:
+        new_start = new_start.astimezone(timezone.utc)
     if new_end.tzinfo is None:
         new_end = new_end.replace(tzinfo=timezone.utc)
+    else:
+        new_end = new_end.astimezone(timezone.utc)
         
     event_data = {
-        "start": {"dateTime": new_start.isoformat()},
-        "end": {"dateTime": new_end.isoformat()}
+        "start": {
+            "dateTime": new_start.isoformat(),
+            "timeZone": "Asia/Manila",
+        },
+        "end": {
+            "dateTime": new_end.isoformat(),
+            "timeZone": "Asia/Manila",
+        }
     }
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.patch(url, json=event_data, headers=headers)
         if response.status_code != 200:
             logger.error("Failed to update Google Calendar event %s: %s", event_id, response.text)

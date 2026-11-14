@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 export default function AccountSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
+  const [role, setRole] = useState<"client" | "counselor" | "admin">("client");
   
   // Name form
   const [fullName, setFullName] = useState("");
@@ -29,6 +30,9 @@ export default function AccountSettingsPage() {
       const data = await api.get("/auth/me");
       setEmail(data.email || "");
       setFullName(data.full_name || "");
+      if (data.role) {
+        setRole(data.role);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -80,7 +84,7 @@ export default function AccountSettingsPage() {
 
   if (loading) {
     return (
-      <DashboardLayout role="client" allowedRoles={["client", "counselor", "admin"]}>
+      <DashboardLayout role={role} allowedRoles={["client", "counselor", "admin"]}>
         <div className="max-w-2xl mx-auto space-y-6 animate-pulse">
           <div className="h-40 bg-surface-variant rounded-xl"></div>
           <div className="h-64 bg-surface-variant rounded-xl"></div>
@@ -90,7 +94,7 @@ export default function AccountSettingsPage() {
   }
 
   return (
-    <DashboardLayout role="client" allowedRoles={["client", "counselor", "admin"]}>
+    <DashboardLayout role={role} allowedRoles={["client", "counselor", "admin"]}>
       <div className="max-w-2xl mx-auto space-y-8">
         <div>
           <h1 className="font-headline-xl text-primary mb-2">Account Settings</h1>

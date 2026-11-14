@@ -9,21 +9,16 @@ logger = logging.getLogger(__name__)
 
 def _run_async(coro):
     """Helper to run async functions within synchronous Celery tasks."""
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    return loop.run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 async def _send_reminder_if_confirmed(user_email: str, booking_id: str, hours_before: int):
     # Fetch DB explicitly for this async scope
-    from app.db.session import async_session_maker
+    from app.db.session import AsyncSessionLocal
     from sqlalchemy.future import select
     from app.models.booking import Booking, BookingStatus
 
-    async with async_session_maker() as db:
+    async with AsyncSessionLocal() as db:
         result = await db.execute(select(Booking).where(Booking.id == booking_id))
         booking = result.scalar_one_or_none()
 
@@ -56,14 +51,21 @@ def send_session_reminder_task(user_email: str, booking_id: str, hours_before: i
 def expire_stale_bookings_task():
     """
     Periodic task to sweep and cancel stale pending_payment bookings.
+    Each synchronous Celery task invocation owns its event loop and connections.
     """
-    from app.db.session import async_session_maker
-    from app.services.booking_service import cancel_stale_pending_bookings
-    
     async def _sweep():
-        async with async_session_maker() as db:
-            return await cancel_stale_pending_bookings(db, max_age_minutes=15)
-            
+        from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+        from app.config import settings
+        from app.services.booking_service import cancel_stale_pending_bookings
+
+        engine = create_async_engine(settings.DATABASE_URL)
+        session_factory = async_sessionmaker(engine, expire_on_commit=False)
+        try:
+            async with session_factory() as db:
+                return await cancel_stale_pending_bookings(db, max_age_minutes=15)
+        finally:
+            await engine.dispose()
+
     try:
         count = _run_async(_sweep())
         return f"Swept {count} bookings"

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { api } from "@/lib/api";
 
@@ -29,7 +30,13 @@ export default function CounselorDashboardPage() {
         const user = await api.get("/auth/me");
         const names = user.full_name?.split(" ");
         setLastName(names && names.length > 1 ? names[names.length - 1] : user.full_name);
-        setIsActive(user.is_active);
+
+        try {
+          const profile = await api.get("/counselors/me/profile");
+          setIsActive(Boolean(profile.is_verified && profile.is_active));
+        } catch {
+          setIsActive(Boolean(user.is_active));
+        }
 
         // Fetch Bookings
         const bookings: Booking[] = await api.get("/bookings/counselor/me");
@@ -80,6 +87,14 @@ export default function CounselorDashboardPage() {
     const e = new Date(end);
     const options: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' };
     return `${s.toLocaleTimeString('en-US', options)} - ${e.toLocaleTimeString('en-US', options)}`;
+  };
+
+  const formatDateTimeRange = (start: string, end: string) => {
+    const s = new Date(start);
+    const e = new Date(end);
+    const dateOptions: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+    const timeOptions: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' };
+    return `${s.toLocaleDateString('en-US', dateOptions)} • ${s.toLocaleTimeString('en-US', timeOptions)} - ${e.toLocaleTimeString('en-US', timeOptions)}`;
   };
 
   const getInitials = (name: string) => {
@@ -172,7 +187,7 @@ export default function CounselorDashboardPage() {
                 <span className="material-symbols-outlined text-secondary">today</span>
                 Today's Schedule
               </h2>
-              <button className="font-label-sm text-[12px] font-semibold tracking-wider text-secondary hover:underline">View Full Calendar</button>
+              <Link href="/counselor/availability" className="font-label-sm text-[12px] font-semibold tracking-wider text-secondary hover:underline">View Full Calendar</Link>
             </div>
 
             <div className="space-y-4">
@@ -209,7 +224,9 @@ export default function CounselorDashboardPage() {
                             Join Session
                           </a>
                         ) : (
-                          <button className="text-primary border border-outline-variant font-label-md text-[14px] font-medium px-4 py-2 rounded-lg hover:bg-surface-container-low transition-colors w-full md:w-auto">Review Intake</button>
+                          <Link href={`/counselor/bookings/${booking.id}`} className="text-primary border border-outline-variant font-label-md text-[14px] font-medium px-4 py-2 rounded-lg hover:bg-surface-container-low transition-colors w-full md:w-auto inline-block text-center">
+                            Review Intake
+                          </Link>
                         )}
                       </div>
                     </div>
@@ -244,29 +261,13 @@ export default function CounselorDashboardPage() {
                       <div>
                         <h4 className="font-label-md text-[14px] font-bold text-primary">{booking.client_name}</h4>
                         <div className="flex items-center gap-3 mt-1 font-label-sm text-[12px] font-semibold tracking-wider text-on-surface-variant">
-                          <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">schedule</span> {formatTimeRange(booking.scheduled_start, booking.scheduled_end)}</span>
+                          <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">schedule</span> {formatDateTimeRange(booking.scheduled_start, booking.scheduled_end)}</span>
                         </div>
                       </div>
                     </div>
                     
                     <div className="flex items-center gap-3">
-                      <button 
-                        onClick={async () => {
-                          try {
-                            const res = await api.post(`/bookings/${booking.id}/mark-paid`, {});
-                            if (res) {
-                              setPendingBookings(prev => prev.filter(b => b.id !== booking.id));
-                              setTodaysBookings(prev => prev.map(b => b.id === booking.id ? res : b));
-                            }
-                          } catch (err) {
-                            console.error("Failed to mark as paid", err);
-                            alert("Failed to confirm payment.");
-                          }
-                        }}
-                        className="text-on-tertiary bg-tertiary hover:opacity-90 transition-opacity font-label-md text-[14px] font-medium px-4 py-2 rounded-lg w-full md:w-auto"
-                      >
-                        Mark as Paid
-                      </button>
+                      <p>Awaiting administrator payment review</p>
                     </div>
                   </div>
                 ))}

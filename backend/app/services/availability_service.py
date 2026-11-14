@@ -1,3 +1,5 @@
+import logging
+logger = logging.getLogger(__name__)
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -52,10 +54,12 @@ async def get_available_slots(
 
     from app.models.booking import Booking, BookingStatus
 
+    if duration_minutes != 60:
+        raise ValueError("Sessions must be 60 minutes")
     s_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
     e_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
 
-    if (e_dt - s_dt).days > 31:
+    if not 0 <= (e_dt - s_dt).days <= 31:
         raise ValueError("Date range cannot exceed 31 days")
 
     # Fetch all availability blocks for this counselor
@@ -76,8 +80,11 @@ async def get_available_slots(
     if not avail_blocks:
         return {}
 
-    start_of_range = datetime.combine(s_dt, time.min).replace(tzinfo=timezone.utc)
-    end_of_range = datetime.combine(e_dt, time.max).replace(tzinfo=timezone.utc)
+    from zoneinfo import ZoneInfo
+    PHT = ZoneInfo("Asia/Manila")
+
+    start_of_range = datetime.combine(s_dt, time.min, tzinfo=PHT).astimezone(timezone.utc)
+    end_of_range = datetime.combine(e_dt, time.max, tzinfo=PHT).astimezone(timezone.utc)
     
     # Fetch all bookings in range
     conditions = [
@@ -92,8 +99,29 @@ async def get_available_slots(
     stmt_bookings = select(Booking).where(*conditions)
     booking_result = await db.execute(stmt_bookings)
     bookings = booking_result.scalars().all()
-    booked_intervals = [(b.scheduled_start, b.scheduled_end) for b in bookings]
+    booked_intervals = []
+    for b in bookings:
+        b_s = b.scheduled_start.replace(tzinfo=timezone.utc) if b.scheduled_start.tzinfo is None else b.scheduled_start.astimezone(timezone.utc)
+        b_e = b.scheduled_end.replace(tzinfo=timezone.utc) if b.scheduled_end.tzinfo is None else b.scheduled_end.astimezone(timezone.utc)
+        booked_intervals.append((b_s, b_e))
     
+    # Check counselor Google Calendar busy intervals if connected
+    from app.models.counselor_profile import CounselorProfile
+    c_res = await db.execute(select(CounselorProfile).where(CounselorProfile.id == counselor_id))
+    counselor = c_res.scalar_one_or_none()
+    if counselor and counselor.google_calendar_connected and counselor.google_refresh_token:
+        from app.core.encryption import decrypt_token
+        from app.services.calendar_service import get_google_calendar_busy_intervals
+        try:
+            refresh_token = decrypt_token(counselor.google_refresh_token)
+            gcal_busy = await get_google_calendar_busy_intervals(refresh_token, start_of_range, end_of_range)
+            for g_s, g_e in gcal_busy:
+                g_s_utc = g_s.replace(tzinfo=timezone.utc) if g_s.tzinfo is None else g_s.astimezone(timezone.utc)
+                g_e_utc = g_e.replace(tzinfo=timezone.utc) if g_e.tzinfo is None else g_e.astimezone(timezone.utc)
+                booked_intervals.append((g_s_utc, g_e_utc))
+        except Exception as e:
+            logger.warning("Could not sync Google Calendar busy intervals: %s", e)
+
     duration_delta = timedelta(minutes=duration_minutes)
     interval_delta = timedelta(minutes=30)
     
@@ -114,12 +142,10 @@ async def get_available_slots(
         ]
         
         for block in day_blocks:
-            block_start = datetime.combine(current_date, block.start_time).replace(tzinfo=timezone.utc)
-            block_end = datetime.combine(current_date, block.end_time).replace(tzinfo=timezone.utc)
-            
-            # If the block itself is in the past, skip generating slots for it
-            # (In reality, we should check against current time, but for simplicity we'll just generate them)
-            # We'll filter out past slots in the frontend or here.
+            block_start_pht = datetime.combine(current_date, block.start_time, tzinfo=PHT)
+            block_start = block_start_pht.astimezone(timezone.utc)
+            block_end_pht = datetime.combine(current_date, block.end_time, tzinfo=PHT)
+            block_end = block_end_pht.astimezone(timezone.utc)
             
             current_time = block_start
             while current_time + duration_delta <= block_end:
@@ -142,8 +168,8 @@ async def get_available_slots(
             possible_slots = sorted(list(set(possible_slots)))
             occupied_slots = sorted(list(set(occupied_slots)))
             result_slots[day_str] = {
-                "available": [slot.isoformat() for slot in possible_slots],
-                "occupied": [slot.isoformat() for slot in occupied_slots]
+                "available": [slot.astimezone(PHT).isoformat() for slot in possible_slots],
+                "occupied": [slot.astimezone(PHT).isoformat() for slot in occupied_slots]
             }
         
         current_date += timedelta(days=1)

@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, String, Text, Integer
+from sqlalchemy import JSON, Boolean, Column, DateTime, Enum, String, Text, Integer
 from sqlalchemy.orm import relationship
 
 from app.db.base import Base
@@ -25,6 +25,13 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     full_name = Column(String, nullable=False)
     is_verified = Column(Boolean, default=False, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    mfa_secret = Column(Text, nullable=True)
+    mfa_enabled = Column(Boolean, default=False, nullable=False)
+    mfa_last_counter = Column(Integer, default=-1, nullable=False)
+    mfa_recovery_hashes = Column(JSON, nullable=True)
+    mfa_failed_attempts = Column(Integer, default=0, nullable=False)
+    mfa_locked_until = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

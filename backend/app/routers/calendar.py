@@ -1,10 +1,8 @@
 import logging
 import urllib.parse
-import hmac as hmac_lib
-import hashlib
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -22,16 +20,15 @@ router = APIRouter(prefix="/calendar", tags=["calendar"])
 
 
 @router.get("/google/login")
-async def google_login(current_user: User = Depends(get_current_user)):
+async def google_login(request: Request, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Redirects the counselor to Google OAuth consent screen."""
     if current_user.role != RoleEnum.counselor:
         raise HTTPException(status_code=403, detail="Only counselors can connect Google Calendar")
         
     redirect_uri = f"{settings.FRONTEND_URL}/api/auth/google/callback"
-    state_payload = str(current_user.id)
-    state_sig = hmac_lib.new(settings.JWT_SECRET.encode(), state_payload.encode(), hashlib.sha256).hexdigest()[:16]
-    state = f"{state_sig}:{state_payload}"
-    
+    from app.services.oauth_state import begin
+    state, challenge = await begin(db, request.state.auth_session.id, current_user.id, "counselor")
+
     auth_url = (
         "https://accounts.google.com/o/oauth2/v2/auth?"
         f"client_id={settings.GOOGLE_CLIENT_ID}&"
@@ -40,27 +37,27 @@ async def google_login(current_user: User = Depends(get_current_user)):
         "scope=https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly&"
         "access_type=offline&"
         "prompt=consent&"
-        f"state={urllib.parse.quote(state)}"
+        f"state={urllib.parse.quote(state)}&code_challenge={challenge}&code_challenge_method=S256"
     )
     return RedirectResponse(auth_url)
 
 
 @router.get("/google/callback")
-async def google_callback(code: str, state: str, db: AsyncSession = Depends(get_db)):
+async def google_callback(request: Request, code: str, state: str, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Handles the Google OAuth callback, exchanges code for tokens, and saves them."""
     redirect_uri = f"{settings.FRONTEND_URL}/api/auth/google/callback"
-    if ":" not in state:
-        raise HTTPException(status_code=400, detail="Invalid OAuth state")
-    received_sig, user_id = state.split(":", 1)
-    expected_sig = hmac_lib.new(settings.JWT_SECRET.encode(), user_id.encode(), hashlib.sha256).hexdigest()[:16]
-    if not hmac_lib.compare_digest(received_sig, expected_sig):
-        raise HTTPException(status_code=400, detail="OAuth state verification failed")
-    
+    if current_user.role != RoleEnum.counselor:
+        raise HTTPException(403, "OAuth role mismatch")
+    from app.services.oauth_state import consume
+    verifier = await consume(db, state, request.state.auth_session.id, current_user.id, "counselor")
+    user_id = current_user.id
+
     token_url = "https://oauth2.googleapis.com/token"
     payload = {
         "client_id": settings.GOOGLE_CLIENT_ID,
         "client_secret": settings.GOOGLE_CLIENT_SECRET,
         "code": code,
+        "code_verifier": verifier,
         "grant_type": "authorization_code",
         "redirect_uri": redirect_uri,
     }
@@ -68,7 +65,7 @@ async def google_callback(code: str, state: str, db: AsyncSession = Depends(get_
     async with httpx.AsyncClient() as client:
         response = await client.post(token_url, data=payload)
         if response.status_code != 200:
-            logger.error("Failed to get Google tokens: %s", response.text)
+            logger.error("Google token exchange failed")
             raise HTTPException(status_code=400, detail="Failed to authenticate with Google")
         
         data = response.json()
@@ -84,6 +81,8 @@ async def google_callback(code: str, state: str, db: AsyncSession = Depends(get_
     if refresh_token:
         profile.google_refresh_token = encrypt_token(refresh_token)
         
+    if not profile.google_refresh_token:
+        raise HTTPException(400, "Google did not grant offline access; reconnect your calendar")
     # For MVP, we assume the primary calendar
     profile.google_calendar_id = "primary"
     profile.google_calendar_connected = True
@@ -95,15 +94,14 @@ async def google_callback(code: str, state: str, db: AsyncSession = Depends(get_
 
 
 @router.get("/google/client/login")
-async def google_client_login(current_user: User = Depends(get_current_user)):
+async def google_client_login(request: Request, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Redirects the client to Google OAuth consent screen to connect their calendar."""
     if current_user.role != RoleEnum.client:
         raise HTTPException(status_code=403, detail="Only clients can use this endpoint")
 
     redirect_uri = f"{settings.FRONTEND_URL}/api/auth/google/client/callback"
-    state_payload = str(current_user.id)
-    state_sig = hmac_lib.new(settings.JWT_SECRET.encode(), state_payload.encode(), hashlib.sha256).hexdigest()[:16]
-    state = f"{state_sig}:{state_payload}"
+    from app.services.oauth_state import begin
+    state, challenge = await begin(db, request.state.auth_session.id, current_user.id, "client")
 
     auth_url = (
         "https://accounts.google.com/o/oauth2/v2/auth?"
@@ -113,27 +111,27 @@ async def google_client_login(current_user: User = Depends(get_current_user)):
         "scope=https://www.googleapis.com/auth/calendar.events&"
         "access_type=offline&"
         "prompt=consent&"
-        f"state={urllib.parse.quote(state)}"
+        f"state={urllib.parse.quote(state)}&code_challenge={challenge}&code_challenge_method=S256"
     )
     return RedirectResponse(auth_url)
 
 
 @router.get("/google/client/callback")
-async def google_client_callback(code: str, state: str, db: AsyncSession = Depends(get_db)):
+async def google_client_callback(request: Request, code: str, state: str, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Handles the Google OAuth callback for clients, saves their refresh token."""
     redirect_uri = f"{settings.FRONTEND_URL}/api/auth/google/client/callback"
-    if ":" not in state:
-        raise HTTPException(status_code=400, detail="Invalid OAuth state")
-    received_sig, user_id = state.split(":", 1)
-    expected_sig = hmac_lib.new(settings.JWT_SECRET.encode(), user_id.encode(), hashlib.sha256).hexdigest()[:16]
-    if not hmac_lib.compare_digest(received_sig, expected_sig):
-        raise HTTPException(status_code=400, detail="OAuth state verification failed")
+    if current_user.role != RoleEnum.client:
+        raise HTTPException(403, "OAuth role mismatch")
+    from app.services.oauth_state import consume
+    verifier = await consume(db, state, request.state.auth_session.id, current_user.id, "client")
+    user_id = current_user.id
 
     token_url = "https://oauth2.googleapis.com/token"
     payload = {
         "client_id": settings.GOOGLE_CLIENT_ID,
         "client_secret": settings.GOOGLE_CLIENT_SECRET,
         "code": code,
+        "code_verifier": verifier,
         "grant_type": "authorization_code",
         "redirect_uri": redirect_uri,
     }
@@ -141,7 +139,7 @@ async def google_client_callback(code: str, state: str, db: AsyncSession = Depen
     async with httpx.AsyncClient() as client:
         response = await client.post(token_url, data=payload)
         if response.status_code != 200:
-            logger.error("Failed to get Google tokens for client: %s", response.text)
+            logger.error("Google client token exchange failed")
             raise HTTPException(status_code=400, detail="Failed to authenticate with Google")
 
         data = response.json()
@@ -157,6 +155,8 @@ async def google_client_callback(code: str, state: str, db: AsyncSession = Depen
     if refresh_token:
         user.google_refresh_token = encrypt_token(refresh_token)
 
+    if not user.google_refresh_token:
+        raise HTTPException(400, "Google did not grant offline access; reconnect your calendar")
     user.google_calendar_connected = True
     await db.commit()
 

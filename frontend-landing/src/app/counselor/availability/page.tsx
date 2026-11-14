@@ -4,9 +4,7 @@ import { AvailabilityBlock } from "@/types";
 
 import React, { useState, useEffect } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import { api } from "@/lib/api";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { api, API_BASE_URL } from "@/lib/api";
 
 // Helper to generate a simple time grid structure
 const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -128,13 +126,16 @@ export default function AvailabilityPage() {
           <p className="font-body-md text-[16px] text-on-surface-variant max-w-2xl">Set your recurring weekly hours. These slots will be available for clients to book. Click and drag to easily select times.</p>
         </div>
         {isConnected ? (
-          <button disabled className="flex items-center gap-2 px-6 py-3 rounded-full border border-[#4FC3AA] bg-[#C3F2DA] text-[#138A72] transition-colors font-label-md text-[14px] font-medium opacity-80 cursor-not-allowed">
-            <span className="material-symbols-outlined">check_circle</span>
+          <button disabled className="flex items-center gap-2 px-6 py-3 rounded-full border border-[#4FC3AA] bg-[#C3F2DA] text-[#138A72] font-label-md text-[14px] font-bold shadow-sm cursor-not-allowed">
+            <span className="material-symbols-outlined text-[18px]">check_circle</span>
             Connected to Google Calendar
           </button>
         ) : (
-          <a href={`${API_URL}/auth/google/login`} className="flex items-center gap-2 px-6 py-3 rounded-full border border-tertiary-container text-tertiary-container hover:bg-surface-container-highest transition-colors font-label-md text-[14px] font-medium">
-            <span className="material-symbols-outlined">calendar_today</span>
+          <a
+            href={`${API_BASE_URL}/calendar/google/login`}
+            className="flex items-center gap-2 px-6 py-3 rounded-full bg-white border-2 border-primary text-primary hover:bg-primary hover:text-on-primary transition-all font-label-md text-[14px] font-bold shadow-sm"
+          >
+            <span className="material-symbols-outlined text-[18px]">calendar_today</span>
             Connect Google Calendar
           </a>
         )}

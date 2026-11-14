@@ -10,6 +10,13 @@ interface RescheduleModalProps {
   onSuccess: () => void;
 }
 
+function formatLocalDate(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export default function RescheduleModal({ booking, onClose, onSuccess }: RescheduleModalProps) {
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => {
     const d = new Date();
@@ -39,8 +46,8 @@ export default function RescheduleModal({ booking, onClose, onSuccess }: Resched
         const start = new Date(currentWeekStart);
         const end = new Date(currentWeekStart);
         end.setDate(end.getDate() + 6);
-        const startDateStr = start.toISOString().split('T')[0];
-        const endDateStr = end.toISOString().split('T')[0];
+        const startDateStr = formatLocalDate(start);
+        const endDateStr = formatLocalDate(end);
 
         const data = await api.get(`/availability/${booking.counselor_id}/slots?start_date=${startDateStr}&end_date=${endDateStr}&duration=60&exclude_booking_id=${booking.id}`);
         setAvailableWeeklySlots(data || {});
@@ -64,8 +71,10 @@ export default function RescheduleModal({ booking, onClose, onSuccess }: Resched
     setErrorMsg("");
     setIsSubmitting(true);
     
-    const startD = new Date(`${dateStr}T${startHour.toString().padStart(2, '0')}:00:00Z`);
-    const endD = new Date(`${dateStr}T${(endHour + 1).toString().padStart(2, '0')}:00:00Z`);
+    const startIso = `${dateStr}T${startHour.toString().padStart(2, '0')}:00:00+08:00`;
+    const endIso = `${dateStr}T${(endHour + 1).toString().padStart(2, '0')}:00:00+08:00`;
+    const startD = new Date(startIso);
+    const endD = new Date(endIso);
     
     try {
       await api.put(`/bookings/${booking.id}/reschedule`, {
@@ -215,17 +224,17 @@ export default function RescheduleModal({ booking, onClose, onSuccess }: Resched
                       {Array.from({length: 7}).map((_, dayIndex) => {
                         const d = new Date(currentWeekStart);
                         d.setDate(d.getDate() + dayIndex);
-                        const dateStr = d.toISOString().split('T')[0];
+                        const dateStr = formatLocalDate(d);
                         
                         const startHour = 8 + timeIndex;
-                        const slotTimeIsoStr = `${dateStr}T${startHour.toString().padStart(2, '0')}:00:00Z`;
+                        const slotIsoStr = `${dateStr}T${startHour.toString().padStart(2, '0')}:00:00+08:00`;
                         
                         const slotsForDay = availableWeeklySlots[dateStr] || { available: [], occupied: [] };
                         
-                        const isAvailable = slotsForDay.available?.some(slotStr => new Date(slotStr).getUTCHours() === startHour);
-                        const isOccupied = slotsForDay.occupied?.some(slotStr => new Date(slotStr).getUTCHours() === startHour);
+                        const isAvailable = slotsForDay.available?.some(slotStr => parseInt(slotStr.substring(11, 13), 10) === startHour);
+                        const isOccupied = slotsForDay.occupied?.some(slotStr => parseInt(slotStr.substring(11, 13), 10) === startHour);
                         
-                        const isPast = new Date(slotTimeIsoStr) < new Date();
+                        const isPast = new Date(slotIsoStr) < new Date();
 
                         const isSelected = dragSelection && 
                           dragSelection.dateStr === dateStr && 
@@ -233,8 +242,8 @@ export default function RescheduleModal({ booking, onClose, onSuccess }: Resched
                           startHour <= Math.max(dragSelection.startHour, dragSelection.endHour);
 
                         const isOriginalBooking = (
-                          new Date(slotTimeIsoStr).getTime() >= originalStart.getTime() &&
-                          new Date(slotTimeIsoStr).getTime() < originalEnd.getTime()
+                          new Date(slotIsoStr).getTime() >= originalStart.getTime() &&
+                          new Date(slotIsoStr).getTime() < originalEnd.getTime()
                         );
                         
                         const isPending = pendingReschedule && 

@@ -63,6 +63,7 @@ export default function CounselorBookingDetailPage({ params }: { params: Promise
     }
   };
 
+
   if (loading) {
     return (
       <DashboardLayout role="counselor" allowedRoles={["counselor"]}>
@@ -161,6 +162,21 @@ export default function CounselorBookingDetailPage({ params }: { params: Promise
             </div>
           </div>
         </div>
+
+        {/* Pending Payment Action */}
+        {booking.status === "pending_payment" && (
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-secondary-container mb-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h2 className="font-headline-md text-primary mb-1">GCash Payment Verification</h2>
+                <p className="font-body-sm text-on-surface-variant">
+                  The client has submitted this booking and has been instructed to send payment via GCash. An administrator will verify the transfer.
+                </p>
+              </div>
+              <p>Payment confirmation is handled by the administrator.</p>
+            </div>
+          </div>
+        )}
 
         {/* Action Buttons */}
         {booking.status === "confirmed" && (
