@@ -12,6 +12,7 @@ import {
   type QuoteItem,
 } from "@/data/site";
 import { api } from "@/lib/api";
+import { fetchSiteContentMap } from "@/lib/content";
 import { getInitials } from "@/lib/routes";
 import type { CounselorProfile } from "@/types";
 
@@ -28,12 +29,10 @@ export default function HomePage() {
 
     const loadContent = async () => {
       try {
-        const res = await api.get<{
-          items?: Array<{ key: string; value: string }>;
-        }>("/admin/content");
-        const quoteBlock = res?.items?.find((i) => i.key === "homepage_quotes");
-        if (quoteBlock && active) {
-          const parsed = JSON.parse(quoteBlock.value);
+        const contentMap = await fetchSiteContentMap();
+        const quoteRaw = contentMap.homepage_quotes || contentMap.quotes;
+        if (quoteRaw && active) {
+          const parsed = JSON.parse(quoteRaw);
           if (Array.isArray(parsed) && parsed.length > 0) {
             setQuotes(parsed);
           }
@@ -96,40 +95,22 @@ export default function HomePage() {
             {/* Left 8 cols: Display statement + actions */}
             <div className="lg:col-span-8 flex flex-col justify-between">
               <div>
-                <p
-                  data-reveal="fade"
-                  data-intro
-                  className="text-xs font-semibold uppercase tracking-[0.08em] text-secondary"
-                >
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-secondary">
                   Online Counseling &bull; Philippines
                 </p>
 
-                <h1
-                  data-split="lines"
-                  data-intro
-                  className="mt-5 font-serif text-[clamp(2.65rem,1.45rem+5.2vw,5.25rem)] leading-[0.98] tracking-[-0.03em] text-primary"
-                >
+                <h1 className="mt-5 font-serif text-[clamp(2.65rem,1.45rem+5.2vw,5.25rem)] leading-[0.98] tracking-[-0.03em] text-primary">
                   A quiet room to talk with someone who truly listens.
                 </h1>
 
-                <p
-                  data-reveal="up"
-                  data-intro
-                  data-delay="0.12"
-                  className="mt-7 max-w-[48ch] text-body-lg text-on-surface-variant"
-                >
+                <p className="mt-7 max-w-[48ch] text-body-lg text-on-surface-variant">
                   Connect with vetted, PRC-licensed Filipino counselors and
                   psychologists online. Read their clinical backgrounds, choose
                   an hour in Manila Time, and meet one-on-one from home.
                 </p>
               </div>
 
-              <div
-                data-reveal="up"
-                data-intro
-                data-delay="0.2"
-                className="mt-10 flex flex-wrap items-center gap-5"
-              >
+              <div className="mt-10 flex flex-wrap items-center gap-5">
                 <Link
                   href="/counselors"
                   data-fill
@@ -156,9 +137,6 @@ export default function HomePage() {
 
             {/* Right 4 cols: Architectural ledger */}
             <aside
-              data-reveal="up"
-              data-intro
-              data-delay="0.16"
               aria-label="Platform standards"
               className="lg:col-span-4 lg:border-l lg:border-outline-variant lg:pl-8 flex flex-col justify-between gap-8 pt-6 border-t border-outline-variant lg:border-t-0 lg:pt-0"
             >
@@ -240,7 +218,7 @@ export default function HomePage() {
                       (prev) => (prev - 1 + quotes.length) % quotes.length
                     )
                   }
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/20 text-on-primary transition-colors hover:bg-white/10"
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/20 text-on-primary transition-all hover:-translate-x-0.5 hover:bg-white/10"
                 >
                   <span
                     aria-hidden="true"
@@ -255,7 +233,7 @@ export default function HomePage() {
                   onClick={() =>
                     setCurrentQuoteIndex((prev) => (prev + 1) % quotes.length)
                   }
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/20 text-on-primary transition-colors hover:bg-white/10"
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/20 text-on-primary transition-all hover:translate-x-0.5 hover:bg-white/10"
                 >
                   <span
                     aria-hidden="true"
@@ -326,6 +304,16 @@ export default function HomePage() {
                         <span className="mt-1 sm:mt-0 font-mono text-xs text-on-surface-variant tabular-nums">
                           {String(idx + 1).padStart(2, "0")}
                         </span>
+                        {c.photo_url && (
+                          <img
+                            src={c.photo_url}
+                            alt=""
+                            width={44}
+                            height={44}
+                            aria-hidden="true"
+                            className="h-11 w-11 shrink-0 rounded-full object-cover object-top border border-outline-variant"
+                          />
+                        )}
                         <div>
                           <div className="flex flex-wrap items-baseline gap-2.5">
                             <h3 className="font-serif text-2xl text-primary transition-transform duration-300 group-hover:translate-x-1">
@@ -341,13 +329,17 @@ export default function HomePage() {
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between gap-4 pl-8 sm:pl-0">
-                        {typeof c.rate === "number" && (
+                      <div className="flex items-center justify-between gap-4 pl-8 sm:pl-0 shrink-0">
+                        {typeof c.rate === "number" ? (
                           <span className="text-sm font-semibold text-primary tabular-nums">
                             &#8369;{c.rate.toLocaleString()}
                             <span className="font-normal text-on-surface-variant">
                               /hr
                             </span>
+                          </span>
+                        ) : (
+                          <span className="text-xs font-medium text-on-surface-variant">
+                            Private 1-on-1
                           </span>
                         )}
                         <span
@@ -359,9 +351,21 @@ export default function HomePage() {
                       </div>
                     </Link>
 
-                    {/* Mobile inline summary so touch devices see full detail */}
-                    <div className="px-3 pb-5 pl-11 text-sm text-on-surface-variant lg:hidden">
-                      <p className="line-clamp-2">{c.bio}</p>
+                    {/* Mobile/Tablet inline preview */}
+                    <div className="px-3 pb-5 sm:px-4 lg:hidden">
+                      <p className="text-sm leading-relaxed text-on-surface-variant line-clamp-2">
+                        {c.bio}
+                      </p>
+                      <div className="mt-2.5 flex flex-wrap gap-1.5">
+                        {c.specializations.slice(0, 3).map((spec) => (
+                          <span
+                            key={spec}
+                            className="rounded-full border border-outline-variant bg-background px-2.5 py-0.5 text-[11px] font-medium text-primary"
+                          >
+                            {spec}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 );
@@ -371,14 +375,16 @@ export default function HomePage() {
             {/* Right 5 cols (Desktop): Poised preview frame */}
             <div className="hidden lg:block lg:col-span-5">
               {activeCounselor && (
-                <div className="sticky top-8 border border-outline-variant bg-surface-bright p-8 shadow-ambient">
-                  <div className="flex items-center justify-between border-b border-outline-variant pb-5">
+                <div className="sticky top-[calc(var(--crisis-banner-h,0px)+5.5rem)] border border-outline-variant bg-surface-bright p-8 shadow-ambient">
+                  <div className="flex items-start justify-between border-b border-outline-variant pb-5">
                     <div className="flex items-center gap-4">
                       {activeCounselor.photo_url ? (
                         <img
                           src={activeCounselor.photo_url}
                           alt={activeCounselor.name}
-                          className="h-16 w-16 rounded-full object-cover border border-outline-variant"
+                          width={96}
+                          height={120}
+                          className="w-24 aspect-[4/5] shrink-0 rounded-sm object-cover object-top border border-outline-variant"
                         />
                       ) : (
                         <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-secondary-container font-serif text-2xl text-secondary">
@@ -451,7 +457,7 @@ export default function HomePage() {
         <div className="mx-auto max-w-container-max px-4 md:px-margin-desktop">
           <div className="grid grid-cols-1 gap-12 lg:grid-cols-12">
             <div className="lg:col-span-4">
-              <div className="lg:sticky lg:top-10">
+              <div className="lg:sticky lg:top-[calc(var(--crisis-banner-h,0px)+5.5rem)]">
                 <p className="text-xs font-semibold uppercase tracking-[0.08em] text-secondary">
                   Simple &amp; Guided
                 </p>
@@ -470,7 +476,7 @@ export default function HomePage() {
                   <Link
                     href="/counselors"
                     data-fill
-                    className="btn-fill inline-flex min-h-[44px] items-center gap-2 rounded-full border border-primary px-6 py-3 text-sm font-semibold text-primary"
+                    className="btn-fill btn-fill--outline inline-flex min-h-[44px] items-center gap-2 rounded-full border border-primary px-6 py-3 text-sm font-semibold text-primary"
                   >
                     <span className="btn__fill" aria-hidden="true" />
                     <span>Explore open hours</span>

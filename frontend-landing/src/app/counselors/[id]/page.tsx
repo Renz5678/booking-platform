@@ -209,7 +209,7 @@ export default function CounselorProfilePage() {
 
           {/* Book a Session Panel */}
           <div className="lg:col-span-5">
-            <div className="sticky top-24 rounded-3xl border border-border-subtle bg-surface-elevated p-6 shadow-ambient">
+            <div className="sticky top-[calc(var(--crisis-banner-h,0px)+5.5rem)] rounded-3xl border border-border-subtle bg-surface-elevated p-6 shadow-ambient">
               <h2 className="font-serif text-xl font-medium text-text-primary">
                 Book a Session
               </h2>
@@ -241,7 +241,7 @@ export default function CounselorProfilePage() {
                       href={`/login?redirect=${encodeURIComponent(
                         `/counselors/${counselor.id}`
                       )}`}
-                      className="inline-flex w-full items-center justify-center rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      className="inline-flex min-h-[44px] sm:min-h-[38px] w-full items-center justify-center rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-primary-hover active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       Sign In to Book
                     </Link>
@@ -249,7 +249,7 @@ export default function CounselorProfilePage() {
                       href={`/signup?redirect=${encodeURIComponent(
                         `/counselors/${counselor.id}`
                       )}`}
-                      className="inline-flex w-full items-center justify-center rounded-xl border border-border-subtle bg-surface-elevated px-4 py-2.5 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      className="inline-flex min-h-[44px] sm:min-h-[38px] w-full items-center justify-center rounded-xl border border-border-subtle bg-surface-elevated px-4 py-2.5 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       Create Free Account
                     </Link>
@@ -325,7 +325,7 @@ export default function CounselorProfilePage() {
                                   `/counselors?counselor=${counselor.id}&date=${selectedDate}`
                                 )
                               }
-                              className="rounded-xl border border-primary/30 bg-primary-light/60 px-2.5 py-2 text-xs font-semibold text-primary tabular-nums transition-colors hover:bg-primary hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                              className="min-h-[44px] sm:min-h-[38px] rounded-xl border border-primary/30 bg-primary-light/60 px-2.5 py-2 text-xs font-semibold text-primary tabular-nums transition-colors hover:bg-primary hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                             >
                               {formatHourLabel(hr)}
                             </button>
@@ -342,7 +342,7 @@ export default function CounselorProfilePage() {
                         `/counselors?counselor=${counselor.id}&date=${selectedDate}`
                       )
                     }
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="inline-flex min-h-[44px] sm:min-h-[38px] w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-primary-hover active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     <span>Open Weekly Booking Calendar</span>
                     <span

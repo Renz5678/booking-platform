@@ -361,7 +361,7 @@ function CounselorsContent() {
           <h1 className="mt-2 font-serif text-headline-xl text-text-primary">
             Find the right counselor for you
           </h1>
-          <p className="mt-3 text-body-md text-text-secondary">
+          <p className="mt-3 min-h-[48px] text-body-md text-text-secondary">
             Browse PRC-licensed mental health professionals.{" "}
             {!user && (
               <span>
@@ -407,29 +407,44 @@ function CounselorsContent() {
           <div
             role="group"
             aria-label="Filter by specialization"
-            className="flex flex-wrap gap-2"
+            className="flex min-h-[40px] flex-wrap gap-2"
           >
-            {specializations.map((spec) => {
-              const active = selectedSpec === spec;
-              return (
-                <button
-                  key={spec}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => {
-                    setSelectedSpec(spec);
-                    updateUrlFilters(searchQuery, spec);
-                  }}
-                  className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-                    active
-                      ? "bg-primary text-white shadow-sm"
-                      : "border border-border-subtle bg-surface-elevated text-text-secondary hover:bg-surface-muted hover:text-text-primary"
-                  }`}
-                >
-                  {spec}
-                </button>
-              );
-            })}
+            {loading && specializations.length <= 1 ? (
+              <>
+                <span className="inline-flex min-h-[40px] sm:min-h-[36px] items-center rounded-full bg-primary px-4 py-1.5 text-xs font-medium text-white shadow-sm">
+                  All
+                </span>
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <span
+                    key={n}
+                    aria-hidden="true"
+                    className="inline-flex min-h-[40px] sm:min-h-[36px] w-24 animate-pulse rounded-full border border-border-subtle bg-surface-elevated"
+                  />
+                ))}
+              </>
+            ) : (
+              specializations.map((spec) => {
+                const active = selectedSpec === spec;
+                return (
+                  <button
+                    key={spec}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => {
+                      setSelectedSpec(spec);
+                      updateUrlFilters(searchQuery, spec);
+                    }}
+                    className={`min-h-[40px] sm:min-h-[36px] rounded-full px-4 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                      active
+                        ? "bg-primary text-white shadow-sm"
+                        : "border border-border-subtle bg-surface-elevated text-text-secondary hover:bg-surface-muted hover:text-text-primary"
+                    }`}
+                  >
+                    {spec}
+                  </button>
+                );
+              })
+            )}
           </div>
         </div>
 
@@ -526,7 +541,7 @@ function CounselorsContent() {
                     </div>
 
                     <div className="mt-6 border-t border-border-subtle pt-4">
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
                           <span className="text-xs text-text-muted">
                             Session Format
@@ -535,17 +550,17 @@ function CounselorsContent() {
                             Private 1-on-1
                           </p>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <Link
                             href={`/counselors/${counselor.id}`}
-                            className="rounded-xl border border-border-subtle bg-background px-3.5 py-2 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                            className="inline-flex min-h-[42px] sm:min-h-[38px] items-center justify-center rounded-xl border border-border-subtle bg-background px-3.5 py-2 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                           >
                             View Profile
                           </Link>
                           <button
                             type="button"
                             onClick={() => openBookingModal(counselor)}
-                            className="rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                            className="inline-flex min-h-[42px] sm:min-h-[38px] items-center justify-center rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-white transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-primary-hover active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                           >
                             {user ? "Book Session" : "Sign in to Book"}
                           </button>
