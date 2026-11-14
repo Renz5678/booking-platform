@@ -11,62 +11,78 @@ import {
 function initButtonFills() {
   return onPage(() => {
     if (isTouch() || prefersReducedMotion()) return;
-    const cleanups: (() => void)[] = [];
 
-    document.querySelectorAll<HTMLElement>("[data-fill]").forEach((btn) => {
+    const getOrigin = (btn: HTMLElement, e: PointerEvent) => {
+      const r = btn.getBoundingClientRect();
+      return `${e.clientX - r.left}px ${e.clientY - r.top}px`;
+    };
+
+    const open = (btn: HTMLElement, at: string) => {
       const fill = btn.querySelector<HTMLElement>(".btn__fill");
       if (!fill) return;
-
-      const from = (e: PointerEvent) => {
-        const r = btn.getBoundingClientRect();
-        return `${e.clientX - r.left}px ${e.clientY - r.top}px`;
-      };
-
-      let closed = true;
-      const open = (at: string) => {
-        if (closed) gsap.set(fill, { clipPath: `circle(0% at ${at})` });
-        closed = false;
-        btn.classList.add("is-filled");
-        gsap.to(fill, {
-          clipPath: `circle(150% at ${at})`,
-          duration: 0.55,
-          ease: ease.soft,
-          overwrite: true,
-        });
-      };
-
-      const close = (at: string) => {
-        btn.classList.remove("is-filled");
-        gsap.to(fill, {
-          clipPath: `circle(0% at ${at})`,
-          duration: 0.45,
-          ease: ease.soft,
-          overwrite: true,
-          onComplete: () => {
-            closed = true;
-          },
-        });
-      };
-
-      const onEnter = (e: PointerEvent) => open(from(e));
-      const onLeave = (e: PointerEvent) => close(from(e));
-      const onFocus = () => btn.matches(":focus-visible") && open("50% 50%");
-      const onBlur = () => close("50% 50%");
-
-      btn.addEventListener("pointerenter", onEnter);
-      btn.addEventListener("pointerleave", onLeave);
-      btn.addEventListener("focus", onFocus);
-      btn.addEventListener("blur", onBlur);
-
-      cleanups.push(() => {
-        btn.removeEventListener("pointerenter", onEnter);
-        btn.removeEventListener("pointerleave", onLeave);
-        btn.removeEventListener("focus", onFocus);
-        btn.removeEventListener("blur", onBlur);
+      if (btn.dataset.fillState !== "open") {
+        gsap.set(fill, { clipPath: `circle(0% at ${at})` });
+      }
+      btn.dataset.fillState = "open";
+      btn.classList.add("is-filled");
+      gsap.to(fill, {
+        clipPath: `circle(150% at ${at})`,
+        duration: 0.35,
+        ease: ease.soft,
+        overwrite: true,
       });
-    });
+    };
 
-    return () => cleanups.forEach((fn) => fn());
+    const close = (btn: HTMLElement, at: string) => {
+      const fill = btn.querySelector<HTMLElement>(".btn__fill");
+      if (!fill) return;
+      btn.classList.remove("is-filled");
+      gsap.to(fill, {
+        clipPath: `circle(0% at ${at})`,
+        duration: 0.45,
+        ease: ease.soft,
+        overwrite: true,
+        onComplete: () => {
+          btn.dataset.fillState = "closed";
+        },
+      });
+    };
+
+    const onPointerOver = (e: PointerEvent) => {
+      const btn = (e.target as Element | null)?.closest<HTMLElement>("[data-fill]");
+      if (!btn || btn.contains(e.relatedTarget as Node | null)) return;
+      open(btn, getOrigin(btn, e));
+    };
+
+    const onPointerOut = (e: PointerEvent) => {
+      const btn = (e.target as Element | null)?.closest<HTMLElement>("[data-fill]");
+      if (!btn || btn.contains(e.relatedTarget as Node | null)) return;
+      close(btn, getOrigin(btn, e));
+    };
+
+    const onFocusIn = (e: FocusEvent) => {
+      const btn = (e.target as Element | null)?.closest<HTMLElement>("[data-fill]");
+      if (!btn || !btn.matches(":focus-visible")) return;
+      open(btn, "50% 50%");
+    };
+
+    const onFocusOut = (e: FocusEvent) => {
+      const btn = (e.target as Element | null)?.closest<HTMLElement>("[data-fill]");
+      if (!btn || btn.contains(e.relatedTarget as Node | null)) return;
+      close(btn, "50% 50%");
+    };
+
+    document.addEventListener("pointerover", onPointerOver);
+    document.addEventListener("pointerout", onPointerOut);
+    document.addEventListener("focusin", onFocusIn);
+    document.addEventListener("focusout", onFocusOut);
+
+    return () => {
+      document.removeEventListener("pointerover", onPointerOver);
+      document.removeEventListener("pointerout", onPointerOut);
+      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("focusout", onFocusOut);
+    };
   });
 }
 

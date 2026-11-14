@@ -12,8 +12,45 @@ import { ease, prefersReducedMotion } from './env';
 
 gsap.registerPlugin(ScrollTrigger, SplitText);
 
-const durations = { lines: 1.1, words: 1.0, chars: 0.85 } as const;
-const staggers = { lines: 0.075, words: 0.032, chars: 0.016 } as const;
+const durations = { lines: 0.65, words: 0.6, chars: 0.5 } as const;
+const staggers = { lines: 0.055, words: 0.024, chars: 0.012 } as const;
+
+function onVisible(el: HTMLElement, play: () => void) {
+  let done = false;
+  let io: IntersectionObserver | null = null;
+  const trigger = () => {
+    if (done) return;
+    done = true;
+    play();
+    io?.disconnect();
+  };
+
+  if (el.getBoundingClientRect().top < window.innerHeight * 0.98) {
+    trigger();
+    return;
+  }
+
+  io =
+    typeof IntersectionObserver !== 'undefined'
+      ? new IntersectionObserver(
+          (entries) => {
+            if (entries.some((e) => e.isIntersecting || e.boundingClientRect.top < window.innerHeight)) {
+              trigger();
+            }
+          },
+          { rootMargin: '0px 0px 40px 0px', threshold: 0.01 }
+        )
+      : null;
+  io?.observe(el);
+
+  ScrollTrigger.create({
+    trigger: el,
+    start: 'top 98%',
+    once: true,
+    onEnter: trigger,
+    onEnterBack: trigger,
+  });
+}
 
 function splitTween(el: HTMLElement, isIntro: boolean) {
   const type = (el.dataset.split || 'lines') as keyof typeof durations;
@@ -40,14 +77,13 @@ function splitTween(el: HTMLElement, isIntro: boolean) {
         stagger: staggers[type],
         ease: ease.out,
         delay,
-        paused: isIntro && !s.requested,
+        paused: true,
         onComplete: () => {
           s.done = true;
         },
-        scrollTrigger: isIntro
-          ? undefined
-          : { trigger: el, start: 'top 88%', once: true },
       });
+      if (s.requested) s.tween.play();
+      else if (!isIntro) onVisible(el, () => s.tween?.play());
       return s.tween;
     },
   });
@@ -57,7 +93,7 @@ function splitTween(el: HTMLElement, isIntro: boolean) {
   };
 }
 
-function blockTween(el: HTMLElement, paused: boolean) {
+function blockTween(el: HTMLElement, isIntro: boolean) {
   const kind = el.dataset.reveal || 'up';
   const delay = parseFloat(el.dataset.delay || '0');
   const from: gsap.TweenVars =
@@ -67,24 +103,26 @@ function blockTween(el: HTMLElement, paused: boolean) {
         ? { clipPath: 'inset(100% 0% 0% 0%)', autoAlpha: 1 }
         : kind === 'scale'
           ? { scale: 1.08, clipPath: 'inset(8% 8% 8% 8%)', autoAlpha: 1 }
-          : { y: 36, autoAlpha: 0 };
+          : { y: 20, autoAlpha: 0 };
   const to: gsap.TweenVars =
     kind === 'clip' || kind === 'scale'
       ? { clipPath: 'inset(0% 0% 0% 0%)', scale: 1 }
       : {};
   gsap.set(el, { visibility: 'visible' });
-  return gsap.fromTo(el, from, {
+  const tween = gsap.fromTo(el, from, {
     ...to,
     y: 0,
     autoAlpha: 1,
-    duration: kind === 'fade' ? 0.9 : 1.15,
+    duration: kind === 'fade' ? 0.55 : 0.65,
     ease: ease.out,
     delay,
-    paused,
-    scrollTrigger: paused
-      ? undefined
-      : { trigger: el, start: 'top 90%', once: true },
+    paused: true,
+    onComplete: () => {
+      gsap.set(el, { clearProps: 'transform' });
+    },
   });
+  if (!isIntro) onVisible(el, () => tween.play());
+  return tween;
 }
 
 /** Wire every reveal inside `root`. Returns the intro timeline (paused) for the page entrance. */
@@ -119,5 +157,6 @@ export function initReveals(root: ParentNode = document) {
       }
     );
   });
+  requestAnimationFrame(() => ScrollTrigger.refresh());
   return intro;
 }

@@ -28,21 +28,28 @@ export default function DashboardLayout({
   const effectiveAllowedRoles = allowedRoles ?? [role];
   const pathname = usePathname();
   const { user, logout } = useAuth();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [openMenuPathname, setOpenMenuPathname] = useState<string | null>(null);
+  const isMobileMenuOpen = openMenuPathname === pathname;
   const [loggingOut, setLoggingOut] = useState(false);
-
-  useEffect(() => {
-    setIsMobileMenuOpen(false);
-  }, [pathname]);
 
   useEffect(() => {
     if (!isMobileMenuOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setIsMobileMenuOpen(false);
+      if (e.key === "Escape") setOpenMenuPathname(null);
+    };
+    const handleResize = () => {
+      const desktopBreakpoint = role === "admin" ? 1024 : 768;
+      if (window.innerWidth >= desktopBreakpoint) {
+        setOpenMenuPathname(null);
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isMobileMenuOpen]);
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [isMobileMenuOpen, role]);
 
   const handleLogout = async () => {
     if (loggingOut) return;
@@ -115,9 +122,9 @@ export default function DashboardLayout({
           </div>
           <button
             type="button"
-            onClick={() => setIsMobileMenuOpen(false)}
+            onClick={() => setOpenMenuPathname(null)}
             aria-label="Close admin navigation"
-            className="lg:hidden p-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high"
+            className="lg:hidden inline-flex h-11 w-11 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high"
           >
             <span className="material-symbols-outlined text-[20px]" aria-hidden="true">
               close
@@ -201,7 +208,7 @@ export default function DashboardLayout({
       <ProtectedRoute allowedRoles={effectiveAllowedRoles}>
         <div className="font-sans text-on-surface antialiased flex flex-col lg:flex-row bg-background min-h-screen">
           {/* Mobile Top Bar for Admin */}
-          <header className="lg:hidden sticky top-0 z-40 bg-surface/95 backdrop-blur-md border-b border-outline-variant px-4 py-3 flex items-center justify-between">
+          <header className="lg:hidden sticky top-[var(--crisis-banner-h,0px)] z-40 bg-surface/95 backdrop-blur-md border-b border-outline-variant px-4 py-3 flex items-center justify-between">
             <Link
               href="/admin/dashboard"
               translate="no"
@@ -211,7 +218,7 @@ export default function DashboardLayout({
             </Link>
             <button
               type="button"
-              onClick={() => setIsMobileMenuOpen(true)}
+              onClick={() => setOpenMenuPathname(pathname)}
               aria-label="Open admin navigation menu"
               aria-expanded={isMobileMenuOpen}
               className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg text-primary hover:bg-surface-container-low focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
@@ -223,19 +230,21 @@ export default function DashboardLayout({
           </header>
 
           {/* Desktop Fixed Sidebar */}
-          <aside className="hidden lg:block bg-surface-container-low border-r border-outline-variant h-screen w-64 fixed left-0 top-0 z-40 overflow-y-auto">
+          <aside className="hidden lg:block bg-surface-container-low border-r border-outline-variant h-[calc(100dvh-var(--crisis-banner-h,0px))] w-64 fixed left-0 top-[var(--crisis-banner-h,0px)] z-40 overflow-y-auto overscroll-contain">
             {sidebarContent}
           </aside>
 
           {/* Mobile Slide-Over Drawer */}
           {isMobileMenuOpen && (
             <div
+              data-lenis-prevent
               className="lg:hidden fixed inset-0 z-50 bg-primary/40 backdrop-blur-[2px] flex overscroll-contain animate-fade-in"
-              onClick={() => setIsMobileMenuOpen(false)}
+              onClick={() => setOpenMenuPathname(null)}
             >
               <aside
+                data-lenis-prevent
                 onClick={(e) => e.stopPropagation()}
-                className="w-72 max-w-[85vw] bg-surface-container-low border-r border-outline-variant h-full overflow-y-auto shadow-ambient animate-slide-up"
+                className="w-72 max-w-[85vw] bg-surface-container-low border-r border-outline-variant h-full overflow-y-auto overscroll-contain shadow-ambient animate-slide-up"
               >
                 {sidebarContent}
               </aside>
@@ -255,7 +264,7 @@ export default function DashboardLayout({
     <ProtectedRoute allowedRoles={effectiveAllowedRoles}>
       <div className="text-on-background font-body-md antialiased min-h-screen flex flex-col bg-background">
         {/* Sticky Workspace Navigation */}
-        <header className="sticky top-0 z-40 bg-surface/90 backdrop-blur-md border-b border-outline-variant/70">
+        <header className="sticky top-[var(--crisis-banner-h,0px)] z-40 bg-surface/90 backdrop-blur-md border-b border-outline-variant/70">
           <nav
             aria-label={`${role} workspace navigation`}
             className="flex justify-between items-center px-4 md:px-margin-desktop py-3.5 max-w-[1200px] mx-auto gap-4"
@@ -319,7 +328,11 @@ export default function DashboardLayout({
             <button
               type="button"
               className="md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg text-primary hover:bg-surface-container-low focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-              onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+              onClick={() =>
+                setOpenMenuPathname((prev) =>
+                  prev === pathname ? null : pathname
+                )
+              }
               aria-expanded={isMobileMenuOpen}
               aria-label={isMobileMenuOpen ? "Close workspace menu" : "Open workspace menu"}
             >
@@ -331,7 +344,10 @@ export default function DashboardLayout({
 
           {/* Mobile Nav Menu */}
           {isMobileMenuOpen && (
-            <div className="md:hidden bg-surface-container-lowest border-t border-outline-variant py-3 px-4 flex flex-col gap-1.5 shadow-ambient animate-slide-up overscroll-contain">
+            <div
+              data-lenis-prevent
+              className="md:hidden max-h-[calc(100dvh-var(--crisis-banner-h,0px)-4.5rem)] overflow-y-auto bg-surface-container-lowest border-t border-outline-variant py-3 px-4 flex flex-col gap-1.5 shadow-ambient animate-slide-up overscroll-contain"
+            >
               {navItems.map((item) => {
                 const active = isNavActive(item.path);
                 return (
@@ -344,7 +360,7 @@ export default function DashboardLayout({
                         ? "bg-secondary-container text-on-secondary-container font-semibold"
                         : "text-on-surface hover:bg-surface-container-low"
                     }`}
-                    onClick={() => setIsMobileMenuOpen(false)}
+                    onClick={() => setOpenMenuPathname(null)}
                   >
                     <span className="material-symbols-outlined text-[20px]" aria-hidden="true">
                       {item.icon}
@@ -356,7 +372,7 @@ export default function DashboardLayout({
               <div className="border-t border-outline-variant my-1.5 pt-2 grid grid-cols-2 gap-2">
                 <Link
                   href="/account"
-                  onClick={() => setIsMobileMenuOpen(false)}
+                  onClick={() => setOpenMenuPathname(null)}
                   className="text-center px-4 py-2.5 rounded-xl border border-outline-variant text-primary font-label-md"
                 >
                   Account
@@ -365,7 +381,7 @@ export default function DashboardLayout({
                   type="button"
                   disabled={loggingOut}
                   onClick={() => {
-                    setIsMobileMenuOpen(false);
+                    setOpenMenuPathname(null);
                     handleLogout();
                   }}
                   className="inline-flex items-center justify-center gap-2 text-center px-4 py-2.5 rounded-xl border border-error/30 text-error font-label-md disabled:opacity-60"

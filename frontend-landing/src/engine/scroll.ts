@@ -56,17 +56,32 @@ export function resetScroll() {
   state.y = 0;
   state.velocity = 0;
 }
+function getStickyOffset(): number {
+  if (typeof document === 'undefined') return 0;
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(
+    '--crisis-banner-h'
+  );
+  const bannerH = parseFloat(raw) || 0;
+  return bannerH + 84;
+}
+
 export function scrollToTarget(target: string | HTMLElement | number) {
+  const offset = typeof target === 'number' ? 0 : -getStickyOffset();
   if (lenis) {
     lenis.scrollTo(target, {
+      offset,
       duration: 1.4,
       easing: (t) => 1 - Math.pow(1 - t, 4),
     });
   } else if (typeof target === 'number') {
     scrollTo({ top: target });
   } else {
-    (typeof target === 'string'
-      ? document.querySelector(target)
-      : target)?.scrollIntoView();
+    const el =
+      typeof target === 'string' ? document.querySelector(target) : target;
+    if (el) {
+      const top =
+        el.getBoundingClientRect().top + window.scrollY - getStickyOffset();
+      scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+    }
   }
 }

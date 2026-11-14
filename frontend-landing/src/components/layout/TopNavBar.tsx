@@ -50,16 +50,24 @@ const NAV_LINKS = [
 export default function TopNavBar() {
   const pathname = usePathname();
   const { user, isLoading, logout } = useAuth();
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [openPathname, setOpenPathname] = useState<string | null>(null);
+  const isMobileOpen = openPathname === pathname;
   const manilaTime = useManilaTime();
 
   useEffect(() => {
     if (!isMobileOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setIsMobileOpen(false);
+      if (e.key === "Escape") setOpenPathname(null);
+    };
+    const onResize = () => {
+      if (window.innerWidth >= 768) setOpenPathname(null);
     };
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("resize", onResize);
+    };
   }, [isMobileOpen]);
 
   if (isAuthRoute(pathname) || isDashboardChromeRoute(pathname)) return null;
@@ -67,16 +75,16 @@ export default function TopNavBar() {
   const dashboardHref = getDashboardPathForRole(user?.role);
 
   return (
-    <header className="relative z-40 border-b border-outline-variant bg-background/95 backdrop-blur-sm">
+    <header className="sticky top-[var(--crisis-banner-h,0px)] z-40 border-b border-outline-variant bg-background/95 backdrop-blur-sm">
       <nav
         aria-label="Primary"
-        className="mx-auto flex max-w-container-max items-center justify-between px-4 py-4 md:px-margin-desktop"
+        className="mx-auto flex max-w-container-max items-center justify-between px-4 py-3.5 md:px-margin-desktop"
       >
         <div className="flex items-center gap-6">
           <Link
             href="/"
             translate="no"
-            className="font-serif text-[26px] leading-none tracking-[-0.02em] text-primary transition-opacity hover:opacity-80"
+            className="inline-flex min-h-[44px] md:min-h-[36px] items-center font-serif text-[26px] leading-none tracking-[-0.02em] text-primary transition-all hover:opacity-80 hover:-translate-y-0.5"
           >
             Alaga
           </Link>
@@ -102,9 +110,9 @@ export default function TopNavBar() {
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className={`nav-draw py-1 text-sm font-medium ${
+                className={`nav-draw inline-flex min-h-[36px] items-center py-1 text-sm font-medium ${
                   active
-                    ? "text-primary"
+                    ? "text-primary hover:opacity-80"
                     : "text-on-surface-variant hover:text-primary"
                 }`}
               >
@@ -116,19 +124,19 @@ export default function TopNavBar() {
 
         <div className="hidden md:flex items-center gap-4">
           {isLoading ? (
-            <div className="h-9 w-28 animate-pulse rounded-full bg-surface-container-low" />
+            <div className="h-10 w-40 animate-pulse rounded-full bg-surface-container-low" />
           ) : user ? (
             <>
               <Link
                 href={dashboardHref}
-                className="nav-draw py-1 text-sm font-medium text-primary"
+                className="nav-draw inline-flex min-h-[36px] items-center py-1 text-sm font-medium text-primary hover:opacity-80"
               >
                 Dashboard
               </Link>
               <button
                 type="button"
                 onClick={logout}
-                className="rounded-full border border-outline-variant px-5 py-2 text-sm font-medium text-on-surface-variant transition-colors hover:border-primary hover:text-primary"
+                className="min-h-[38px] rounded-full border border-outline-variant px-5 py-2 text-sm font-medium text-on-surface-variant transition-all hover:border-primary hover:text-primary hover:-translate-y-0.5 active:translate-y-0"
               >
                 Log out
               </button>
@@ -137,7 +145,7 @@ export default function TopNavBar() {
             <>
               <Link
                 href="/login"
-                className="nav-draw py-1 text-sm font-medium text-primary"
+                className="nav-draw inline-flex min-h-[36px] items-center py-1 text-sm font-medium text-primary hover:opacity-80"
               >
                 Log in
               </Link>
@@ -155,10 +163,13 @@ export default function TopNavBar() {
 
         <button
           type="button"
-          onClick={() => setIsMobileOpen((prev) => !prev)}
+          onClick={() =>
+            setOpenPathname((prev) => (prev === pathname ? null : pathname))
+          }
           aria-label={isMobileOpen ? "Close menu" : "Open menu"}
           aria-expanded={isMobileOpen}
-          className="md:hidden inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-primary hover:bg-surface-container-low transition-colors"
+          aria-controls="mobile-nav-drawer"
+          className="md:hidden inline-flex h-11 w-11 items-center justify-center rounded-lg text-primary hover:bg-surface-container-low active:scale-95 transition-all"
         >
           <span aria-hidden="true" className="material-symbols-outlined">
             {isMobileOpen ? "close" : "menu"}
@@ -167,7 +178,11 @@ export default function TopNavBar() {
       </nav>
 
       {isMobileOpen && (
-        <div className="md:hidden border-t border-outline-variant bg-surface-bright px-4 py-5 space-y-1 shadow-ambient">
+        <div
+          id="mobile-nav-drawer"
+          data-lenis-prevent
+          className="md:hidden max-h-[calc(100dvh-var(--crisis-banner-h,0px)-4.5rem)] overflow-y-auto overscroll-contain border-t border-outline-variant bg-surface-bright px-4 py-5 space-y-1 shadow-ambient"
+        >
           {NAV_LINKS.map((item) => {
             const active = item.match(pathname || "/");
             return (
@@ -175,8 +190,8 @@ export default function TopNavBar() {
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                onClick={() => setIsMobileOpen(false)}
-                className={`block rounded-lg px-3 py-3 text-base font-medium transition-colors ${
+                onClick={() => setOpenPathname(null)}
+                className={`flex min-h-[44px] items-center rounded-lg px-3 py-3 text-base font-medium transition-colors ${
                   active
                     ? "bg-surface-container-low text-primary"
                     : "text-on-surface-variant hover:bg-surface-container-low hover:text-primary"
@@ -191,18 +206,18 @@ export default function TopNavBar() {
               <>
                 <Link
                   href={dashboardHref}
-                  onClick={() => setIsMobileOpen(false)}
-                  className="block rounded-full bg-primary px-5 py-3 text-center text-sm font-semibold text-on-primary"
+                  onClick={() => setOpenPathname(null)}
+                  className="flex min-h-[44px] items-center justify-center rounded-full bg-primary px-5 py-3 text-center text-sm font-semibold text-on-primary"
                 >
                   Dashboard
                 </Link>
                 <button
                   type="button"
                   onClick={() => {
-                    setIsMobileOpen(false);
+                    setOpenPathname(null);
                     logout();
                   }}
-                  className="w-full rounded-full border border-outline-variant px-5 py-3 text-sm font-semibold text-on-surface-variant hover:bg-surface-container-low"
+                  className="min-h-[44px] w-full rounded-full border border-outline-variant px-5 py-3 text-sm font-semibold text-on-surface-variant hover:bg-surface-container-low"
                 >
                   Log out
                 </button>
@@ -211,15 +226,15 @@ export default function TopNavBar() {
               <>
                 <Link
                   href="/login"
-                  onClick={() => setIsMobileOpen(false)}
-                  className="block rounded-full border border-outline-variant px-5 py-3 text-center text-sm font-semibold text-primary"
+                  onClick={() => setOpenPathname(null)}
+                  className="flex min-h-[44px] items-center justify-center rounded-full border border-outline-variant px-5 py-3 text-center text-sm font-semibold text-primary"
                 >
                   Log in
                 </Link>
                 <Link
                   href="/signup"
-                  onClick={() => setIsMobileOpen(false)}
-                  className="block rounded-full bg-secondary px-5 py-3 text-center text-sm font-semibold text-on-secondary"
+                  onClick={() => setOpenPathname(null)}
+                  className="flex min-h-[44px] items-center justify-center rounded-full bg-secondary px-5 py-3 text-center text-sm font-semibold text-on-secondary"
                 >
                   Begin care
                 </Link>

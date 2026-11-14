@@ -237,10 +237,11 @@
 
 /* Base foundation */
 html {
-  -webkit-text-size-adjust: none;
-  text-size-adjust: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   background: var(--c-bg);
   color: var(--c-fg);
+  overflow-x: clip;
 }
 
 body {
@@ -335,10 +336,20 @@ html.lenis body {
   .nav-draw:hover {
     background-size: 100% 1px;
   }
+  .nav-draw[aria-current="page"]:hover {
+    opacity: 0.72;
+  }
 }
 .nav-draw:focus-visible,
 .nav-draw[aria-current="page"] {
   background-size: 100% 1px;
+}
+
+/* Native select normalized across browsers so trailing chevron never overlaps */
+.select-control {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 2.5rem;
 }
 
 /* 2. Primary CTA buttons: circular fill flood from pointer entry */
@@ -362,6 +373,17 @@ html.lenis body {
 .btn-fill:active {
   color: #ffffff;
   border-color: transparent;
+}
+@media (hover: hover) {
+  .btn-fill:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(17, 26, 34, 0.14);
+  }
+  .btn-fill--outline:hover {
+    background-color: var(--c-accent);
+    border-color: var(--c-accent);
+    color: #ffffff;
+  }
 }
 .btn-fill:active {
   transform: scale(0.985);
