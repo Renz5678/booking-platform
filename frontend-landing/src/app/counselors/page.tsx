@@ -581,6 +581,7 @@ function CounselorsContent() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="booking-modal-title"
+          data-lenis-prevent
           className="fixed inset-0 z-50 flex items-center justify-center bg-text-primary/50 p-4 backdrop-blur-xs animate-fade-in overscroll-contain"
           onClick={(e) => {
             if (e.target === e.currentTarget && !submitting) {
@@ -610,7 +611,7 @@ function CounselorsContent() {
                 aria-label="Close booking dialog"
                 disabled={submitting}
                 onClick={() => setBookingCounselor(null)}
-                className="rounded-lg p-2 text-text-muted transition-colors hover:bg-surface-muted hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="flex h-11 w-11 sm:h-9 sm:w-9 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-muted hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <span
                   aria-hidden="true"
@@ -622,7 +623,7 @@ function CounselorsContent() {
             </div>
 
             {/* Modal Body */}
-            <div className="overflow-y-auto p-6">
+            <div data-lenis-prevent className="overflow-y-auto p-6">
               {bookingStep === 1 ? (
                 <div className="space-y-5">
                   <WeeklySlotGrid
@@ -839,14 +840,14 @@ function CounselorsContent() {
                       type="button"
                       disabled={submitting}
                       onClick={() => setBookingStep(1)}
-                      className="rounded-xl border border-border-subtle bg-background px-5 py-2.5 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      className="min-h-[44px] sm:min-h-[38px] rounded-xl border border-border-subtle bg-background px-5 py-2.5 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       Back to Time Selection
                     </button>
                     <button
                       type="submit"
                       disabled={submitting}
-                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      className="inline-flex min-h-[44px] sm:min-h-[38px] items-center justify-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-white transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-primary-hover active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 disabled:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       {submitting ? (
                         <>

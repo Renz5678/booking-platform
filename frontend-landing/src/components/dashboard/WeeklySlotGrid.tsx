@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 export type WeeklySlotMap = Record<string, Set<number>>;
 
@@ -104,11 +104,37 @@ export default function WeeklySlotGrid({
     onWeekChange(next);
   };
 
+  const lastPointerTypeRef = useRef<string>("mouse");
+
   const handleMouseDown = (dateStr: string, hour: number, isOpen: boolean) => {
-    if (!isOpen) return;
+    if (!isOpen || lastPointerTypeRef.current === "touch") return;
     setDragDay(dateStr);
     setDragStartHour(hour);
     setDragEndHour(hour);
+  };
+
+  const handleTouchOrClick = (dateStr: string, hour: number, isOpen: boolean) => {
+    if (!isOpen || dragDay) return;
+    if (lastPointerTypeRef.current === "touch" && isHighlighted) {
+      const selectedHours = HOURS.filter((h) => isHighlighted(dateStr, h));
+      if (selectedHours.length > 0 && !selectedHours.includes(hour)) {
+        const minH = Math.min(...selectedHours, hour);
+        const maxH = Math.max(...selectedHours, hour);
+        const daySet = availableWeeklySlots[dateStr];
+        let contiguous = true;
+        for (let h = minH; h <= maxH; h++) {
+          if (!daySet?.has(h)) {
+            contiguous = false;
+            break;
+          }
+        }
+        if (contiguous) {
+          onSelectRange(dateStr, minH, maxH);
+          return;
+        }
+      }
+    }
+    onSelectRange(dateStr, hour, hour);
   };
 
   const handleMouseEnter = (dateStr: string, hour: number, isOpen: boolean) => {
@@ -158,7 +184,7 @@ export default function WeeklySlotGrid({
             disabled={isCurrentWeek || loadingSlots}
             onClick={() => shiftWeek(-7)}
             aria-label="Previous week"
-            className="inline-flex items-center gap-1 rounded-xl border border-border-subtle bg-background px-3 py-1.5 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="inline-flex min-h-[40px] sm:min-h-[34px] items-center gap-1 rounded-xl border border-border-subtle bg-background px-3 py-1.5 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <span
               aria-hidden="true"
@@ -173,7 +199,7 @@ export default function WeeklySlotGrid({
             type="button"
             disabled={isCurrentWeek || loadingSlots}
             onClick={() => onWeekChange(thisWeekMonday)}
-            className="rounded-xl border border-border-subtle bg-background px-3 py-1.5 text-xs font-semibold text-text-secondary transition-colors hover:bg-surface-muted hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="min-h-[40px] sm:min-h-[34px] rounded-xl border border-border-subtle bg-background px-3 py-1.5 text-xs font-semibold text-text-secondary transition-colors hover:bg-surface-muted hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             This Week
           </button>
@@ -183,7 +209,7 @@ export default function WeeklySlotGrid({
             disabled={loadingSlots}
             onClick={() => shiftWeek(7)}
             aria-label="Next week"
-            className="inline-flex items-center gap-1 rounded-xl border border-border-subtle bg-background px-3 py-1.5 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="inline-flex min-h-[40px] sm:min-h-[34px] items-center gap-1 rounded-xl border border-border-subtle bg-background px-3 py-1.5 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <span>Next</span>
             <span
@@ -227,11 +253,14 @@ export default function WeeklySlotGrid({
       )}
 
       {/* Grid */}
-      <div className="overflow-x-auto rounded-2xl border border-border-subtle bg-background">
+      <div
+        data-lenis-prevent
+        className="overflow-x-auto rounded-2xl border border-border-subtle bg-background"
+      >
         <div className="min-w-[640px]">
           {/* Day Headers */}
           <div className="grid grid-cols-8 border-b border-border-subtle bg-surface-muted/60">
-            <div className="p-2.5 text-center text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+            <div className="sticky left-0 z-10 border-r border-border-subtle bg-surface-muted/95 p-2.5 text-center text-[11px] font-semibold uppercase tracking-wider text-text-muted backdrop-blur-sm">
               Time
             </div>
             {weekDays.map((day) => (
@@ -265,7 +294,7 @@ export default function WeeklySlotGrid({
                 key={hour}
                 className="grid grid-cols-8 border-b border-border-subtle last:border-b-0"
               >
-                <div className="flex items-center justify-center px-2 py-2 text-xs font-medium text-text-secondary tabular-nums">
+                <div className="sticky left-0 z-10 flex items-center justify-center border-r border-border-subtle bg-background/95 px-2 py-2 text-xs font-medium text-text-secondary tabular-nums backdrop-blur-sm">
                   {formatHour(hour)}
                 </div>
                 {weekDays.map((day) => {
@@ -290,18 +319,19 @@ export default function WeeklySlotGrid({
                               ? "Available"
                               : "Unavailable"
                         }`}
+                        onPointerDown={(e) => {
+                          lastPointerTypeRef.current = e.pointerType;
+                        }}
                         onMouseDown={() =>
                           handleMouseDown(day.dateStr, hour, isOpen)
                         }
                         onMouseEnter={() =>
                           handleMouseEnter(day.dateStr, hour, isOpen)
                         }
-                        onClick={() => {
-                          if (isOpen && !dragDay) {
-                            onSelectRange(day.dateStr, hour, hour);
-                          }
-                        }}
-                        className={`h-8 w-full rounded-lg text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                        onClick={() =>
+                          handleTouchOrClick(day.dateStr, hour, isOpen)
+                        }
+                        className={`h-10 sm:h-8 w-full rounded-lg text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                           active
                             ? "bg-primary text-white shadow-sm"
                             : isOpen

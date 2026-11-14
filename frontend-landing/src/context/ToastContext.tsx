@@ -202,6 +202,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {/* Confirm Dialog */}
       {confirmState && (
         <div
+          data-lenis-prevent
           className="fixed inset-0 z-[100] bg-primary/40 backdrop-blur-[2px] flex items-center justify-center p-4 overscroll-contain animate-fade-in"
           onClick={() => {
             confirmState.resolve(false);
@@ -236,7 +237,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   confirmState.resolve(false);
                   setConfirmState(null);
                 }}
-                className="px-4 py-2.5 rounded-lg border border-outline-variant text-on-surface font-label-md hover:bg-surface-container-low transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                className="min-h-[44px] sm:min-h-[38px] px-4 py-2.5 rounded-lg border border-outline-variant text-on-surface font-label-md hover:bg-surface-container-low transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               >
                 {confirmState.options.cancelText || "Cancel"}
               </button>
@@ -246,7 +247,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   confirmState.resolve(true);
                   setConfirmState(null);
                 }}
-                className={`px-5 py-2.5 rounded-lg font-label-md transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                className={`min-h-[44px] sm:min-h-[38px] px-5 py-2.5 rounded-lg font-label-md transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                   confirmState.options.variant === "danger"
                     ? "bg-error text-on-error"
                     : "bg-primary text-on-primary"
@@ -262,6 +263,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {/* Prompt Dialog */}
       {promptState && (
         <div
+          data-lenis-prevent
           className="fixed inset-0 z-[100] bg-primary/40 backdrop-blur-[2px] flex items-center justify-center p-4 overscroll-contain animate-fade-in"
           onClick={() => {
             promptState.resolve(null);
@@ -323,13 +325,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   promptState.resolve(null);
                   setPromptState(null);
                 }}
-                className="px-4 py-2.5 rounded-lg border border-outline-variant text-on-surface font-label-md hover:bg-surface-container-low transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                className="min-h-[44px] sm:min-h-[38px] px-4 py-2.5 rounded-lg border border-outline-variant text-on-surface font-label-md hover:bg-surface-container-low transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               >
                 {promptState.options.cancelText || "Cancel"}
               </button>
               <button
                 type="submit"
-                className={`px-5 py-2.5 rounded-lg font-label-md transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                className={`min-h-[44px] sm:min-h-[38px] px-5 py-2.5 rounded-lg font-label-md transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                   promptState.options.variant === "danger"
                     ? "bg-error text-on-error"
                     : "bg-primary text-on-primary"

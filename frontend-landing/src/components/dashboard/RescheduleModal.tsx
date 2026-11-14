@@ -133,6 +133,7 @@ export default function RescheduleModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="reschedule-modal-title"
+      data-lenis-prevent
       className="fixed inset-0 z-50 flex items-center justify-center bg-text-primary/50 p-4 backdrop-blur-xs animate-fade-in overscroll-contain"
       onClick={(e) => {
         if (e.target === e.currentTarget && !submitting) onClose();
@@ -159,7 +160,7 @@ export default function RescheduleModal({
             aria-label="Close reschedule dialog"
             disabled={submitting}
             onClick={onClose}
-            className="rounded-lg p-2 text-text-muted transition-colors hover:bg-surface-muted hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="flex h-11 w-11 sm:h-9 sm:w-9 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-muted hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <span
               aria-hidden="true"
@@ -170,7 +171,7 @@ export default function RescheduleModal({
           </button>
         </div>
 
-        <div className="overflow-y-auto p-6 space-y-5">
+        <div data-lenis-prevent className="overflow-y-auto p-6 space-y-5">
           <WeeklySlotGrid
             currentWeekStart={currentWeekStart}
             onWeekChange={(nextMonday) => {
@@ -215,12 +216,12 @@ export default function RescheduleModal({
               </p>
             )}
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
                 disabled={submitting}
                 onClick={onClose}
-                className="rounded-xl border border-border-subtle bg-surface-elevated px-4 py-2 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="min-h-[44px] sm:min-h-[38px] rounded-xl border border-border-subtle bg-surface-elevated px-4 py-2 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 Cancel
               </button>
@@ -233,7 +234,7 @@ export default function RescheduleModal({
                   selectedEndHour === null
                 }
                 onClick={handleConfirm}
-                className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="inline-flex min-h-[44px] sm:min-h-[38px] items-center gap-2 rounded-xl bg-primary px-5 py-2 text-sm font-semibold text-white transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-primary-hover active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 disabled:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 {submitting ? (
                   <>
