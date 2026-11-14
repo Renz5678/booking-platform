@@ -4,13 +4,14 @@ import hmac as hmac_lib
 import hashlib
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.config import settings
 from app.core.encryption import encrypt_token
+from app.core.rate_limit import limiter
 from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models.counselor_profile import CounselorProfile
@@ -22,7 +23,8 @@ router = APIRouter(prefix="/calendar", tags=["calendar"])
 
 
 @router.get("/google/login")
-async def google_login(current_user: User = Depends(get_current_user)):
+@limiter.limit("20/minute")
+async def google_login(request: Request, current_user: User = Depends(get_current_user)):
     """Redirects the counselor to Google OAuth consent screen."""
     if current_user.role != RoleEnum.counselor:
         raise HTTPException(status_code=403, detail="Only counselors can connect Google Calendar")
@@ -46,7 +48,8 @@ async def google_login(current_user: User = Depends(get_current_user)):
 
 
 @router.get("/google/callback")
-async def google_callback(code: str, state: str, db: AsyncSession = Depends(get_db)):
+@limiter.limit("20/minute")
+async def google_callback(request: Request, code: str, state: str, db: AsyncSession = Depends(get_db)):
     """Handles the Google OAuth callback, exchanges code for tokens, and saves them."""
     redirect_uri = f"{settings.FRONTEND_URL}/api/auth/google/callback"
     if ":" not in state:
@@ -95,7 +98,8 @@ async def google_callback(code: str, state: str, db: AsyncSession = Depends(get_
 
 
 @router.get("/google/client/login")
-async def google_client_login(current_user: User = Depends(get_current_user)):
+@limiter.limit("20/minute")
+async def google_client_login(request: Request, current_user: User = Depends(get_current_user)):
     """Redirects the client to Google OAuth consent screen to connect their calendar."""
     if current_user.role != RoleEnum.client:
         raise HTTPException(status_code=403, detail="Only clients can use this endpoint")
@@ -119,7 +123,8 @@ async def google_client_login(current_user: User = Depends(get_current_user)):
 
 
 @router.get("/google/client/callback")
-async def google_client_callback(code: str, state: str, db: AsyncSession = Depends(get_db)):
+@limiter.limit("20/minute")
+async def google_client_callback(request: Request, code: str, state: str, db: AsyncSession = Depends(get_db)):
     """Handles the Google OAuth callback for clients, saves their refresh token."""
     redirect_uri = f"{settings.FRONTEND_URL}/api/auth/google/client/callback"
     if ":" not in state:

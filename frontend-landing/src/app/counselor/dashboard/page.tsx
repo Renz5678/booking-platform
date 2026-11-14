@@ -7,6 +7,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 import { api } from "@/lib/api";
+import { isBookingPast } from "@/lib/bookingTime";
 import { getTimeBasedGreeting } from "@/lib/routes";
 import type { Booking, CounselorProfile } from "@/types";
 
@@ -184,9 +185,11 @@ export default function CounselorDashboardPage() {
                             ` • ₱${Number(b.payment.amount).toLocaleString()}`}
                         </p>
                         <p className="mt-1 text-xs font-medium text-text-muted">
-                          {b.payment?.proof_url
-                            ? "Payment proof uploaded — ready for review"
-                            : "Waiting for client to upload payment proof"}
+                          {isBookingPast(b.scheduled_end)
+                            ? "Session time has passed"
+                            : b.payment?.proof_url
+                              ? "Payment proof uploaded — ready for review"
+                              : "Waiting for client to upload payment proof"}
                         </p>
                       </div>
                       <Link
@@ -243,15 +246,24 @@ export default function CounselorDashboardPage() {
                         </p>
                       </div>
                       <div className="flex items-center gap-2.5">
-                        {b.meeting_link && (
-                          <a
-                            href={b.meeting_link}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                        {isBookingPast(b.scheduled_end) ? (
+                          <Link
+                            href={`/counselor/bookings/${b.id}`}
                             className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-hover"
                           >
-                            Join Meet
-                          </a>
+                            Mark Outcome
+                          </Link>
+                        ) : (
+                          b.meeting_link && (
+                            <a
+                              href={b.meeting_link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-hover"
+                            >
+                              Join Meet
+                            </a>
+                          )
                         )}
                         <Link
                           href={`/counselor/bookings/${b.id}`}

@@ -53,6 +53,54 @@ def _resolve_counselor_refresh_token(counselor: CounselorProfile | None) -> str 
     return None
 
 
+def _validate_schedule_window(
+    start_manila: datetime, end_manila: datetime, now_manila: datetime
+) -> None:
+    if end_manila <= start_manila:
+        raise HTTPException(
+            status_code=400,
+            detail="Session end time must be after start time.",
+        )
+    if start_manila <= now_manila:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot book or reschedule a session in the past.",
+        )
+    if start_manila.date() != end_manila.date():
+        raise HTTPException(
+            status_code=400,
+            detail="Sessions must start and end on the same calendar day.",
+        )
+    if start_manila > now_manila + timedelta(days=90):
+        raise HTTPException(
+            status_code=400,
+            detail="Sessions cannot be scheduled more than 90 days in advance.",
+        )
+    if (
+        start_manila.second != 0
+        or start_manila.microsecond != 0
+        or end_manila.second != 0
+        or end_manila.microsecond != 0
+        or start_manila.minute not in (0, 30)
+        or end_manila.minute not in (0, 30)
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Session start and end times must align to 30-minute intervals.",
+        )
+    duration = end_manila - start_manila
+    if duration < timedelta(minutes=30):
+        raise HTTPException(
+            status_code=400,
+            detail="Session duration must be at least 30 minutes.",
+        )
+    if duration > timedelta(hours=4):
+        raise HTTPException(
+            status_code=400,
+            detail="Session duration cannot exceed 4 hours.",
+        )
+
+
 @router.post("/", response_model=dict, status_code=status.HTTP_201_CREATED)
 @limiter.limit("10/minute")
 async def create_booking(
@@ -68,7 +116,7 @@ async def create_booking(
     if booking_data.honeypot:
         raise HTTPException(status_code=400, detail="Bot detected")
 
-    if not await verify_captcha(booking_data.captcha_token):
+    if not await verify_captcha(booking_data.captcha_token, expected_action="booking"):
         raise HTTPException(status_code=400, detail="Invalid CAPTCHA token")
 
     # 1. Only clients can book
@@ -93,21 +141,7 @@ async def create_booking(
     scheduled_end = to_manila(booking_data.scheduled_end)
     now_manila = datetime.now(MANILA_TZ)
 
-    if scheduled_end <= scheduled_start:
-        raise HTTPException(
-            status_code=400,
-            detail="Session end time must be after start time.",
-        )
-    if scheduled_start <= now_manila:
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot book a session in the past.",
-        )
-    if (scheduled_end - scheduled_start) > timedelta(hours=4):
-        raise HTTPException(
-            status_code=400,
-            detail="Session duration cannot exceed 4 hours.",
-        )
+    _validate_schedule_window(scheduled_start, scheduled_end, now_manila)
 
     # 3. Check counselor availability
     is_available = await check_counselor_availability(
@@ -384,7 +418,9 @@ async def cancel_booking(
 
 
 @router.post("/{booking_id}/counselor-cancel", response_model=BookingCancelResponse)
+@limiter.limit("20/minute")
 async def counselor_cancel_booking(
+    request: Request,
     booking_id: str,
     current_user: User = Depends(require_role(["counselor"])),
     db: AsyncSession = Depends(get_db),
@@ -474,7 +510,9 @@ async def counselor_cancel_booking(
 
 
 @router.put("/{booking_id}/status", response_model=BookingResponse)
+@limiter.limit("20/minute")
 async def update_booking_status(
+    request: Request,
     booking_id: str,
     body: BookingStatusUpdateRequest,
     current_user: User = Depends(require_role(["counselor"])),
@@ -586,16 +624,7 @@ async def reschedule_booking(
             status_code=400,
             detail="Cannot reschedule a session that has already started or passed.",
         )
-    if new_end <= new_start:
-        raise HTTPException(
-            status_code=400,
-            detail="New session end time must be after start time.",
-        )
-    if new_start <= now_manila:
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot reschedule a session into the past.",
-        )
+    _validate_schedule_window(new_start, new_end, now_manila)
 
     # 2. Check duration match
     old_duration = (to_manila(booking.scheduled_end) - to_manila(booking.scheduled_start)).total_seconds()

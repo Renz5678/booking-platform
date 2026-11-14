@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     GOOGLE_REFRESH_TOKEN: str | None = None
     ENCRYPTION_KEY: str
     FRONTEND_URL: str
+    CORS_ORIGINS: str = ""  # Optional comma-separated additional allowed origins
     ENVIRONMENT: str = "development"  # Set to "production" to disable dev-only endpoints
     SESSION_HOURLY_RATE: float = 1500.0
     REDIS_URL: str = "redis://localhost:6379/0"

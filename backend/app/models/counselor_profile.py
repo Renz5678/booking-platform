@@ -15,6 +15,8 @@ class CounselorProfile(Base):
     photo_url = Column(String, nullable=True)
     specialization_tags = Column(JSON, default=list)
     credentials_url = Column(String, nullable=True)
+    gcash_number = Column(String, nullable=True)
+    gcash_qr_url = Column(String, nullable=True)
     is_verified = Column(Boolean, default=False)
     is_active = Column(Boolean, default=False)
     google_calendar_connected = Column(Boolean, default=False)

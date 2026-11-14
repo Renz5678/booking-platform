@@ -9,6 +9,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { DetailPageSkeleton } from "@/components/ui/LoadingState";
 import { useToast } from "@/context/ToastContext";
 import { api, ApiError } from "@/lib/api";
+import { isBookingPast } from "@/lib/bookingTime";
 import type { Booking } from "@/types";
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
@@ -242,60 +243,82 @@ export default function ClientBookingDetailPage() {
                     </div>
                   </dl>
 
-                  {booking.status === "confirmed" && (
-                    <div className="mt-6 flex flex-wrap gap-3 border-t border-border-subtle pt-5">
-                      {booking.meeting_link && (
-                        <a
-                          href={booking.meeting_link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-primary-hover"
-                        >
-                          <span
-                            aria-hidden="true"
-                            className="material-symbols-outlined text-[18px]"
-                          >
-                            videocam
-                          </span>
-                          <span>Join Google Meet</span>
-                        </a>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => downloadIcs(booking)}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-border-subtle bg-background px-4 py-2.5 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-muted"
-                      >
-                        <span
-                          aria-hidden="true"
-                          className="material-symbols-outlined text-[16px]"
-                        >
-                          download
-                        </span>
-                        <span>Download .ics</span>
-                      </button>
-                    </div>
-                  )}
+                  {(() => {
+                    const past = isBookingPast(booking.scheduled_end);
+                    return (
+                      <>
+                        {booking.status === "confirmed" && !past && (
+                          <div className="mt-6 flex flex-wrap gap-3 border-t border-border-subtle pt-5">
+                            {booking.meeting_link && (
+                              <a
+                                href={booking.meeting_link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-primary-hover"
+                              >
+                                <span
+                                  aria-hidden="true"
+                                  className="material-symbols-outlined text-[18px]"
+                                >
+                                  videocam
+                                </span>
+                                <span>Join Google Meet</span>
+                              </a>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => downloadIcs(booking)}
+                              className="inline-flex items-center gap-1.5 rounded-xl border border-border-subtle bg-background px-4 py-2.5 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-muted"
+                            >
+                              <span
+                                aria-hidden="true"
+                                className="material-symbols-outlined text-[16px]"
+                              >
+                                download
+                              </span>
+                              <span>Download .ics</span>
+                            </button>
+                          </div>
+                        )}
 
-                  {(booking.status === "pending_payment" ||
-                    booking.status === "confirmed") && (
-                    <div className="mt-5 flex flex-wrap gap-3 border-t border-border-subtle pt-5">
-                      <button
-                        type="button"
-                        onClick={() => setShowReschedule(true)}
-                        className="rounded-xl border border-border-subtle bg-background px-4 py-2 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-muted"
-                      >
-                        Reschedule Session
-                      </button>
-                      <button
-                        type="button"
-                        disabled={cancelling}
-                        onClick={handleCancel}
-                        className="rounded-xl border border-status-danger/30 bg-status-danger-bg px-4 py-2 text-xs font-semibold text-status-danger transition-colors hover:bg-status-danger hover:text-white disabled:opacity-50"
-                      >
-                        {cancelling ? "Cancelling…" : "Cancel Booking"}
-                      </button>
-                    </div>
-                  )}
+                        {(booking.status === "pending_payment" ||
+                          booking.status === "confirmed") &&
+                          !past && (
+                            <div className="mt-5 flex flex-wrap gap-3 border-t border-border-subtle pt-5">
+                              <button
+                                type="button"
+                                onClick={() => setShowReschedule(true)}
+                                className="rounded-xl border border-border-subtle bg-background px-4 py-2 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-muted"
+                              >
+                                Reschedule Session
+                              </button>
+                              <button
+                                type="button"
+                                disabled={cancelling}
+                                onClick={handleCancel}
+                                className="rounded-xl border border-status-danger/30 bg-status-danger-bg px-4 py-2 text-xs font-semibold text-status-danger transition-colors hover:bg-status-danger hover:text-white disabled:opacity-50"
+                              >
+                                {cancelling ? "Cancelling…" : "Cancel Booking"}
+                              </button>
+                            </div>
+                          )}
+
+                        {past && (
+                          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle pt-5">
+                            <span className="text-xs text-text-muted">
+                              This session&apos;s scheduled time has passed.
+                            </span>
+                            <Link
+                              href="/counselors"
+                              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-hover"
+                            >
+                              Book Another Session
+                            </Link>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
 
                 {/* Intake Summary */}
@@ -332,12 +355,95 @@ export default function ClientBookingDetailPage() {
               <div className="lg:col-span-5">
                 <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-6 shadow-ambient">
                   <h2 className="font-serif text-xl font-medium text-text-primary">
-                    Payment Proof
+                    Payment &amp; Proof
                   </h2>
                   <p className="mt-1 text-xs text-text-secondary">
-                    Upload a screenshot or PDF of your GCash / bank transfer
+                    Send your session fee via GCash using your counselor&apos;s
+                    details below, then upload a screenshot or PDF of your
                     receipt (max 5 MB).
                   </p>
+
+                  {booking.status === "pending_payment" &&
+                    !isBookingPast(booking.scheduled_end) && (
+                      <div className="mt-4 rounded-xl border border-border-subtle bg-background p-4 space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                            Pay via GCash
+                          </span>
+                          {booking.payment?.amount != null && (
+                            <span className="text-xs font-semibold text-primary tabular-nums">
+                              &#8369;
+                              {Number(booking.payment.amount).toLocaleString()}
+                            </span>
+                          )}
+                        </div>
+
+                        {booking.counselor?.gcash_number ||
+                        booking.counselor?.gcash_qr_url ? (
+                          <>
+                            {booking.counselor?.gcash_number && (
+                              <div className="flex items-center justify-between gap-2 rounded-lg border border-border-subtle bg-surface-elevated px-3 py-2">
+                                <div>
+                                  <p className="text-[11px] text-text-muted">
+                                    GCash Number
+                                  </p>
+                                  <p className="text-sm font-semibold text-text-primary tabular-nums">
+                                    {booking.counselor.gcash_number}
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    try {
+                                      await navigator.clipboard.writeText(
+                                        booking.counselor?.gcash_number || ""
+                                      );
+                                      toast.success("GCash number copied.");
+                                    } catch {
+                                      toast.error("Unable to copy number.");
+                                    }
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-border-subtle bg-background px-2.5 py-1 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-muted"
+                                >
+                                  <span
+                                    aria-hidden="true"
+                                    className="material-symbols-outlined text-[14px]"
+                                  >
+                                    content_copy
+                                  </span>
+                                  Copy
+                                </button>
+                              </div>
+                            )}
+
+                            {booking.counselor?.gcash_qr_url && (
+                              <div className="rounded-lg border border-border-subtle bg-white p-3 text-center">
+                                <img
+                                  src={booking.counselor.gcash_qr_url}
+                                  alt="Counselor GCash QR code"
+                                  className="mx-auto max-h-56 w-auto rounded object-contain"
+                                />
+                                <p className="mt-2 text-[11px] text-text-muted">
+                                  Scan with your GCash app to pay
+                                </p>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <p className="text-xs text-text-secondary">
+                            Your counselor hasn&apos;t added their GCash
+                            details yet. Please check back shortly or contact{" "}
+                            <a
+                              href="mailto:care@alaga.ph"
+                              className="font-semibold text-primary hover:underline"
+                            >
+                              care@alaga.ph
+                            </a>{" "}
+                            for payment instructions.
+                          </p>
+                        )}
+                      </div>
+                    )}
 
                   {booking.payment?.proof_url && (
                     <div className="mt-4 rounded-xl border border-status-success/30 bg-status-success-bg p-4 text-xs text-status-success">
@@ -355,8 +461,14 @@ export default function ClientBookingDetailPage() {
                     </div>
                   )}
 
-                  {booking.status === "pending_payment" && (
-                    <form onSubmit={handleUploadProof} className="mt-5 space-y-4">
+                  {booking.status === "pending_payment" &&
+                    (isBookingPast(booking.scheduled_end) ? (
+                      <p className="mt-4 rounded-xl border border-border-subtle bg-background p-4 text-xs text-text-secondary">
+                        Payment upload closed — this session&apos;s scheduled
+                        time has passed.
+                      </p>
+                    ) : (
+                      <form onSubmit={handleUploadProof} className="mt-5 space-y-4">
                       <div>
                         <label
                           htmlFor="payment-proof-input"
@@ -397,7 +509,7 @@ export default function ClientBookingDetailPage() {
                         )}
                       </button>
                     </form>
-                  )}
+                    ))}
                 </div>
               </div>
             </div>

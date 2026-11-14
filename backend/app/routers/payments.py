@@ -2,12 +2,13 @@ import base64
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
+from app.core.rate_limit import limiter
 from app.core.security import require_role, validate_upload_magic_bytes
 from app.db.session import get_db
 from app.models.booking import Booking, BookingStatus
@@ -51,7 +52,9 @@ async def _load_booking_for_counselor(
 
 
 @router.post("/{booking_id}/proof", response_model=PaymentResponse)
+@limiter.limit("10/minute")
 async def submit_payment_proof(
+    request: Request,
     booking_id: str,
     reference_number: str | None = Form(None),
     payment_method: PaymentMethod | None = Form(None),
@@ -110,7 +113,9 @@ async def submit_payment_proof(
 
 
 @router.post("/{booking_id}/verify")
+@limiter.limit("20/minute")
 async def verify_payment(
+    request: Request,
     booking_id: str,
     current_user: User = Depends(require_role(["counselor"])),
     db: AsyncSession = Depends(get_db),
@@ -129,7 +134,9 @@ async def verify_payment(
 
 
 @router.post("/{booking_id}/reject")
+@limiter.limit("20/minute")
 async def reject_payment(
+    request: Request,
     booking_id: str,
     current_user: User = Depends(require_role(["counselor"])),
     db: AsyncSession = Depends(get_db),

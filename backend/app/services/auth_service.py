@@ -63,11 +63,13 @@ def decode_refresh_token(token: str) -> str | None:
         return None
 
 
-async def verify_captcha(token: str | None) -> bool:
+async def verify_captcha(
+    token: str | None, expected_action: str | None = None
+) -> bool:
     """
     Verify the CAPTCHA token with Google reCAPTCHA v3 API.
     """
-    if not token:
+    if not token or not isinstance(token, str) or len(token) > 4096:
         return False
 
     if not settings.RECAPTCHA_SECRET_KEY:
@@ -87,7 +89,18 @@ async def verify_captcha(token: str | None) -> bool:
                 }
             )
             result = response.json()
-            return result.get("success", False) and result.get("score", 0.0) >= 0.5
+            if not result.get("success", False):
+                return False
+            if result.get("score", 0.0) < 0.5:
+                return False
+            if expected_action and result.get("action") and result.get("action") != expected_action:
+                logger.warning(
+                    "CAPTCHA action mismatch: expected=%s got=%s",
+                    expected_action,
+                    result.get("action"),
+                )
+                return False
+            return True
     except (httpx.HTTPError, ValueError) as exc:
         logger.error("CAPTCHA verification request failed: %s", exc)
         return False

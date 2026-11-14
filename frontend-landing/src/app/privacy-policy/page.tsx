@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "Privacy Policy | Alaga Counseling",
+  title: "Privacy Policy",
   description: "Privacy policy in compliance with the Philippines Data Privacy Act (RA 10173).",
 };
 

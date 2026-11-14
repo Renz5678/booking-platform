@@ -17,6 +17,10 @@ export default function CounselorProfileSetupPage() {
   const [bio, setBio] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
   const [specializationsText, setSpecializationsText] = useState("");
+  const [gcashNumber, setGcashNumber] = useState("");
+  const [gcashQrUrl, setGcashQrUrl] = useState<string | null>(null);
+  const [gcashQrFile, setGcashQrFile] = useState<File | null>(null);
+  const [uploadingQr, setUploadingQr] = useState(false);
   const [credentialUrl, setCredentialUrl] = useState<string | null>(null);
   const [credentialFile, setCredentialFile] = useState<File | null>(null);
 
@@ -28,6 +32,8 @@ export default function CounselorProfileSetupPage() {
       setBio(profile.bio || "");
       setPhotoUrl(profile.photo_url || "");
       setSpecializationsText((profile.specialization_tags || []).join(", "));
+      setGcashNumber(profile.gcash_number || "");
+      setGcashQrUrl(profile.gcash_qr_url || null);
       setCredentialUrl(profile.credentials_url || null);
     } catch {
       toast.error("Unable to load your counselor profile.");
@@ -53,6 +59,7 @@ export default function CounselorProfileSetupPage() {
         bio: bio.trim() || null,
         photo_url: photoUrl.trim() || null,
         specialization_tags,
+        gcash_number: gcashNumber.trim() || null,
       });
       toast.success("Profile updated successfully.");
     } catch (err) {
@@ -97,6 +104,59 @@ export default function CounselorProfileSetupPage() {
       toast.error(msg);
     } finally {
       setUploadingCred(false);
+    }
+  };
+
+  const handleGcashQrChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    setGcashQrFile(file);
+  };
+
+  const handleUploadGcashQr = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!gcashQrFile) {
+      toast.error("Please choose a GCash QR image (JPG or PNG).");
+      return;
+    }
+
+    setUploadingQr(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", gcashQrFile);
+      const res = await api.post<{ gcash_qr_url?: string }>(
+        "/counselors/me/gcash-qr",
+        formData
+      );
+      if (res?.gcash_qr_url) {
+        setGcashQrUrl(res.gcash_qr_url);
+      }
+      setGcashQrFile(null);
+      toast.success("GCash QR code uploaded.");
+    } catch (err) {
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : "Failed to upload GCash QR code.";
+      toast.error(msg);
+    } finally {
+      setUploadingQr(false);
+    }
+  };
+
+  const handleRemoveGcashQr = async () => {
+    setUploadingQr(true);
+    try {
+      await api.put("/counselors/me/profile", { gcash_qr_url: null });
+      setGcashQrUrl(null);
+      toast.success("GCash QR code removed.");
+    } catch (err) {
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : "Failed to remove GCash QR code.";
+      toast.error(msg);
+    } finally {
+      setUploadingQr(false);
     }
   };
 
@@ -158,6 +218,27 @@ export default function CounselorProfileSetupPage() {
 
                 <div>
                   <label
+                    htmlFor="profile-gcash"
+                    className="block text-sm font-medium text-text-primary"
+                  >
+                    GCash Number (for client payments)
+                  </label>
+                  <input
+                    id="profile-gcash"
+                    type="tel"
+                    value={gcashNumber}
+                    onChange={(e) => setGcashNumber(e.target.value)}
+                    placeholder="0917 123 4567"
+                    className="mt-1.5 w-full rounded-xl border border-border-subtle bg-background px-4 py-2.5 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  />
+                  <p className="mt-1 text-xs text-text-muted">
+                    Shown to clients after they book a session with you so they
+                    can send payment.
+                  </p>
+                </div>
+
+                <div>
+                  <label
                     htmlFor="profile-bio"
                     className="block text-sm font-medium text-text-primary"
                   >
@@ -182,7 +263,70 @@ export default function CounselorProfileSetupPage() {
                 </button>
               </form>
 
-              <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-6 shadow-ambient lg:col-span-5">
+              <div className="space-y-6 lg:col-span-5">
+                <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-6 shadow-ambient">
+                  <h2 className="font-serif text-xl font-medium text-text-primary">
+                    GCash QR Code
+                  </h2>
+                  <p className="mt-1 text-xs text-text-secondary">
+                    Upload your GCash QR code (JPG or PNG) so clients can scan
+                    to pay for their session.
+                  </p>
+
+                  {gcashQrUrl && (
+                    <div className="mt-4 rounded-xl border border-border-subtle bg-background p-4 text-center">
+                      <img
+                        src={gcashQrUrl}
+                        alt="Your GCash QR code"
+                        className="mx-auto max-h-48 rounded-lg bg-white p-2 object-contain"
+                      />
+                      <button
+                        type="button"
+                        disabled={uploadingQr}
+                        onClick={handleRemoveGcashQr}
+                        className="mt-3 text-xs font-semibold text-status-danger hover:underline disabled:opacity-50"
+                      >
+                        Remove QR Code
+                      </button>
+                    </div>
+                  )}
+
+                  <form
+                    onSubmit={handleUploadGcashQr}
+                    className="mt-5 space-y-4"
+                  >
+                    <div>
+                      <label
+                        htmlFor="gcash-qr-file"
+                        className="block text-xs font-semibold uppercase tracking-wider text-text-muted"
+                      >
+                        Upload QR Image
+                      </label>
+                      <input
+                        id="gcash-qr-file"
+                        type="file"
+                        accept="image/jpeg,image/png"
+                        onChange={handleGcashQrChange}
+                        className="mt-2 block w-full rounded-xl border border-border-subtle bg-background p-2.5 text-xs text-text-secondary file:mr-3 file:rounded-lg file:border-0 file:bg-primary-light file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-primary hover:file:bg-primary/20"
+                      />
+                      {gcashQrFile && (
+                        <p className="mt-1.5 text-xs text-text-secondary">
+                          Selected: <strong>{gcashQrFile.name}</strong>
+                        </p>
+                      )}
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={uploadingQr || !gcashQrFile}
+                      className="inline-flex w-full items-center justify-center rounded-xl border border-border-subtle bg-background px-5 py-2.5 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-muted disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    >
+                      {uploadingQr ? "Uploading…" : "Upload GCash QR"}
+                    </button>
+                  </form>
+                </div>
+
+                <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-6 shadow-ambient">
                 <h2 className="font-serif text-xl font-medium text-text-primary">
                   PRC Verification Document
                 </h2>
@@ -238,6 +382,7 @@ export default function CounselorProfileSetupPage() {
                     {uploadingCred ? "Uploading…" : "Upload Credential"}
                   </button>
                 </form>
+                </div>
               </div>
             </div>
           )}

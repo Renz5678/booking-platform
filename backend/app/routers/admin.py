@@ -1,12 +1,14 @@
 import logging
 from datetime import date, timedelta
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from sqlalchemy import case, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
+from app.core.email_validation import verify_email_deliverability
+from app.core.rate_limit import limiter
 from app.core.security import require_role
 from app.db.session import get_db
 from app.models.booking import Booking, BookingStatus
@@ -80,13 +82,16 @@ async def get_admin_counselor_detail(
 
 
 @router.post("/counselors/invite", response_model=dict)
+@limiter.limit("10/minute")
 async def invite_counselor(
+    request: Request,
     data: CounselorInviteRequest,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(require_role(["admin"])),
     db: AsyncSession = Depends(get_db),
 ):
     """Admin: Invite a new counselor."""
+    await verify_email_deliverability(data.email)
     result = await db.execute(select(User).where(User.email == data.email))
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -326,7 +331,8 @@ async def get_analytics(
 
 
 @router.get("/content", response_model=list[ContentResponse])
-async def get_all_content(db: AsyncSession = Depends(get_db)):
+@limiter.limit("60/minute")
+async def get_all_content(request: Request, db: AsyncSession = Depends(get_db)):
     """Admin: Get all dynamic site content. (Can also be public)"""
     result = await db.execute(select(SiteContent))
     content_list = result.scalars().all()

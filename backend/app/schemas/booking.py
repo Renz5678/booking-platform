@@ -1,22 +1,22 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.booking import BookingStatus
 from app.schemas.payment import PaymentResponse
 
 
 class BookingBase(BaseModel):
-    counselor_id: str
+    counselor_id: str = Field(..., min_length=1, max_length=100)
     scheduled_start: datetime
     scheduled_end: datetime
 
 
 class BookingCreate(BookingBase):
-    intake_concern_category: str
-    intake_notes: str | None = None
-    captcha_token: str
+    intake_concern_category: str = Field(..., min_length=1, max_length=100)
+    intake_notes: str | None = Field(default=None, max_length=2000)
+    captcha_token: str = Field(..., max_length=4096)
     honeypot: str | None = None
 
 
@@ -64,5 +64,13 @@ class BookingCounselorResponse(BookingResponse):
     payment: PaymentResponse | None = None
 
 
+class BookingCounselorPaymentInfo(BaseModel):
+    id: str
+    gcash_number: str | None = None
+    gcash_qr_url: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class BookingDetailResponse(BookingCounselorResponse):
-    pass
+    counselor: BookingCounselorPaymentInfo | None = None

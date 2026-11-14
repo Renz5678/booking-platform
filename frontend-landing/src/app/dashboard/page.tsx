@@ -8,6 +8,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 import { api, ApiError } from "@/lib/api";
+import { isBookingPast } from "@/lib/bookingTime";
 import { getTimeBasedGreeting } from "@/lib/routes";
 import type { Booking } from "@/types";
 
@@ -91,7 +92,10 @@ export default function ClientDashboardPage() {
     const up: Booking[] = [];
     const old: Booking[] = [];
     bookings.forEach((b) => {
-      if (b.status === "pending_payment" || b.status === "confirmed") {
+      if (
+        (b.status === "pending_payment" || b.status === "confirmed") &&
+        !isBookingPast(b.scheduled_end)
+      ) {
         up.push(b);
       } else {
         old.push(b);

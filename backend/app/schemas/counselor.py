@@ -8,6 +8,8 @@ class CounselorProfileBase(BaseModel):
     photo_url: HttpUrl | str | None = None
     specialization_tags: list[str] = []
     credentials_url: HttpUrl | str | None = None
+    gcash_number: str | None = None
+    gcash_qr_url: HttpUrl | str | None = None
 
 
 class CounselorProfileCreate(CounselorProfileBase):
@@ -36,5 +38,7 @@ class CounselorProfilePrivateResponse(CounselorProfilePublicResponse):
     is_active: bool
     credentials_url: str | None
     google_calendar_connected: bool
+    gcash_number: str | None = None
+    gcash_qr_url: str | None = None
 
     model_config = ConfigDict(from_attributes=True)

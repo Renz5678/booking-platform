@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import WeeklySlotGrid, {
   buildManilaSlotIso,
   formatLocalDate,
@@ -223,10 +223,23 @@ function CounselorsContent() {
     [user, toast, router, fetchWeekSlots]
   );
 
+  const handledDeepLinkRef = useRef<string | null>(null);
+
+  const closeBookingModal = useCallback(() => {
+    setBookingCounselor(null);
+    if (deepLinkedCounselorId) {
+      updateUrlFilters(searchQuery, selectedSpec);
+    }
+  }, [deepLinkedCounselorId, searchQuery, selectedSpec, updateUrlFilters]);
+
   // Handle deep-link ?counselor=<id> once auth & counselors resolve
   useEffect(() => {
+    if (!deepLinkedCounselorId) {
+      handledDeepLinkRef.current = null;
+      return;
+    }
     if (
-      !deepLinkedCounselorId ||
+      handledDeepLinkRef.current === deepLinkedCounselorId ||
       loading ||
       authLoading ||
       bookingCounselor ||
@@ -236,6 +249,7 @@ function CounselorsContent() {
     }
     const found = counselors.find((c) => c.id === deepLinkedCounselorId);
     if (found && user?.role === "client") {
+      handledDeepLinkRef.current = deepLinkedCounselorId;
       openBookingModal(found, deepLinkedDate);
     }
   }, [
@@ -254,12 +268,12 @@ function CounselorsContent() {
     if (!bookingCounselor) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !submitting) {
-        setBookingCounselor(null);
+        closeBookingModal();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [bookingCounselor, submitting]);
+  }, [bookingCounselor, submitting, closeBookingModal]);
 
   const handleWeekChange = (newMonday: Date) => {
     setCurrentWeekStart(newMonday);
@@ -585,7 +599,7 @@ function CounselorsContent() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-text-primary/50 p-4 backdrop-blur-xs animate-fade-in overscroll-contain"
           onClick={(e) => {
             if (e.target === e.currentTarget && !submitting) {
-              setBookingCounselor(null);
+              closeBookingModal();
             }
           }}
         >
@@ -610,7 +624,7 @@ function CounselorsContent() {
                 type="button"
                 aria-label="Close booking dialog"
                 disabled={submitting}
-                onClick={() => setBookingCounselor(null)}
+                onClick={closeBookingModal}
                 className="flex h-11 w-11 sm:h-9 sm:w-9 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-muted hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <span

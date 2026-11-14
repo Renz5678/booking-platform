@@ -17,6 +17,8 @@ export interface CounselorProfile {
   is_verified?: boolean;
   is_active?: boolean;
   credentials_url?: string | null;
+  gcash_number?: string | null;
+  gcash_qr_url?: string | null;
   user: {
     id: string;
     full_name: string;
@@ -66,7 +68,9 @@ export interface Booking {
   };
   counselor?: {
     id: string;
-    user: {
+    gcash_number?: string | null;
+    gcash_qr_url?: string | null;
+    user?: {
       full_name: string;
       email?: string;
     };

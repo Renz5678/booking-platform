@@ -56,7 +56,9 @@ async def get_my_counselor_profile(
 
 
 @router.put("/me/profile", response_model=CounselorProfilePrivateResponse)
+@limiter.limit("20/minute")
 async def update_my_counselor_profile(
+    request: Request,
     update_data: CounselorProfileUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["counselor"])),
@@ -77,7 +79,9 @@ MAX_CREDENTIAL_BYTES = 5 * 1024 * 1024
 
 
 @router.post("/me/credentials")
+@limiter.limit("10/minute")
 async def upload_my_credentials(
+    request: Request,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["counselor"])),
@@ -109,6 +113,47 @@ async def upload_my_credentials(
     return {
         "msg": "Credentials uploaded successfully",
         "credentials_url": counselor.credentials_url,
+    }
+
+
+ALLOWED_QR_TYPES = {"image/jpeg", "image/jpg", "image/png"}
+
+
+@router.post("/me/gcash-qr")
+@limiter.limit("10/minute")
+async def upload_my_gcash_qr(
+    request: Request,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(["counselor"])),
+):
+    """Counselor-only endpoint to upload a GCash QR code image (JPG/PNG, <= 5MB)."""
+    if file.content_type not in ALLOWED_QR_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported file type. Please upload JPG or PNG.",
+        )
+
+    content = await file.read()
+    if len(content) > MAX_CREDENTIAL_BYTES:
+        raise HTTPException(status_code=400, detail="File exceeds 5MB limit.")
+    if not validate_upload_magic_bytes(content, file.content_type):
+        raise HTTPException(
+            status_code=400,
+            detail="File content does not match the declared JPG or PNG type.",
+        )
+
+    counselor = await counselor_service.get_counselor_by_user_id(db, current_user.id)
+    if not counselor:
+        raise HTTPException(status_code=404, detail="Counselor profile not found")
+
+    encoded = base64.b64encode(content).decode("ascii")
+    counselor.gcash_qr_url = f"data:{file.content_type};base64,{encoded}"
+    await db.commit()
+
+    return {
+        "msg": "GCash QR code uploaded successfully",
+        "gcash_qr_url": counselor.gcash_qr_url,
     }
 
 @router.get("/me/stats")

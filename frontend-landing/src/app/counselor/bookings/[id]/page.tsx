@@ -8,6 +8,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import { DetailPageSkeleton } from "@/components/ui/LoadingState";
 import { useToast } from "@/context/ToastContext";
 import { api, ApiError } from "@/lib/api";
+import { isBookingPast } from "@/lib/bookingTime";
 import type { Booking } from "@/types";
 
 function formatManilaDateTime(iso: string): string {
@@ -227,14 +228,18 @@ export default function CounselorBookingDetailPage() {
                       <dt className="text-xs text-text-muted">Meet Link</dt>
                       <dd className="mt-0.5 text-sm">
                         {booking.meeting_link ? (
-                          <a
-                            href={booking.meeting_link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="font-semibold text-primary hover:underline"
-                          >
-                            Open Google Meet
-                          </a>
+                          isBookingPast(booking.scheduled_end) ? (
+                            <span className="text-text-muted">Session ended</span>
+                          ) : (
+                            <a
+                              href={booking.meeting_link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-semibold text-primary hover:underline"
+                            >
+                              Open Google Meet
+                            </a>
+                          )
                         ) : (
                           <span className="text-text-muted">Not generated</span>
                         )}
@@ -260,14 +265,16 @@ export default function CounselorBookingDetailPage() {
                       >
                         Mark No Show
                       </button>
-                      <button
-                        type="button"
-                        disabled={!!busyAction}
-                        onClick={handleCounselorCancel}
-                        className="rounded-xl border border-status-danger/30 bg-status-danger-bg px-4 py-2 text-xs font-semibold text-status-danger transition-colors hover:bg-status-danger hover:text-white disabled:opacity-50"
-                      >
-                        Cancel Session
-                      </button>
+                      {!isBookingPast(booking.scheduled_end) && (
+                        <button
+                          type="button"
+                          disabled={!!busyAction}
+                          onClick={handleCounselorCancel}
+                          className="rounded-xl border border-status-danger/30 bg-status-danger-bg px-4 py-2 text-xs font-semibold text-status-danger transition-colors hover:bg-status-danger hover:text-white disabled:opacity-50"
+                        >
+                          Cancel Session
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -330,17 +337,23 @@ export default function CounselorBookingDetailPage() {
                       </a>
 
                       {booking.status === "pending_payment" && (
-                        <div className="flex flex-wrap gap-2.5 pt-2">
-                          <button
-                            type="button"
-                            disabled={!!busyAction}
-                            onClick={handleVerifyPayment}
-                            className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-hover disabled:opacity-50"
-                          >
-                            {busyAction === "verify"
-                              ? "Verifying…"
-                              : "Verify & Confirm"}
-                          </button>
+                        <div className="flex flex-wrap items-center gap-2.5 pt-2">
+                          {isBookingPast(booking.scheduled_end) ? (
+                            <span className="text-xs text-text-muted">
+                              Session time has passed — cannot confirm.
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={!!busyAction}
+                              onClick={handleVerifyPayment}
+                              className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-hover disabled:opacity-50"
+                            >
+                              {busyAction === "verify"
+                                ? "Verifying…"
+                                : "Verify & Confirm"}
+                            </button>
+                          )}
                           <button
                             type="button"
                             disabled={!!busyAction}

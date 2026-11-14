@@ -75,13 +75,16 @@ async def run_async_migrations() -> None:
 
     """
 
+    url = get_url()
     configuration = config.get_section(config.config_ini_section)
-    configuration["sqlalchemy.url"] = get_url()
+    configuration["sqlalchemy.url"] = url
 
+    connect_args = {"statement_cache_size": 0} if ":6543" in url else {}
     connectable = async_engine_from_config(
         configuration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=connect_args,
     )
 
     async with connectable.connect() as connection:

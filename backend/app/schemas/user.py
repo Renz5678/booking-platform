@@ -3,12 +3,18 @@ import re
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from app.core.email_validation import assert_non_disposable_email
+
 # Use the module-level logger so validation errors can be traced if needed.
 logger = logging.getLogger(__name__)
 
 
 def _normalize_email(v: str) -> str:
     return v.strip().lower()
+
+
+def _validate_signup_email(v: str) -> str:
+    return assert_non_disposable_email(v)
 
 
 def _check_password_strength(v: str) -> str:
@@ -39,7 +45,7 @@ class UserCreate(BaseModel):
 
     full_name: str = Field(..., min_length=2, max_length=100)
     email: EmailStr
-    password: str = Field(..., min_length=8)
+    password: str = Field(..., min_length=8, max_length=128)
 
     # Honeypot field — bots often auto-fill hidden fields.
     # Real users will never see or fill this (the frontend hides it via CSS).
@@ -48,12 +54,12 @@ class UserCreate(BaseModel):
 
     # CAPTCHA token from the frontend (e.g., reCAPTCHA v3 or hCaptcha).
     # Validated server-side in the auth router before the account is created.
-    captcha_token: str | None = None
+    captcha_token: str | None = Field(default=None, max_length=4096)
 
     @field_validator("email")
     @classmethod
     def normalize_email(cls, v: str) -> str:
-        return _normalize_email(v)
+        return _validate_signup_email(v)
 
     @field_validator("password")
     @classmethod
@@ -91,23 +97,23 @@ class UserResponse(BaseModel):
 
 class CounselorInviteRequest(BaseModel):
     email: EmailStr
-    full_name: str
+    full_name: str = Field(..., min_length=2, max_length=100)
 
     @field_validator("email")
     @classmethod
     def normalize_email(cls, v: str) -> str:
-        return _normalize_email(v)
+        return _validate_signup_email(v)
 
 
 class AcceptInviteRequest(BaseModel):
-    token: str
+    token: str = Field(..., min_length=10, max_length=256)
     email: EmailStr
-    password: str = Field(..., min_length=8)
+    password: str = Field(..., min_length=8, max_length=128)
 
     @field_validator("email")
     @classmethod
     def normalize_email(cls, v: str) -> str:
-        return _normalize_email(v)
+        return _validate_signup_email(v)
 
     @field_validator("password")
     @classmethod

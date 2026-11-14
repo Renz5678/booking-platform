@@ -74,14 +74,20 @@ async def update_counselor_profile(
     db: AsyncSession, profile: CounselorProfile, update_data: CounselorProfileUpdate
 ):
     """Update an existing counselor profile."""
-    if update_data.bio is not None:
+    fields_set = update_data.model_fields_set
+    if update_data.bio is not None or "bio" in fields_set:
         profile.bio = update_data.bio
-    if update_data.photo_url is not None:
+    if update_data.photo_url is not None or "photo_url" in fields_set:
         profile.photo_url = str(update_data.photo_url) if update_data.photo_url else None
     if update_data.specialization_tags is not None:
         profile.specialization_tags = update_data.specialization_tags
     if update_data.credentials_url is not None:
         profile.credentials_url = str(update_data.credentials_url)
+    if "gcash_number" in fields_set:
+        cleaned_number = update_data.gcash_number.strip() if update_data.gcash_number else None
+        profile.gcash_number = cleaned_number or None
+    if "gcash_qr_url" in fields_set:
+        profile.gcash_qr_url = str(update_data.gcash_qr_url) if update_data.gcash_qr_url else None
 
     await db.commit()
     return await get_counselor_by_user_id(db, profile.user_id)

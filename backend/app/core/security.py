@@ -69,6 +69,11 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
         )
+    if not user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Email not verified",
+        )
     token_pwd = payload.get("pwd")
     if token_pwd is not None and token_pwd != get_password_fingerprint(user.password_hash):
         raise HTTPException(

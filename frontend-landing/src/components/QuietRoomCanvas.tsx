@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import { gsap } from "gsap";
-import { isTouch, onScroll, prefersReducedMotion } from "@/engine";
+import { isMobile, isTouch, onScroll, prefersReducedMotion } from "@/engine";
 import { usePage } from "@/engine/next";
 
 /**
@@ -71,27 +71,27 @@ export default function QuietRoomCanvas() {
 
       ctx.clearRect(0, 0, width, height);
 
-      // Slow breathing cycle (~10s period)
-      const breath = Math.sin(time * 0.6) * 0.5 + 0.5;
-      const cx = width * (pointer.x * 0.45 + 0.42);
-      const cy = height * (pointer.y * 0.35 + 0.25 + scrollProgress * 0.12);
+      // Slow breathing cycle (~8s period)
+      const breath = Math.sin(time * 0.8) * 0.5 + 0.5;
+      const cx = width * (pointer.x * 0.45 + 0.42) + Math.cos(time * 0.45) * 18;
+      const cy = height * (pointer.y * 0.35 + 0.25 + scrollProgress * 0.12) + Math.sin(time * 0.55) * 12;
 
       // Warm capiz window light
-      const r1 = Math.max(width, height) * (0.48 + breath * 0.06);
+      const r1 = Math.max(width, height) * (0.48 + breath * 0.08);
       const g1 = ctx.createRadialGradient(cx, cy, 0, cx, cy, r1);
-      g1.addColorStop(0, "rgba(23, 89, 70, 0.09)");
-      g1.addColorStop(0.45, "rgba(214, 206, 188, 0.22)");
+      g1.addColorStop(0, "rgba(23, 89, 70, 0.13)");
+      g1.addColorStop(0.45, "rgba(210, 200, 180, 0.28)");
       g1.addColorStop(1, "rgba(243, 241, 236, 0)");
       ctx.fillStyle = g1;
       ctx.fillRect(0, 0, width, height);
 
       // Subtle architectural horizon lines (capiz lattice echo)
-      ctx.strokeStyle = "rgba(17, 26, 34, 0.045)";
+      ctx.strokeStyle = "rgba(17, 26, 34, 0.065)";
       ctx.lineWidth = 1;
       const bands = 5;
       for (let i = 1; i <= bands; i++) {
         const yBase = (height / (bands + 1)) * i;
-        const drift = Math.sin(time * 0.35 + i * 0.9) * 6;
+        const drift = Math.sin(time * 0.55 + i * 0.9) * 9;
         ctx.beginPath();
         ctx.moveTo(0, yBase + drift);
         ctx.bezierCurveTo(
@@ -107,6 +107,11 @@ export default function QuietRoomCanvas() {
     };
 
     gsap.ticker.add(tick);
+    if (isMobile() || isTouch()) {
+      // Render a single calm static frame on mobile so 4x-throttled phones hold 60 fps scroll
+      tick(0);
+      gsap.ticker.remove(tick);
+    }
 
     return () => {
       gsap.ticker.remove(tick);

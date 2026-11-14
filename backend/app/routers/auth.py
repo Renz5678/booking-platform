@@ -3,12 +3,13 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.config import settings
+from app.core.email_validation import verify_email_deliverability
 from app.core.rate_limit import limiter
 from app.core.security import get_current_user
 from app.db.session import get_db
@@ -51,9 +52,21 @@ def _as_utc(dt: datetime | None) -> datetime | None:
     return dt
 
 
+def _cookie_security_kwargs() -> dict:
+    is_https = (
+        settings.ENVIRONMENT == "production"
+        or getattr(settings, "FRONTEND_URL", "").startswith("https")
+    )
+    return {
+        "httponly": True,
+        "secure": is_https,
+        "samesite": "none" if is_https else "lax",
+    }
+
+
 class OTPVerify(BaseModel):
     email: EmailStr
-    otp: str
+    otp: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
 
     @field_validator("email")
     @classmethod
@@ -63,6 +76,7 @@ class OTPVerify(BaseModel):
 
 class ResendOTPRequest(BaseModel):
     email: EmailStr
+    website: str | None = None
 
     @field_validator("email")
     @classmethod
@@ -85,8 +99,11 @@ async def signup(
         }
 
     # CAPTCHA check
-    if not await verify_captcha(user_data.captcha_token):
+    if not await verify_captcha(user_data.captcha_token, expected_action="signup"):
         raise HTTPException(status_code=400, detail="Invalid CAPTCHA")
+
+    # Strict email deliverability check (disposable + MX DNS in production)
+    await verify_email_deliverability(user_data.email)
 
     # Check if user already exists
     result = await db.execute(select(User).where(User.email == user_data.email))
@@ -129,7 +146,7 @@ async def verify_otp(request: Request, data: OTPVerify, db: AsyncSession = Depen
     user = result.scalar_one_or_none()
 
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=400, detail="Invalid or expired verification code")
 
     if user.is_verified:
         return {"msg": "Email already verified"}
@@ -140,7 +157,7 @@ async def verify_otp(request: Request, data: OTPVerify, db: AsyncSession = Depen
             user.verification_otp = None
             user.verification_otp_expires_at = None
         await db.commit()
-        raise HTTPException(status_code=400, detail="Invalid OTP")
+        raise HTTPException(status_code=400, detail="Invalid or expired verification code")
 
     now = datetime.now(timezone.utc)
     expires_at = _as_utc(user.verification_otp_expires_at)
@@ -158,7 +175,7 @@ async def verify_otp(request: Request, data: OTPVerify, db: AsyncSession = Depen
 
 
 @router.post("/resend-otp")
-@limiter.limit("3/minute")
+@limiter.limit("3/5minute")
 async def resend_otp(
     request: Request,
     data: ResendOTPRequest,
@@ -166,6 +183,11 @@ async def resend_otp(
     db: AsyncSession = Depends(get_db),
 ):
     """Regenerates and emails a fresh 6-digit OTP for an unverified account."""
+    if data.website:
+        return {
+            "msg": "If an unverified account with that email exists, a new verification code has been sent."
+        }
+
     result = await db.execute(select(User).where(User.email == data.email))
     user = result.scalar_one_or_none()
 
@@ -261,39 +283,38 @@ async def login(
     access_token = create_access_token(data={"sub": str(user.id), "pwd": pwd_fp})
     refresh_token = create_refresh_token(data={"sub": str(user.id), "pwd": pwd_fp})
 
-    is_production = getattr(settings, "FRONTEND_URL", "").startswith("https")
+    cookie_kwargs = _cookie_security_kwargs()
 
     # Set httpOnly cookie
     response.set_cookie(
         key="access_token",
         value=access_token,
-        httponly=True,
-        secure=is_production,
-        samesite="lax",
         max_age=30 * 60,  # 30 minutes
+        **cookie_kwargs,
     )
     
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
-        httponly=True,
-        secure=is_production,
-        samesite="lax",
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        **cookie_kwargs,
     )
 
     return {"msg": "Login successful"}
 
 
 @router.post("/logout")
-async def logout(response: Response):
+@limiter.limit("30/minute")
+async def logout(request: Request, response: Response):
     """Logout by clearing the JWT cookie."""
-    response.delete_cookie("access_token")
-    response.delete_cookie("refresh_token")
+    cookie_kwargs = _cookie_security_kwargs()
+    response.delete_cookie("access_token", **cookie_kwargs)
+    response.delete_cookie("refresh_token", **cookie_kwargs)
     return {"msg": "Logout successful"}
 
 
 @router.post("/refresh")
+@limiter.limit("30/minute")
 async def refresh_token(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
     """Refresh the access and refresh tokens using the existing refresh token cookie."""
     refresh_token = request.cookies.get("refresh_token")
@@ -323,24 +344,20 @@ async def refresh_token(request: Request, response: Response, db: AsyncSession =
     new_access_token = create_access_token(data={"sub": str(user.id), "pwd": pwd_fp})
     new_refresh_token = create_refresh_token(data={"sub": str(user.id), "pwd": pwd_fp})
 
-    is_production = getattr(settings, "FRONTEND_URL", "").startswith("https")
+    cookie_kwargs = _cookie_security_kwargs()
 
     response.set_cookie(
         key="access_token",
         value=new_access_token,
-        httponly=True,
-        secure=is_production,
-        samesite="lax",
         max_age=30 * 60,
+        **cookie_kwargs,
     )
     
     response.set_cookie(
         key="refresh_token",
         value=new_refresh_token,
-        httponly=True,
-        secure=is_production,
-        samesite="lax",
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        **cookie_kwargs,
     )
 
     return {"msg": "Tokens refreshed"}
@@ -353,7 +370,9 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
 
 
 @router.put("/me", response_model=UserResponse)
+@limiter.limit("20/minute")
 async def update_users_me(
+    request: Request,
     payload: UserUpdateProfileRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -369,7 +388,9 @@ async def update_users_me(
 
 
 @router.post("/change-password")
+@limiter.limit("5/15minute")
 async def change_password(
+    request: Request,
     payload: ChangePasswordRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -394,7 +415,7 @@ async def forgot_password(
     if payload.website:
         return {"msg": GENERIC_FORGOT_PASSWORD_MSG}
 
-    if not await verify_captcha(payload.captcha_token):
+    if not await verify_captcha(payload.captcha_token, expected_action="forgot_password"):
         raise HTTPException(status_code=400, detail="Invalid CAPTCHA")
 
     result = await db.execute(select(User).where(User.email == payload.email))
@@ -426,7 +447,7 @@ async def reset_password(
     if payload.website:
         raise HTTPException(status_code=400, detail="Invalid or expired password reset token")
 
-    if not await verify_captcha(payload.captcha_token):
+    if not await verify_captcha(payload.captcha_token, expected_action="reset_password"):
         raise HTTPException(status_code=400, detail="Invalid CAPTCHA")
 
     token_hash = hash_reset_token(payload.token.strip())
@@ -452,8 +473,9 @@ async def reset_password(
     user.locked_until = None
     await db.commit()
 
-    response.delete_cookie("access_token")
-    response.delete_cookie("refresh_token")
+    cookie_kwargs = _cookie_security_kwargs()
+    response.delete_cookie("access_token", **cookie_kwargs)
+    response.delete_cookie("refresh_token", **cookie_kwargs)
 
     return {"msg": "Password has been reset successfully. You can now log in."}
 

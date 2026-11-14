@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 import sentry_sdk
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,14 +9,28 @@ from slowapi.errors import RateLimitExceeded
 from app.config import settings
 from app.core.exceptions import AlagaException, alaga_exception_handler
 from app.core.rate_limit import limiter
+from app.db.session import engine
 from app.middleware.logging import AuditLoggingMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.routers import admin, auth, availability, bookings, calendar, contact, counselors, payments
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    yield
+    await engine.dispose()
+
+
+is_production_env = settings.ENVIRONMENT == "production"
 
 app = FastAPI(
     title="Alaga API",
     description="Backend API for the Alaga counseling platform",
     version="1.0.0",
+    lifespan=lifespan,
+    docs_url=None if is_production_env else "/docs",
+    redoc_url=None if is_production_env else "/redoc",
+    openapi_url=None if is_production_env else "/openapi.json",
 )
 
 if settings.SENTRY_DSN:
@@ -31,12 +47,20 @@ app.add_exception_handler(AlagaException, alaga_exception_handler)
 
 app.add_middleware(AuditLoggingMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
+
+allowed_origins = [settings.FRONTEND_URL.rstrip("/")]
+if settings.CORS_ORIGINS:
+    for origin in settings.CORS_ORIGINS.split(","):
+        cleaned = origin.strip().rstrip("/")
+        if cleaned and cleaned not in allowed_origins:
+            allowed_origins.append(cleaned)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_URL],
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
 )
 
 app.include_router(auth.router)

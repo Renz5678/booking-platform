@@ -304,7 +304,7 @@ export default function HomePage() {
                         <span className="mt-1 sm:mt-0 font-mono text-xs text-on-surface-variant tabular-nums">
                           {String(idx + 1).padStart(2, "0")}
                         </span>
-                        {c.photo_url && (
+                        {c.photo_url ? (
                           <img
                             src={c.photo_url}
                             alt=""
@@ -313,6 +313,13 @@ export default function HomePage() {
                             aria-hidden="true"
                             className="h-11 w-11 shrink-0 rounded-full object-cover object-top border border-outline-variant"
                           />
+                        ) : (
+                          <div
+                            aria-hidden="true"
+                            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-outline-variant bg-secondary-container font-serif text-sm font-medium text-secondary"
+                          >
+                            {getInitials(c.name)}
+                          </div>
                         )}
                         <div>
                           <div className="flex flex-wrap items-baseline gap-2.5">
@@ -387,7 +394,7 @@ export default function HomePage() {
                           className="w-24 aspect-[4/5] shrink-0 rounded-sm object-cover object-top border border-outline-variant"
                         />
                       ) : (
-                        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-secondary-container font-serif text-2xl text-secondary">
+                        <div className="flex w-24 aspect-[4/5] shrink-0 items-center justify-center rounded-sm border border-outline-variant bg-secondary-container font-serif text-2xl text-secondary">
                           {getInitials(activeCounselor.name)}
                         </div>
                       )}

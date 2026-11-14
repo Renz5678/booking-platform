@@ -33,7 +33,7 @@ export const defaultQuotes: QuoteItem[] = [
   },
   {
     text: "A safe, confidential room allows you to slow down, untangle your thoughts, and rebuild clarity at your own pace.",
-    author: "Dr. Elena Santos, RPsy",
+    author: "Alaga Guidance & Counseling Team",
   },
   {
     text: "Care that respects your culture, your language, and your privacy, from wherever you feel most at ease.",
@@ -86,35 +86,49 @@ export const trustCommitments = [
 ];
 
 // Curated fallback practitioners shown only when the backend API is unreachable
+// or no live counselor profiles are returned yet. Leave photo_url as null until
+// real portraits are added (profile cards reserve space for pictures).
 export const fallbackCounselors: FeaturedCounselor[] = [
   {
     id: "featured-1",
-    name: "Dr. Elena Santos",
-    title: "Clinical Psychologist",
-    credential: "RPsy",
-    specializations: ["Anxiety", "Trauma", "Life Transitions"],
-    bio: "Evidence-based CBT and trauma-informed care for young adults and working professionals navigating major transitions.",
-    rate: 1800,
+    name: "Dr. Princess Lara V. Gaganao",
+    title: "Licensed Guidance Counselor & Values Education Teacher",
+    credential: "RGC",
+    specializations: [
+      "Personal & Academic Growth",
+      "Career Development",
+      "Values & Resilience",
+    ],
+    bio: "Licensed Guidance Counselor, Values Education Teacher, Mental Health Advocate, and Career Development Advocate passionate about guiding learners in their personal, academic, and career growth while promoting positive values, resilience, and holistic development to help students become responsible, confident, and future-ready.",
+    photo_url: null,
     isLive: false,
   },
   {
     id: "featured-2",
-    name: "Marcus Reyes",
-    title: "Registered Guidance Counselor",
-    credential: "RGC",
-    specializations: ["Stress & Burnout", "Career", "Boundaries"],
-    bio: "Practical, grounded counseling for workplace exhaustion, family expectations, and rebuilding sustainable daily rhythms.",
-    rate: 1500,
+    name: "Sir Danree De Gula",
+    title: "Teacher III & Certified Career Guidance Advocate",
+    credential: "LPT, MAEd, RGC",
+    specializations: [
+      "Career Guidance",
+      "Personal & Social Development",
+      "Academic Growth",
+    ],
+    bio: "Teacher III at Gen. T. De Leon National High School and Certified Career Guidance Advocate championing Personal, Academic, Career, and Social Development—equipping students with life skills, decision-making tools, and career pathways in a safe, supportive space where no learner is left behind.",
+    photo_url: null,
     isLive: false,
   },
   {
     id: "featured-3",
-    name: "Sofia Villanueva",
-    title: "Licensed Psychologist",
-    credential: "RPsy",
-    specializations: ["Depression", "Grief", "Mindfulness"],
-    bio: "Culturally attuned therapy focused on emotional steadiness, grief processing, and long-term self-compassion.",
-    rate: 1700,
+    name: "Dr. Jasmin Gacutan-Santos",
+    title: "Instructor & University Counselor, PSAU",
+    credential: "RGC, LPT",
+    specializations: [
+      "Mental Wellness",
+      "Student Empowerment",
+      "Academic Counseling",
+    ],
+    bio: "Licensed Guidance Counselor, Mental Health Advocate, and Licensed Professional Teacher serving as Instructor and University Counselor at Pampanga State Agricultural University—committed to creating safe, supportive, and empowering learning environments that inspire lifelong learning and help students reach their fullest potential.",
+    photo_url: null,
     isLive: false,
   },
 ];

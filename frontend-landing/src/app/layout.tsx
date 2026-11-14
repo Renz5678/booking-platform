@@ -13,7 +13,7 @@ import { hostGrotesk, zodiak } from "./fonts";
 export const metadata: Metadata = {
   metadataBase: new URL(site.url),
   title: {
-    default: "Alaga | Confidential Online Counseling in the Philippines",
+    default: "Alaga | Online Counseling",
     template: "%s | Alaga",
   },
   description: site.description,
@@ -21,13 +21,13 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: site.name,
-    title: "Alaga | Confidential Online Counseling in the Philippines",
+    title: "Alaga | Online Counseling",
     description: site.description,
     images: ["/og.png"],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Alaga | Confidential Online Counseling in the Philippines",
+    title: "Alaga | Online Counseling",
     description: site.description,
     images: ["/og.png"],
   },
@@ -65,7 +65,7 @@ export default function RootLayout({
           crossOrigin="anonymous"
         />
         <link
-          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap"
           rel="stylesheet"
         />
       </head>
@@ -78,7 +78,12 @@ export default function RootLayout({
         </a>
 
         <div id="curtain" aria-hidden="true">
-          <div className="curtain__panel" />
+          <div className="curtain__panel flex flex-col items-center justify-center gap-2 text-on-primary">
+            <span className="font-serif text-4xl tracking-[-0.02em]">Alaga</span>
+            <span className="text-[11px] uppercase tracking-[0.16em] text-primary-fixed-dim">
+              Quiet Room
+            </span>
+          </div>
         </div>
 
         <AuthProvider>

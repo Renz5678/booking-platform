@@ -12,7 +12,8 @@ router = APIRouter(prefix="/availability", tags=["availability"])
 
 
 @router.get("/{counselor_id}", response_model=list[AvailabilityResponse])
-async def get_availability(counselor_id: str, db: AsyncSession = Depends(get_db)):
+@limiter.limit("60/minute")
+async def get_availability(request: Request, counselor_id: str, db: AsyncSession = Depends(get_db)):
     """Public endpoint to view a counselor's availability blocks."""
     # First verify the counselor exists and is active
     counselor = await counselor_service.get_counselor_by_id(db, counselor_id)
@@ -66,7 +67,9 @@ async def get_my_availability(
     response_model=AvailabilityResponse,
     status_code=status.HTTP_201_CREATED,
 )
+@limiter.limit("20/minute")
 async def create_my_availability(
+    request: Request,
     avail_data: AvailabilityCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["counselor"])),
@@ -82,12 +85,16 @@ async def create_my_availability(
 
 
 @router.put("/me/blocks", response_model=list[AvailabilityResponse])
+@limiter.limit("20/minute")
 async def replace_my_availability(
+    request: Request,
     blocks: list[AvailabilityCreate],
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["counselor"])),
 ):
     """Counselor-only endpoint to replace all recurring availability blocks in one transaction."""
+    if len(blocks) > 50:
+        raise HTTPException(status_code=400, detail="Cannot configure more than 50 availability blocks")
     counselor = await counselor_service.get_counselor_by_user_id(db, current_user.id)
     if not counselor:
         raise HTTPException(status_code=404, detail="Counselor profile not found")
@@ -98,7 +105,9 @@ async def replace_my_availability(
 
 
 @router.delete("/me/blocks/{availability_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("20/minute")
 async def delete_my_availability(
+    request: Request,
     availability_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(["counselor"])),

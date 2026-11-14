@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
+from app.core.email_validation import verify_email_deliverability
 from app.core.rate_limit import limiter
 from app.models.contact_message import ContactMessage
 from app.services.auth_service import verify_captcha
@@ -28,8 +29,10 @@ async def submit_contact_form(
     if data.honeypot:
         raise HTTPException(status_code=400, detail="Bot detected")
 
-    if not await verify_captcha(data.captcha_token):
+    if not await verify_captcha(data.captcha_token, expected_action="contact"):
         raise HTTPException(status_code=400, detail="Invalid CAPTCHA token")
+
+    await verify_email_deliverability(data.email)
 
     new_message = ContactMessage(
         name=data.name,
