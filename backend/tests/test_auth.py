@@ -296,3 +296,59 @@ async def test_forgot_password_rate_limit(async_client: AsyncClient):
     finally:
         limiter.reset()
         limiter.enabled = False
+
+
+async def test_resend_otp_and_login_preserves_otp_counter(
+    async_client: AsyncClient, db: AsyncSession
+):
+    signup_data = {
+        "full_name": "OTP User",
+        "email": "otpuser@example.com",
+        "password": "Password123",
+        "captcha_token": "dummy_token",
+    }
+    with patch("app.routers.auth.send_verification_email", new_callable=AsyncMock):
+        resp = await async_client.post("/auth/signup", json=signup_data)
+    assert resp.status_code == 201
+
+    # Fail OTP twice
+    for _ in range(2):
+        bad_otp = await async_client.post(
+            "/auth/verify-otp", json={"email": signup_data["email"], "otp": "000000"}
+        )
+        assert bad_otp.status_code == 400
+
+    # Login before verification must NOT reset failed_login_attempts
+    unverified_login = await async_client.post(
+        "/auth/login",
+        json={"email": signup_data["email"], "password": signup_data["password"]},
+    )
+    assert unverified_login.status_code == 401
+
+    user = (
+        await db.execute(select(User).where(User.email == signup_data["email"]))
+    ).scalar_one()
+    assert user.failed_login_attempts == 2
+
+    # Resend OTP issues a new code and resets the OTP attempt counter
+    with patch("app.routers.auth.send_verification_email", new_callable=AsyncMock) as mock_resend:
+        resend_resp = await async_client.post(
+            "/auth/resend-otp", json={"email": signup_data["email"]}
+        )
+        unknown_resp = await async_client.post(
+            "/auth/resend-otp", json={"email": "nobody@example.com"}
+        )
+    assert resend_resp.status_code == 200
+    assert unknown_resp.status_code == 200
+    assert resend_resp.json() == unknown_resp.json()
+    assert mock_resend.await_count == 1
+    new_otp = mock_resend.await_args.args[1]
+
+    await db.refresh(user)
+    assert user.failed_login_attempts == 0
+    assert user.verification_otp == new_otp
+
+    verify_resp = await async_client.post(
+        "/auth/verify-otp", json={"email": signup_data["email"], "otp": new_otp}
+    )
+    assert verify_resp.status_code == 200

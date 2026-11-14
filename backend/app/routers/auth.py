@@ -60,6 +60,15 @@ class OTPVerify(BaseModel):
     def normalize_email(cls, v: str) -> str:
         return _normalize_email(v)
 
+
+class ResendOTPRequest(BaseModel):
+    email: EmailStr
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return _normalize_email(v)
+
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/15minute")
 async def signup(
@@ -148,6 +157,31 @@ async def verify_otp(request: Request, data: OTPVerify, db: AsyncSession = Depen
     return {"msg": "Email successfully verified"}
 
 
+@router.post("/resend-otp")
+@limiter.limit("3/minute")
+async def resend_otp(
+    request: Request,
+    data: ResendOTPRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """Regenerates and emails a fresh 6-digit OTP for an unverified account."""
+    result = await db.execute(select(User).where(User.email == data.email))
+    user = result.scalar_one_or_none()
+
+    if user and not user.is_verified:
+        otp = f"{secrets.randbelow(1000000):06d}"
+        user.verification_otp = otp
+        user.verification_otp_expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        user.failed_login_attempts = 0
+        await db.commit()
+        background_tasks.add_task(send_verification_email, user.email, otp)
+
+    return {
+        "msg": "If an unverified account with that email exists, a new verification code has been sent."
+    }
+
+
 @router.post("/accept-invite")
 @limiter.limit("5/15minute")
 async def accept_invite(
@@ -211,16 +245,16 @@ async def login(
             detail="Incorrect email or password",
         )
 
-    # Success: reset lock fields
-    user.failed_login_attempts = 0
-    user.locked_until = None
-    await db.commit()
-
     if not user.is_verified:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Please verify your email before logging in",
         )
+
+    # Success: reset lock fields
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    await db.commit()
 
     # Issue token
     pwd_fp = get_password_fingerprint(user.password_hash)
