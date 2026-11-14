@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import Response
@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
+from app.config import settings
 from app.core.encryption import decrypt_token
 from app.core.rate_limit import limiter
 from app.core.security import get_current_user, require_role
@@ -90,6 +91,23 @@ async def create_booking(
 
     scheduled_start = to_manila(booking_data.scheduled_start)
     scheduled_end = to_manila(booking_data.scheduled_end)
+    now_manila = datetime.now(MANILA_TZ)
+
+    if scheduled_end <= scheduled_start:
+        raise HTTPException(
+            status_code=400,
+            detail="Session end time must be after start time.",
+        )
+    if scheduled_start <= now_manila:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot book a session in the past.",
+        )
+    if (scheduled_end - scheduled_start) > timedelta(hours=4):
+        raise HTTPException(
+            status_code=400,
+            detail="Session duration cannot exceed 4 hours.",
+        )
 
     # 3. Check counselor availability
     is_available = await check_counselor_availability(
@@ -127,7 +145,7 @@ async def create_booking(
     duration_hours = (
         new_booking.scheduled_end - new_booking.scheduled_start
     ).total_seconds() / 3600.0
-    amount = 300.0 * duration_hours
+    amount = settings.SESSION_HOURLY_RATE * duration_hours
     payment = Payment(
         booking_id=new_booking.id,
         amount=amount,
@@ -155,7 +173,11 @@ async def get_my_bookings(
     """Returns bookings for the currently authenticated client."""
     result = await db.execute(
         select(Booking)
-        .options(selectinload(Booking.counselor).selectinload(CounselorProfile.user))
+        .options(
+            selectinload(Booking.counselor).selectinload(CounselorProfile.user),
+            selectinload(Booking.payment),
+            selectinload(Booking.client),
+        )
         .where(Booking.client_id == current_user.id)
         .order_by(Booking.scheduled_start.asc())
     )
@@ -184,6 +206,8 @@ async def get_counselor_bookings(
         .options(
             selectinload(Booking.intake_form),
             selectinload(Booking.payment),
+            selectinload(Booking.client),
+            selectinload(Booking.counselor).selectinload(CounselorProfile.user),
         )
         .where(Booking.counselor_id == counselor.id)
     )
@@ -320,9 +344,10 @@ async def cancel_booking(
     scheduled_start = to_manila(booking.scheduled_start)
 
     hours_until_session = (scheduled_start - now).total_seconds() / 3600
+    was_confirmed = booking.status == BookingStatus.confirmed
     refund_issued = False
 
-    if hours_until_session >= 24 and booking.status == BookingStatus.confirmed:
+    if hours_until_session >= 24 and was_confirmed:
         # Attempt refund — only confirmed (paid) bookings can be refunded
         refund_issued = await refund_payment(booking_id, db)
         if not refund_issued:
@@ -345,7 +370,9 @@ async def cancel_booking(
     client = booking.client
     if client:
         try:
-            await send_cancellation_email(client.email, booking_id, refund_issued)
+            await send_cancellation_email(
+                client.email, booking_id, refund_issued, was_paid=was_confirmed
+            )
         except Exception as e:
             logger.error("Failed to send cancellation email for booking %s: %s", booking_id, e)
 
@@ -470,6 +497,7 @@ async def update_booking_status(
         .options(
             selectinload(Booking.counselor).selectinload(CounselorProfile.user),
             selectinload(Booking.client),
+            selectinload(Booking.payment),
         )
         .where(Booking.id == booking_id)
     )
@@ -529,6 +557,7 @@ async def reschedule_booking(
         .options(
             selectinload(Booking.counselor).selectinload(CounselorProfile.user),
             selectinload(Booking.client),
+            selectinload(Booking.payment),
         )
         .where(Booking.id == booking_id)
     )
@@ -550,6 +579,23 @@ async def reschedule_booking(
 
     new_start = to_manila(reschedule_data.new_scheduled_start)
     new_end = to_manila(reschedule_data.new_scheduled_end)
+    now_manila = datetime.now(MANILA_TZ)
+
+    if to_manila(booking.scheduled_start) <= now_manila:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot reschedule a session that has already started or passed.",
+        )
+    if new_end <= new_start:
+        raise HTTPException(
+            status_code=400,
+            detail="New session end time must be after start time.",
+        )
+    if new_start <= now_manila:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot reschedule a session into the past.",
+        )
 
     # 2. Check duration match
     old_duration = (to_manila(booking.scheduled_end) - to_manila(booking.scheduled_start)).total_seconds()

@@ -1,8 +1,8 @@
-import os
 from celery import Celery
 
-# Default to a local Redis instance for development if not provided
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+from app.config import settings
+
+REDIS_URL = settings.REDIS_URL
 
 celery_app = Celery(
     "alaga_worker",

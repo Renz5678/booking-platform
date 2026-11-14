@@ -89,12 +89,16 @@ async def get_available_slots(
     counselor_id: str,
     start_date: str,
     end_date: str,
-    duration_minutes: int,
+    duration_minutes: int = 60,
     exclude_booking_id: str | None = None,
 ) -> dict[str, dict[str, list[str]]]:
     s_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
     e_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
 
+    if e_dt < s_dt:
+        raise ValueError("end_date must be on or after start_date")
+    if duration_minutes <= 0 or duration_minutes > 240:
+        raise ValueError("duration must be between 1 and 240 minutes")
     if (e_dt - s_dt).days > 31:
         raise ValueError("Date range cannot exceed 31 days")
 
@@ -157,6 +161,7 @@ async def get_available_slots(
 
     duration_delta = timedelta(minutes=duration_minutes)
     interval_delta = timedelta(minutes=30)
+    now_manila = datetime.now(MANILA_TZ)
 
     result_slots = {}
 
@@ -191,7 +196,7 @@ async def get_available_slots(
 
                 if overlap:
                     occupied_slots.append(current_time)
-                else:
+                elif current_time > now_manila:
                     possible_slots.append(current_time)
 
                 current_time += interval_delta

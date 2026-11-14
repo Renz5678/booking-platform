@@ -1,5 +1,6 @@
 import base64
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +14,7 @@ from app.models.booking import Booking, BookingStatus
 from app.models.payment import PaymentMethod, PaymentStatus
 from app.models.user import User
 from app.schemas.payment import PaymentResponse
-from app.services.email_service import send_cancellation_email
+from app.services.email_service import send_payment_rejected_email
 from app.services.payment_service import process_successful_payment
 
 logger = logging.getLogger(__name__)
@@ -133,20 +134,29 @@ async def reject_payment(
     current_user: User = Depends(require_role(["counselor"])),
     db: AsyncSession = Depends(get_db),
 ):
-    """Counselor rejects an unverified payment, cancelling the booking and releasing the slot."""
+    """Counselor rejects an unverified payment proof so the client can re-upload a valid receipt."""
     booking = await _load_booking_for_counselor(booking_id, current_user.id, db)
-    booking.status = BookingStatus.cancelled
+    if booking.status != BookingStatus.pending_payment:
+        raise HTTPException(
+            status_code=400,
+            detail="Only pending payment bookings can have their payment proof rejected.",
+        )
+
+    booking.status = BookingStatus.pending_payment
+    booking.created_at = datetime.now(timezone.utc)
     if booking.payment:
-        booking.payment.status = PaymentStatus.failed
+        booking.payment.status = PaymentStatus.pending
+        booking.payment.proof_url = None
+        booking.payment.provider_payment_id = None
     await db.commit()
 
     if booking.client:
         try:
-            await send_cancellation_email(booking.client.email, booking_id, refund_issued=False)
+            await send_payment_rejected_email(booking.client.email, booking_id)
         except Exception as e:
             logger.error("Failed to send rejection email for booking %s: %s", booking_id, e)
 
-    return {"msg": "Payment rejected and booking cancelled."}
+    return {"msg": "Payment proof rejected. Client has been asked to re-upload."}
 
 
 @router.post("/simulate-success/{booking_id}")

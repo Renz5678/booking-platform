@@ -84,6 +84,7 @@ class UserResponse(BaseModel):
     full_name: str
     role: str
     is_active: bool = True
+    is_verified: bool = True
     google_calendar_connected: bool = False
 
     model_config = ConfigDict(from_attributes=True)

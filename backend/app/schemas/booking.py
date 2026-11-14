@@ -38,6 +38,7 @@ class BookingResponse(BookingBase):
     created_at: datetime
     client_name: str | None = None
     counselor_name: str | None = None
+    payment: PaymentResponse | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

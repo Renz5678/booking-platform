@@ -9,6 +9,7 @@ from app.core.encryption import decrypt_token
 from app.models.availability import Availability
 from app.models.booking import Booking, BookingStatus
 from app.models.counselor_profile import CounselorProfile
+from app.models.payment import Payment, PaymentStatus
 from app.services.calendar_service import (
     MANILA_TZ,
     check_google_calendar_busy,
@@ -30,6 +31,8 @@ async def check_counselor_availability(
     """
     start_manila = to_manila(start_time)
     end_manila = to_manila(end_time)
+    if end_manila <= start_manila:
+        return False
 
     # Acquire row-level lock on counselor profile to serialize concurrent booking attempts
     profile_result = await db.execute(
@@ -38,7 +41,7 @@ async def check_counselor_availability(
         .with_for_update()
     )
     profile = profile_result.scalar_one_or_none()
-    if not profile:
+    if not profile or not (profile.is_verified and profile.is_active):
         return False
 
     # Verify requested time falls within an availability block for this Manila date
@@ -112,31 +115,45 @@ async def check_counselor_availability(
 async def cancel_stale_pending_bookings(db: AsyncSession, max_age_minutes: int = 60) -> int:
     """
     Sweeps the database for bookings in 'pending_payment' status that are older
-    than max_age_minutes and cancels them to free up the slot.
+    than max_age_minutes without an uploaded payment proof and cancels them to
+    free up the slot.
     Returns the number of cancelled bookings.
     """
     from datetime import datetime, timedelta, timezone
-    
+    from sqlalchemy.orm import selectinload
+
     cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=max_age_minutes)
-    
-    # Find stale bookings
+
+    # Find stale unpaid bookings (never cancel if client already uploaded proof)
     result = await db.execute(
-        select(Booking).where(
+        select(Booking)
+        .outerjoin(Payment, Payment.booking_id == Booking.id)
+        .options(selectinload(Booking.payment))
+        .where(
             and_(
                 Booking.status == BookingStatus.pending_payment,
-                Booking.created_at < cutoff_time
+                Booking.created_at < cutoff_time,
+                or_(
+                    Payment.id.is_(None),
+                    and_(
+                        Payment.proof_url.is_(None),
+                        Payment.provider_payment_id.is_(None),
+                    ),
+                ),
             )
         )
     )
     stale_bookings = result.scalars().all()
-    
+
     count = 0
     for booking in stale_bookings:
         booking.status = BookingStatus.cancelled
+        if booking.payment:
+            booking.payment.status = PaymentStatus.failed
         count += 1
-        
+
     if count > 0:
         await db.commit()
         logger.info("Swept and cancelled %d stale pending_payment bookings.", count)
-        
+
     return count

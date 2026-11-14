@@ -152,7 +152,7 @@ async def test_manual_payment_proof_counselor_verify_and_reject(
     assert updated_payment.payment_method == PaymentMethod.gcash
     assert updated_payment.paid_at is not None
 
-    # 4. Second booking rejected by counselor -> cancelled & failed
+    # 4. Second booking proof rejected by counselor -> stays pending_payment, proof_url cleared for re-upload
     booking_req2 = {
         "counselor_id": profile.id,
         "scheduled_start": f"{day_str}T14:00:00+08:00",
@@ -168,19 +168,20 @@ async def test_manual_payment_proof_counselor_verify_and_reject(
     booking_id2 = booking_resp2.json()["booking_id"]
 
     with patch(
-        "app.routers.payments.send_cancellation_email", new_callable=AsyncMock
-    ) as mock_cancel_email:
+        "app.routers.payments.send_payment_rejected_email", new_callable=AsyncMock
+    ) as mock_reject_email:
         reject_resp = await async_client.post(
             f"/payments/{booking_id2}/reject", cookies=c_cookies
         )
     assert reject_resp.status_code == 200
-    assert mock_cancel_email.await_count == 1
+    assert mock_reject_email.await_count == 1
 
     b2 = (
         await db.execute(select(Booking).where(Booking.id == booking_id2))
     ).scalar_one()
-    assert b2.status == BookingStatus.cancelled
+    assert b2.status == BookingStatus.pending_payment
     p2 = (
         await db.execute(select(Payment).where(Payment.booking_id == booking_id2))
     ).scalar_one()
-    assert p2.status == PaymentStatus.failed
+    assert p2.status == PaymentStatus.pending
+    assert p2.proof_url is None

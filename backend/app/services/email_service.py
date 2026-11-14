@@ -156,7 +156,7 @@ async def send_booking_confirmation(
 
 
 async def send_cancellation_email(
-    user_email: str, booking_id: str, refund_issued: bool
+    user_email: str, booking_id: str, refund_issued: bool, was_paid: bool = True
 ) -> None:
     """
     Sends a booking cancellation confirmation email to the client.
@@ -165,13 +165,15 @@ async def send_cancellation_email(
         user_email: The client's email address.
         booking_id: The unique ID of the cancelled booking.
         refund_issued: Whether a refund was issued for this cancellation.
+        was_paid: Whether the booking had been paid/confirmed prior to cancellation.
     """
     subject = "Your Booking Has Been Cancelled"
-    refund_note = (
-        "<p>A full refund has been processed and will appear in your account within 3–7 business days.</p>"
-        if refund_issued
-        else "<p>As per our cancellation policy, no refund will be issued for cancellations made less than 24 hours before the session.</p>"
-    )
+    if not was_paid:
+        refund_note = "<p>Your unpaid reservation has been cancelled and no payment was charged.</p>"
+    elif refund_issued:
+        refund_note = "<p>A full refund has been processed and will appear in your account within 3–7 business days.</p>"
+    else:
+        refund_note = "<p>As per our cancellation policy, no refund will be issued for cancellations made less than 24 hours before the session.</p>"
 
     html_body = f"""
     <html>
@@ -181,6 +183,29 @@ async def send_cancellation_email(
         <p><strong>Booking ID:</strong> {booking_id}</p>
         {refund_note}
         <p>If you have any questions, please contact our support team.</p>
+      </body>
+    </html>
+    """
+    await asyncio.to_thread(_send_email_sync, user_email, subject, html_body)
+
+
+async def send_payment_rejected_email(user_email: str, booking_id: str) -> None:
+    """
+    Notifies a client that their uploaded payment proof was rejected and asks
+    them to re-upload a valid receipt.
+    """
+    subject = "Action Needed: Please Re-upload Your Payment Receipt"
+    booking_url = f"{settings.FRONTEND_URL}/dashboard/bookings/{urllib.parse.quote(booking_id)}"
+    safe_url = html.escape(booking_url, quote=True)
+
+    html_body = f"""
+    <html>
+      <body style="font-family: sans-serif; color: #333;">
+        <h2>Payment Receipt Needs Attention</h2>
+        <p>Your counselor could not verify the payment receipt uploaded for your booking.</p>
+        <p><strong>Booking ID:</strong> {booking_id}</p>
+        <p>Your time slot is still reserved for the next 60 minutes. Please upload a clear, valid payment receipt here:</p>
+        <p><a href="{safe_url}">{safe_url}</a></p>
       </body>
     </html>
     """

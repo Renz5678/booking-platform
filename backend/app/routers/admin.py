@@ -236,6 +236,7 @@ async def get_all_bookings(
         .options(
             selectinload(Booking.client),
             selectinload(Booking.counselor).selectinload(CounselorProfile.user),
+            selectinload(Booking.payment),
         )
         .order_by(Booking.scheduled_start.desc())
     )

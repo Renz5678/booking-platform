@@ -10,6 +10,7 @@ from app.core.encryption import encrypt_token
 from app.models.availability import Availability
 from app.models.booking import Booking, BookingStatus
 from app.models.counselor_profile import CounselorProfile
+from app.models.payment import Payment, PaymentStatus
 from app.models.user import RoleEnum, User
 from app.services.booking_service import (
     cancel_stale_pending_bookings,
@@ -140,8 +141,26 @@ async def test_booking_flow_timezone_and_calendar_sync(
     assert booking_resp.status_code == 201
     booking_body = booking_resp.json()
     assert booking_body["payment_window_minutes"] == 60
-    assert booking_body["amount"] == 300.0
+    assert booking_body["amount"] == 1500.0
     booking_id = booking_body["booking_id"]
+
+    # 5b. Verify GET /bookings/me includes payment and GET /bookings/counselor/me includes client_name
+    my_bookings_resp = await async_client.get("/bookings/me", cookies=cookies)
+    assert my_bookings_resp.status_code == 200
+    my_bookings = my_bookings_resp.json()
+    assert len(my_bookings) == 1
+    assert my_bookings[0]["payment"]["amount"] == 1500.0
+
+    c_login_resp = await async_client.post(
+        "/auth/login",
+        json={"email": counselor_data["email"], "password": counselor_data["password"]},
+    )
+    c_cookies = {"access_token": c_login_resp.cookies["access_token"]}
+    c_bookings_resp = await async_client.get("/bookings/counselor/me", cookies=c_cookies)
+    assert c_bookings_resp.status_code == 200
+    c_bookings = c_bookings_resp.json()
+    assert len(c_bookings) == 1
+    assert c_bookings[0]["client_name"] == "Client Book"
 
     # 6. Reject concurrent/second pending booking (slot-squatting or overlap)
     booking_resp2 = await async_client.post(
@@ -223,7 +242,11 @@ async def test_check_counselor_availability_merges_adjacent_blocks(db: AsyncSess
     db.add(counselor_user)
     await db.flush()
 
-    profile = CounselorProfile(user_id=counselor_user.id)
+    profile = CounselorProfile(
+        user_id=counselor_user.id,
+        is_active=True,
+        is_verified=True,
+    )
     db.add(profile)
     await db.flush()
 
@@ -250,4 +273,124 @@ async def test_check_counselor_availability_merges_adjacent_blocks(db: AsyncSess
     ):
         assert await check_counselor_availability(db, profile.id, start_3h, end_3h) is True
         assert await check_counselor_availability(db, profile.id, start_3h, end_4h) is False
+        # Negative duration is rejected
+        assert await check_counselor_availability(db, profile.id, end_3h, start_3h) is False
+
+
+async def test_booking_validation_and_sweeper_preserves_proof(
+    async_client: AsyncClient, db: AsyncSession
+):
+    counselor_user = User(
+        email="c_val@example.com",
+        password_hash="hashed",
+        full_name="Counselor Val",
+        role=RoleEnum.counselor,
+        is_verified=True,
+    )
+    db.add(counselor_user)
+    await db.flush()
+
+    profile = CounselorProfile(
+        user_id=counselor_user.id,
+        is_active=True,
+        is_verified=True,
+    )
+    db.add(profile)
+    await db.flush()
+
+    tomorrow = (datetime.now(MANILA_TZ) + timedelta(days=1)).date()
+    yesterday = (datetime.now(MANILA_TZ) - timedelta(days=1)).date()
+    db.add(
+        Availability(
+            counselor_id=profile.id,
+            specific_date=tomorrow,
+            start_time=time(9, 0),
+            end_time=time(17, 0),
+            is_recurring=False,
+        )
+    )
+    await db.commit()
+
+    # Invalid slot query returns 400 instead of 500
+    bad_slots = await async_client.get(
+        f"/availability/{profile.id}/slots?start_date={tomorrow.isoformat()}&end_date={yesterday.isoformat()}"
+    )
+    assert bad_slots.status_code == 400
+
+    # Sign up & login client
+    client_data = {
+        "email": "cli_val@example.com",
+        "password": "Password123",
+        "full_name": "Client Val",
+        "captcha_token": "dummy",
+    }
+    with patch("app.routers.auth.send_verification_email", new_callable=AsyncMock):
+        resp = await async_client.post("/auth/signup", json=client_data)
+    assert resp.status_code == 201
+    cli_user = (
+        await db.execute(select(User).where(User.email == client_data["email"]))
+    ).scalar_one()
+    cli_user.is_verified = True
+    await db.commit()
+
+    login_resp = await async_client.post(
+        "/auth/login",
+        json={"email": client_data["email"], "password": client_data["password"]},
+    )
+    cookies = {"access_token": login_resp.cookies["access_token"]}
+
+    # Reject past booking
+    past_resp = await async_client.post(
+        "/bookings/",
+        json={
+            "counselor_id": profile.id,
+            "scheduled_start": f"{yesterday.isoformat()}T10:00:00+08:00",
+            "scheduled_end": f"{yesterday.isoformat()}T11:00:00+08:00",
+            "intake_concern_category": "Stress",
+            "captcha_token": "mock_captcha_token",
+        },
+        cookies=cookies,
+    )
+    assert past_resp.status_code == 400
+
+    # Reject negative duration booking
+    neg_resp = await async_client.post(
+        "/bookings/",
+        json={
+            "counselor_id": profile.id,
+            "scheduled_start": f"{tomorrow.isoformat()}T12:00:00+08:00",
+            "scheduled_end": f"{tomorrow.isoformat()}T11:00:00+08:00",
+            "intake_concern_category": "Stress",
+            "captcha_token": "mock_captcha_token",
+        },
+        cookies=cookies,
+    )
+    assert neg_resp.status_code == 400
+
+    # Sweeper must NOT cancel a pending_payment booking that already has proof_url
+    b_with_proof = Booking(
+        client_id=cli_user.id,
+        counselor_id=profile.id,
+        scheduled_start=datetime.combine(tomorrow, time(10, 0), tzinfo=MANILA_TZ),
+        scheduled_end=datetime.combine(tomorrow, time(11, 0), tzinfo=MANILA_TZ),
+        status=BookingStatus.pending_payment,
+    )
+    db.add(b_with_proof)
+    await db.flush()
+    db.add(
+        Payment(
+            booking_id=b_with_proof.id,
+            amount=1500.0,
+            currency="PHP",
+            provider="manual",
+            status=PaymentStatus.pending,
+            proof_url="data:image/png;base64,abc",
+        )
+    )
+    await db.commit()
+
+    swept = await cancel_stale_pending_bookings(db, max_age_minutes=-1)
+    assert swept == 0
+    await db.refresh(b_with_proof)
+    assert b_with_proof.status == BookingStatus.pending_payment
 
