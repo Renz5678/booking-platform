@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getManilaHour } from "@/components/dashboard/WeeklySlotGrid";
+import { DetailPageSkeleton } from "@/components/ui/LoadingState";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 import { getInitials } from "@/lib/routes";
@@ -92,7 +93,7 @@ export default function CounselorProfilePage() {
   if (loading) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-14 sm:px-6 lg:px-8">
-        <div className="h-80 animate-pulse rounded-3xl border border-border-subtle bg-surface-elevated" />
+        <DetailPageSkeleton label="Loading counselor profile…" />
       </div>
     );
   }

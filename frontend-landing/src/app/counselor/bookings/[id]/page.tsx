@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import { DetailPageSkeleton } from "@/components/ui/LoadingState";
 import { useToast } from "@/context/ToastContext";
 import { api, ApiError } from "@/lib/api";
 import type { Booking } from "@/types";
@@ -168,7 +169,7 @@ export default function CounselorBookingDetailPage() {
           </Link>
 
           {loading ? (
-            <div className="h-72 animate-pulse rounded-2xl border border-border-subtle bg-surface-elevated" />
+            <DetailPageSkeleton label="Loading session details…" />
           ) : !booking ? (
             <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-8 text-center">
               <p className="text-sm text-text-secondary">Booking not found.</p>

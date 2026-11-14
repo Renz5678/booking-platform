@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth, RoleEnum } from "@/context/AuthContext";
+import { Spinner } from "@/components/ui/LoadingState";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -30,16 +31,32 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
   }, [user, isLoading, router, pathname, allowedRoles]);
 
   if (isLoading || !user || (allowedRoles && !allowedRoles.includes(user.role))) {
+    const statusLabel = isLoading
+      ? "Verifying your session…"
+      : !user
+        ? "Redirecting to sign in…"
+        : "Redirecting to your dashboard…";
+
     return (
-      <div className="min-h-screen flex flex-col bg-[#E1F4F1] animate-pulse">
-        <div className="h-16 bg-surface shadow-sm full-width w-full mb-12"></div>
-        <div className="max-w-[1200px] w-full mx-auto px-4 md:px-8 space-y-6">
-          <div className="h-12 w-64 bg-surface-variant/30 rounded-lg"></div>
-          <div className="h-4 w-96 bg-surface-variant/20 rounded"></div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-12">
-             <div className="h-64 bg-surface-container-lowest rounded-xl shadow-sm"></div>
-             <div className="h-64 bg-surface-container-lowest rounded-xl shadow-sm hidden md:block"></div>
-             <div className="h-64 bg-surface-container-lowest rounded-xl shadow-sm hidden lg:block"></div>
+      <div
+        role="status"
+        aria-live="polite"
+        className="min-h-screen flex flex-col bg-background"
+      >
+        <div className="h-16 border-b border-border-subtle bg-surface-elevated/80 px-6 flex items-center justify-between">
+          <div className="h-6 w-24 rounded-md bg-surface-muted animate-pulse" />
+          <div className="inline-flex items-center gap-2 rounded-full border border-border-subtle bg-surface-elevated px-3 py-1 text-xs font-medium text-text-secondary">
+            <Spinner size="sm" className="text-primary" />
+            <span>{statusLabel}</span>
+          </div>
+        </div>
+        <div className="max-w-[1200px] w-full mx-auto px-4 md:px-8 py-10 space-y-6 animate-pulse">
+          <div className="h-9 w-56 rounded-lg bg-surface-muted" />
+          <div className="h-4 w-80 max-w-full rounded bg-surface-muted/80" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-4">
+            <div className="h-52 rounded-2xl border border-border-subtle bg-surface-elevated" />
+            <div className="h-52 rounded-2xl border border-border-subtle bg-surface-elevated hidden md:block" />
+            <div className="h-52 rounded-2xl border border-border-subtle bg-surface-elevated hidden lg:block" />
           </div>
         </div>
       </div>

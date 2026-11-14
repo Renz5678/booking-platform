@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import ProtectedRoute from "../auth/ProtectedRoute";
+import { Spinner } from "@/components/ui/LoadingState";
 import { useAuth } from "@/context/AuthContext";
 import { getInitials } from "@/lib/routes";
 
@@ -28,6 +29,7 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -43,10 +45,13 @@ export default function DashboardLayout({
   }, [isMobileMenuOpen]);
 
   const handleLogout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
     try {
       await logout();
     } catch (err) {
       console.error("Failed to log out", err);
+      setLoggingOut(false);
     }
   };
 
@@ -161,13 +166,18 @@ export default function DashboardLayout({
 
           <button
             type="button"
+            disabled={loggingOut}
             onClick={handleLogout}
-            className="flex items-center gap-3 text-error hover:bg-error-container/70 hover:text-on-error-container rounded-xl px-4 py-3 font-label-md transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-error/40"
+            className="flex items-center gap-3 text-error hover:bg-error-container/70 hover:text-on-error-container rounded-xl px-4 py-3 font-label-md transition-colors text-left disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-error/40"
           >
-            <span className="material-symbols-outlined text-[20px]" aria-hidden="true">
-              logout
-            </span>
-            <span>Log Out</span>
+            {loggingOut ? (
+              <Spinner size="sm" />
+            ) : (
+              <span className="material-symbols-outlined text-[20px]" aria-hidden="true">
+                logout
+              </span>
+            )}
+            <span>{loggingOut ? "Signing out…" : "Log Out"}</span>
           </button>
         </nav>
 
@@ -296,10 +306,12 @@ export default function DashboardLayout({
               </Link>
               <button
                 type="button"
+                disabled={loggingOut}
                 onClick={handleLogout}
-                className="px-4 py-2 rounded-full border border-outline-variant font-label-md text-on-surface-variant hover:text-error hover:border-error/40 hover:bg-error-container/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-error/40"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-outline-variant font-label-md text-on-surface-variant hover:text-error hover:border-error/40 hover:bg-error-container/30 transition-colors disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-error/40"
               >
-                Log Out
+                {loggingOut && <Spinner size="sm" />}
+                <span>{loggingOut ? "Signing out…" : "Log Out"}</span>
               </button>
             </div>
 
@@ -351,13 +363,15 @@ export default function DashboardLayout({
                 </Link>
                 <button
                   type="button"
+                  disabled={loggingOut}
                   onClick={() => {
                     setIsMobileMenuOpen(false);
                     handleLogout();
                   }}
-                  className="text-center px-4 py-2.5 rounded-xl border border-error/30 text-error font-label-md"
+                  className="inline-flex items-center justify-center gap-2 text-center px-4 py-2.5 rounded-xl border border-error/30 text-error font-label-md disabled:opacity-60"
                 >
-                  Log Out
+                  {loggingOut && <Spinner size="sm" />}
+                  <span>{loggingOut ? "Signing out…" : "Log Out"}</span>
                 </button>
               </div>
             </div>

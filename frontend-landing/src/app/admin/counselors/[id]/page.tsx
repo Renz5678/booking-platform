@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import { DetailPageSkeleton, Spinner } from "@/components/ui/LoadingState";
 import { useToast } from "@/context/ToastContext";
 import { api, ApiError } from "@/lib/api";
 import type { CounselorProfile } from "@/types";
@@ -17,7 +18,9 @@ export default function AdminCounselorDetailPage() {
 
   const [counselor, setCounselor] = useState<CounselorProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState<
+    "approve" | "reject" | "deactivate" | null
+  >(null);
 
   const loadCounselor = useCallback(async () => {
     try {
@@ -47,7 +50,7 @@ export default function AdminCounselorDetailPage() {
     });
     if (!ok) return;
 
-    setBusy(true);
+    setBusyAction("approve");
     try {
       await api.post(`/admin/counselors/${counselor.id}/verify`);
       toast.success("Counselor approved.");
@@ -55,7 +58,7 @@ export default function AdminCounselorDetailPage() {
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Failed to approve.");
     } finally {
-      setBusy(false);
+      setBusyAction(null);
     }
   };
 
@@ -71,7 +74,7 @@ export default function AdminCounselorDetailPage() {
     });
     if (!reason) return;
 
-    setBusy(true);
+    setBusyAction("reject");
     try {
       await api.post(
         `/admin/counselors/${counselor.id}/reject?reason=${encodeURIComponent(
@@ -83,7 +86,7 @@ export default function AdminCounselorDetailPage() {
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Failed to reject.");
     } finally {
-      setBusy(false);
+      setBusyAction(null);
     }
   };
 
@@ -97,7 +100,7 @@ export default function AdminCounselorDetailPage() {
     });
     if (!ok) return;
 
-    setBusy(true);
+    setBusyAction("deactivate");
     try {
       await api.post(`/admin/counselors/${counselor.id}/deactivate`);
       toast.success("Counselor deactivated.");
@@ -107,7 +110,7 @@ export default function AdminCounselorDetailPage() {
         err instanceof ApiError ? err.message : "Failed to deactivate."
       );
     } finally {
-      setBusy(false);
+      setBusyAction(null);
     }
   };
 
@@ -129,7 +132,7 @@ export default function AdminCounselorDetailPage() {
           </Link>
 
           {loading ? (
-            <div className="h-64 animate-pulse rounded-2xl border border-border-subtle bg-surface-elevated" />
+            <DetailPageSkeleton label="Loading counselor details…" />
           ) : !counselor ? (
             <div className="rounded-2xl border border-border-subtle bg-surface-elevated p-8 text-center">
               <p className="text-sm text-text-secondary">
@@ -152,30 +155,51 @@ export default function AdminCounselorDetailPage() {
                     <>
                       <button
                         type="button"
-                        disabled={busy}
+                        disabled={busyAction !== null}
                         onClick={handleApprove}
-                        className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-50"
+                        className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-50"
                       >
-                        Approve &amp; Verify
+                        {busyAction === "approve" ? (
+                          <>
+                            <Spinner size="sm" />
+                            <span>Approving…</span>
+                          </>
+                        ) : (
+                          <span>Approve &amp; Verify</span>
+                        )}
                       </button>
                       <button
                         type="button"
-                        disabled={busy}
+                        disabled={busyAction !== null}
                         onClick={handleReject}
-                        className="rounded-xl border border-status-danger/30 bg-status-danger-bg px-4 py-2 text-xs font-semibold text-status-danger hover:bg-status-danger hover:text-white disabled:opacity-50"
+                        className="inline-flex items-center gap-2 rounded-xl border border-status-danger/30 bg-status-danger-bg px-4 py-2 text-xs font-semibold text-status-danger hover:bg-status-danger hover:text-white disabled:opacity-50"
                       >
-                        Reject
+                        {busyAction === "reject" ? (
+                          <>
+                            <Spinner size="sm" />
+                            <span>Rejecting…</span>
+                          </>
+                        ) : (
+                          <span>Reject</span>
+                        )}
                       </button>
                     </>
                   )}
                   {counselor.is_verified && (
                     <button
                       type="button"
-                      disabled={busy}
+                      disabled={busyAction !== null}
                       onClick={handleDeactivate}
-                      className="rounded-xl border border-status-danger/30 bg-status-danger-bg px-4 py-2 text-xs font-semibold text-status-danger hover:bg-status-danger hover:text-white disabled:opacity-50"
+                      className="inline-flex items-center gap-2 rounded-xl border border-status-danger/30 bg-status-danger-bg px-4 py-2 text-xs font-semibold text-status-danger hover:bg-status-danger hover:text-white disabled:opacity-50"
                     >
-                      Deactivate
+                      {busyAction === "deactivate" ? (
+                        <>
+                          <Spinner size="sm" />
+                          <span>Deactivating…</span>
+                        </>
+                      ) : (
+                        <span>Deactivate</span>
+                      )}
                     </button>
                   )}
                 </div>
